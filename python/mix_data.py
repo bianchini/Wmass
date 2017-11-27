@@ -9,7 +9,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from template_parameters import params_test, pdf_test 
+from template_parameters import params_test, pdf_test , coefficients_test
 
 class MixData:
 
@@ -19,85 +19,122 @@ class MixData:
         self.output_dir = output_dir
         return
 
-    def mix(self, mass=80.000, pt_bin=[], y_bin=[], coeff=[], pdf=(lambda x : 1.0), params={}):
+    def add_shapes(self, params, symmetrise=False):
+
+        # these are the available shapes (all generated for y=0.00)
+        self.input_shapes_pt = params['params_W']['pt']
+
+        # these are the shapes to be merged
+        self.output_shapes_pt = params['params_template']['pt']
+        self.output_shapes_y  = params['params_template']['y']
+         
+        self.param_string = '_M{:05.3f}'.format( params['params_template']['mass'][0] )
+
+    
+        self.symmetrise = symmetrise
+
+
+    def mix_bin(self, y_bin=[], pt_bin=[], pdf=(lambda x : 1.0)):
+
+        # the merged sample
+        mix = np.array([])
 
         pt_edges = np.array([])
         y_edges = np.array([])        
-        mix = np.array([])
-        for ipt,pt in enumerate(params['params_W']['pt']):
+        
+        # load a test file to read the bon edges
+        test_name = 'pt{:02.1f}'.format(0.0)+'_'+'y{:03.2f}'.format(0.00)+'_M{:05.3f}'.format(80.000)
+        for c in range(5):
+            p =  0.0
+            test_name += ('_A'+str(c)+('{:03.2f}'.format(p)))
+        grid_test = np.load(self.input_dir+'/grid_lab_'+test_name+'.npy')
+
+        # y and pt bins of the input shape
+        y_edges = grid_test[1]
+        pt_edges = grid_test[2]
+
+        # must be odd!
+        middle_point = (len( y_edges ) - 1)/2
+        y_bin_width = (y_edges[1]-y_edges[0])
+        shift_pos = range( int((y_bin[0]-y_edges[0])/y_bin_width), 
+                           int((y_bin[1]-y_edges[0])/y_bin_width) )        
+
+
+        for ipt,pt in enumerate(self.input_shapes_pt):
+
             if pt<pt_bin[0] or pt>=pt_bin[1]:
                 continue
-            print "pt %s is in range" % pt 
-            for ic0,c0 in enumerate(params['params_W']['A0']):
-                if c0!=coeff[0]:
-                    continue
-                for ic1,c1 in enumerate(params['params_W']['A1']):
-                    if c1!=coeff[1]:
-                        continue
-                    for ic2,c2 in enumerate(params['params_W']['A2']):
-                        if c2!=coeff[2]:
-                            continue
-                        for ic3,c3 in enumerate(params['params_W']['A3']):
-                            if c3!=coeff[3]:
-                                continue
-                            for ic4,c4 in enumerate(params['params_W']['A4']):
-                                if c4!=coeff[4]:
-                                    continue
 
-                                in_name = 'pt{:02.1f}'.format(pt)+'_'+'y{:02.1f}'.format(0.00)+'_M{:05.3f}'.format(mass)
+            for iy in shift_pos:
+                y = y_edges[0]+y_bin_width*iy
+                print "(%s, %s) is in range" % (pt, y)
 
-                                coeff = [c0,c1,c2,c3,c4]
-                                for c in range(5):
-                                    in_name += ('_A'+str(c)+('{:03.2f}'.format(coeff[c])))
+                in_name = 'pt{:02.1f}'.format(pt)+'_'+'y{:03.2f}'.format(0.00)+self.param_string
+                in_name_symm = in_name
+            
+                for ic,c in enumerate( coefficients_test(pt_bin[0],y_bin[0]) ):
+                    c = c if abs(c)>0. else 0.0
+                    in_name      += ('_A'+str(ic)+('{:03.2f}'.format(c)))
+                    in_name_symm += ('_A'+str(ic)+('{:03.2f}'.format( -c if ic in [1,4] and abs(c)>0. else c )))
 
-                                # load the file
-                                sample = np.load(self.input_dir+'/grid_lab_'+in_name+'.npy')
+                # load the file
+                grid = np.load(self.input_dir+'/grid_lab_'+in_name+'.npy')
+                grid_symm = np.array([])
+                if self.symmetrise:
+                    if in_name_symm!=in_name: 
+                        print "\tloading the symmetric file..."
+                        grid_symm = np.load(self.input_dir+'/grid_lab_'+in_name_symm+'.npy')
+                    else:
+                        grid_symm = grid                    
 
-                                y_edges = sample[1]
-                                pt_edges = sample[2]
+                #weight = pdf(pt,y, c0, c1, c2, c3, c4)
+                weight=1.0
 
-                                # must be odd!
-                                #middle_point = (len(params['params_W']['y'])-1)/2
-                                middle_point = (len( y_edges )-1)/2
-                                y_bin_width = (y_edges[1]-y_edges[0])
+                shifts = [ [iy-middle_point, grid] ]
+                if self.symmetrise and shifts[0][0]!=0:                    
+                    shifts.append( [-(iy-middle_point), grid_symm] )
+                
+                #print shifts[0][0], shifts[-1][0]
+                for [shift,sample] in shifts:
+                    sam = copy.deepcopy(sample[0]) 
+                    if shift>0:
+                        sam[-shift:, :] = 0.
+                    elif shift<0:
+                        sam[:-shift, :] = 0.
+                    sam_shifted = np.roll(sam, shift, axis=0 ) 
+                    if not mix.shape==sam.shape:
+                        mix = sam_shifted*weight
+                    else:
+                        mix += sam_shifted*weight
 
-                                shift_pos = range( int((y_bin[0]-y_edges[0])/y_bin_width), 
-                                                   int((y_bin[1]-y_edges[0])/y_bin_width) + 1)
-                                        
-                                #for iy in [  middle_point-80,middle_point, middle_point+130]:
-                                #for iy,y in np.ndenumerate( y_edges ):            
+        if self.symmetrise:
+            for ipt in range(mix.shape[1]):
+                for iy in range( mix.shape[0]/2 ):
+                    #print iy, "+", mix.shape[0]-1-iy
+                    left = mix[iy][ipt]
+                    right = mix[mix.shape[0]-1-iy][ipt] 
+                    mix[iy][ipt] += right
+                    mix[mix.shape[0]-1-iy][ipt] += left
+            mix *= 0.5
 
-                                for iy in shift_pos:
-                                #for iy,y in np.ndenumerate(params['params_W']['y']):            
-                                    y = y_edges[0]+y_bin_width*iy
-                                    print "y %s is in range" % y 
-
-                                    weight = pdf(pt,y, c0, c1, c2, c3, c4)
-                                    #weight=1.0
-
-                                    shift = iy-middle_point
-                                    #shift = int(y/y_bin_width)
-
-                                    sam = copy.deepcopy(sample[0])
-                                    if shift>0:
-                                        sam[-shift:, :] = 0.
-                                    elif shift<0:
-                                        sam[:-shift, :] = 0.
-                                    sam_shifted = np.roll(sam, shift, axis=0 ) 
-                                    if not mix.shape==sam.shape:
-                                        mix = sam_shifted*weight
-                                    else:
-                                        mix += sam_shifted*weight
-
-        #print(mix)
-        out_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:02.1f}'.format(y_bin[0])+'-'+'y{:02.1f}'.format(y_bin[1])+'_M{:05.3f}'.format(mass)
-        for c in range(5):
-            out_name += ('_A'+str(c)+('{:03.2f}'.format(coeff[c])))
+        out_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'y{:03.2f}'.format(y_bin[1])
+        out_name += self.param_string
+        
         np.save(self.output_dir+'/mixed_dataset_'+out_name, mix)
 
         xx, yy = np.meshgrid(pt_edges, y_edges)        
         plt.pcolormesh(yy, xx, mix)
         plt.show()
         plt.savefig(self.output_dir+'/mixed_dataset_'+out_name+'.png')
+
+    def mix_all_bins(self):
+        for ipt in range(len(self.output_shapes_pt)-1):
+            pt_bin=[ self.output_shapes_pt[ipt], self.output_shapes_pt[ipt+1] ]
+            for iy in range(len(self.output_shapes_y)-1):
+                y_bin=[ self.output_shapes_y[iy], self.output_shapes_y[iy+1] ]
+                print "Call MixData for (%s,%s)" % (pt_bin, y_bin)
+                self.mix_bin(pt_bin=pt_bin, y_bin=y_bin, pdf=pdf_test)
+ 
+
 
 ##################################

@@ -139,7 +139,7 @@ class TemplateMaker:
             pt, y = boost_vec
 
             print ("Make the grid in the lab for (pt,y)=(%s,%s)" % (pt,y))            
-            boost_tag = 'pt{:02.1f}'.format(pt)+'_'+'y{:02.1f}'.format(y)
+            boost_tag = 'pt{:02.1f}'.format(pt)+'_'+'y{:03.2f}'.format(y)
 
             # fill the template
             setattr(self, 'rnd_grid_lab_'+boost_tag,  np.zeros((self.ntoys, 2+n_weights)) )
