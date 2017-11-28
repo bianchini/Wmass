@@ -63,20 +63,20 @@ def coefficients_test(pt=0.0,y=0.0):
     #coeff[2] = coeff[20] 
     #coeff[3] = 0.0
 
-    #coeff[4] = -math.tanh(y)
+    coeff[4] = -math.tanh(y)
 
     #if y > 0.0:
     #    coeff[4] = -1.
     #elif y < 0.0:
     #    coeff[4] = +1.
 
-    coeff[4] = 0.0
+    #coeff[4] = 0.0
 
     return coeff
 
 
 params_test = copy.deepcopy(Parameters)
-params_test['params_W']['pt'] = np.linspace(0.0, 10., 11) 
+params_test['params_W']['pt'] = np.linspace(0.0, 10.0, 11)
 #params_test['params_W']['pt'] = np.linspace(0.0, 2.0, 2) 
 params_test['params_W']['y'] = np.array([0.0])
 params_test['params_W']['mass'] = np.array([80.000])
@@ -85,14 +85,16 @@ params_test['params_W']['A1'] = np.array([0.0])
 params_test['params_W']['A2'] = np.array([0.0])
 params_test['params_W']['A3'] = np.array([0.0]) 
 #params_test['params_W']['A4'] = np.array([-1.0, +1.0])
-A4_realistic = np.zeros(15)
-for iy, y in enumerate(np.linspace(-3.5, 3.5, 15)):
+A4_realistic = np.zeros(37)
+for iy, y in enumerate(np.linspace(-3.6, 3.6, 37)):
     A4_realistic[iy] = -math.tanh(y) if abs(y)>0 else 0.0
 params_test['params_W']['A4'] = A4_realistic 
 #params_test['params_W']['A4'] = np.array([0.0]) 
 
-params_test['params_template']['pt'] = np.array([0.0,  1.0])
-params_test['params_template']['y']  = np.linspace(0.0, 0.50, 2)
+#params_test['params_template']['pt'] = np.linspace(0.0, 10.0, 5)
+#params_test['params_template']['y']  = np.linspace(0.0, 3.6, 19)
+params_test['params_template']['pt'] = np.linspace(0.0, 1.0, 2)
+params_test['params_template']['y']  = np.linspace(0.5, 0.55, 2)
 params_test['params_template']['mass'] = np.array([80.000])
 params_test['params_template']['A0'] = params_test['params_W']['A0']
 params_test['params_template']['A1'] = params_test['params_W']['A1']
