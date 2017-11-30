@@ -8,9 +8,10 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-
+# Class that computes grid (pt,y) in the lab
 class TemplateMaker:
 
+    # initialise
     def __init__(self, out_dir='../test/'):
         print "Initialize TemplateMaker"
         self.out_dir = out_dir
@@ -18,6 +19,7 @@ class TemplateMaker:
         self.width = 2.0
         return
 
+    # specify the mesh size
     def set_CS_grid_mesh(self, grid_px_cos=500, grid_px_phi=10):
         self.grid_px_cos = grid_px_cos
         self.grid_px_phi = grid_px_phi        
@@ -27,6 +29,7 @@ class TemplateMaker:
         self.grid_phi = np.linspace( 0., 2*np.pi, grid_px_phi, dtype=np.float)
         self.grid_indexes = np.arange(0, len(self.grid_cos)*len(self.grid_phi), 1)
         
+    # compute dsigma/dphidcos in the CS frame
     def angular_pdf(self, x, y, coeff=[]):
         UL = (1.0 + x*x)
         L = 0.5*(1-3*x*x)
@@ -36,10 +39,12 @@ class TemplateMaker:
         P = x
         return 3./16./math.pi * ( UL + coeff[0]*L + coeff[1]*T + coeff[2]*I + coeff[3]*A + coeff[4]*P)
 
+    # NR Breit-Wigner
     def BW(self, x, mass):
         bw = 1.0/math.pi/self.width/(1+math.pow((x-mass)/self.width,2.0))
         return bw
 
+    # sample mass from BW
     def sample_BW(self, mass, truncate=True):
         x = np.random.standard_cauchy()
         check = lambda x : (x<3.0 and x>-3.0) 
@@ -47,8 +52,8 @@ class TemplateMaker:
             x = np.random.standard_cauchy()
         return (x*self.width + mass)
 
-    def boost_to_lab(self, x=np.array([0.,0.,0.]), y=0.0, pt=0.0):
-        
+    # (cos,phi,E) --> (E,px,py,pz)
+    def boost_to_lab(self, x=np.array([0.,0.,0.]), y=0.0, pt=0.0):       
         cos = x[0]
         phi = x[1]
         E = x[2]
@@ -71,14 +76,13 @@ class TemplateMaker:
         x_lab = np.linalg.tensorsolve(boost, x_CS)
         return x_lab
 
-
+    # fill (cos,phi) grid in CS frame
     def make_grid_CS(self, coeff=[0., 0., 0., 0., 0.], mass=80., ntoys=1000):
-
+        # number of toys used to fill the template
         self.ntoys=ntoys
 
         # array that stores the rnd values
         rnd_grid = np.zeros((ntoys,3))
-
         xx, yy = np.meshgrid( self.grid_cos, self.grid_phi )        
 
         print "Evaluating the pdf over the grid..."
@@ -102,6 +106,7 @@ class TemplateMaker:
             rnd_grid[i][2] = self.sample_BW(mass)*0.5
         return rnd_grid
 
+    # fill (pt,y) template and save output as .npy
     def make_grid_lab(self, 
                       params = {},
                       boost_vecs=[], weights_mass=[], 
@@ -133,9 +138,9 @@ class TemplateMaker:
                       weights=np.ones(ntoys),
                       title=( 'CS frame, M={:05.3f}, A=[{:03.2f},{:03.2f},{:03.2f},{:03.2f},{:03.2f}]'.format(mass, coeff[0], coeff[1], coeff[2], coeff[3], coeff[4])),     
                       name='grid_CS_'+grid_tag)
-        
-        for boost_vec in boost_vecs:
 
+        # loop over pt,y values
+        for boost_vec in boost_vecs:
             pt, y = boost_vec
 
             print ("Make the grid in the lab for (pt,y)=(%s,%s)" % (pt,y))            
@@ -144,11 +149,11 @@ class TemplateMaker:
             # fill the template
             setattr(self, 'rnd_grid_lab_'+boost_tag,  np.zeros((self.ntoys, 2+n_weights)) )
 
+            # needed to reweight sample to various Ai,M
             weight_tensor = np.zeros((n_weights_mass,n_weights_A0,n_weights_A1,n_weights_A2,n_weights_A3,n_weights_A4), dtype=int)
 
             # fill the templates toy-by-toy
             for itoy in range(self.ntoys):
-
                 toy_CS = rnd_grid_CS[itoy]
                 angle_pdf = self.angular_pdf(toy_CS[0],toy_CS[1], coeff=coeff )
 
@@ -159,12 +164,14 @@ class TemplateMaker:
 
                 index = 0
                 for im,m in enumerate(params['params_W']['mass']):
+                    # mass weight is ratio of two BW
                     weight_mass = self.BW(2.0*toy_CS[2], m)/self.BW(2.0*toy_CS[2], mass)
                     for iA0,A0 in enumerate(params['params_W']['A0']):
                         for iA1,A1 in enumerate(params['params_W']['A1']):
                             for iA2,A2 in enumerate(params['params_W']['A2']):
                                 for iA3,A3 in enumerate(params['params_W']['A3']):
                                     for iA4,A4 in enumerate(params['params_W']['A4']):
+                                        # weight angle is the ratio between angular pdfs
                                         weight_angle = self.angular_pdf(toy_CS[0], toy_CS[1], coeff=[A0, A1, A2, A3, A4] )/angle_pdf
                                         this_toy[2+index] = weight_mass*weight_angle
                                         #print im, iA0, iA1, iA2, iA3, iA4, index, weight_angle
@@ -200,7 +207,7 @@ class TemplateMaker:
                                                   xmin=params['params_lep']['y_range'][0], xmax=params['params_lep']['y_range'][1], ymin=params['params_lep']['pt_range'][0], ymax=params['params_lep']['pt_range'][1], nbins=[params['params_lep']['y_bins'], params['params_lep']['pt_bins']],
                                                   name='/grid_lab_'+out_name)
 
-
+    # plot (pt,y) for each .npy
     def plot(self, data_x=np.array([]), label_x='eta', data_y=np.array([]), label_y='pT (GeV)', weights=np.array([]),
              xmin=-1.,xmax=1., ymin=0, ymax=2*math.pi, nbins=[], title='', name='grid_CS'):
         plt.title(title)
@@ -213,33 +220,3 @@ class TemplateMaker:
 
 
 #################################################
-
-
-'''
-            for im,m in enumerate(params['params_W']['mass']):
-                for iA4,A4 in enumerate(params['params_W']['A4']):
-                    for iA4,A4 in enumerate(params['params_W']['A4']):
-                        template = np.histogram2d( getattr(self, 'rnd_grid_lab_'+boost_tag)[:,1], getattr(self, 'rnd_grid_lab_'+boost_tag)[:,0],
-                                                   weights=getattr(self, 'rnd_grid_lab_'+boost_tag)[:,2 + im*n_weights_mass + iA4],
-                                                   normed=True,
-                                                   bins=[params['params_lep']['y_bins'], params['params_lep']['pt_bins']],
-                                                   range=[ params['params_lep']['y_range'], params['params_lep']['pt_range']]
-                                                   )
-                    
-                        # save to disk
-                        out_name = boost_tag+'_M{:05.3f}'.format(m)
-                        for ic,c in enumerate(coeff):
-                            if ic<4:
-                                out_name += '_A'+str(ic)+('{:03.2f}'.format(c))
-                        out_name += '_A4{:03.2f}'.format(A4)
-                        np.save(self.out_dir+'/grid_lab_'+out_name, template)
-
-                        if self.save_plots:            
-                            self.plot(data_x=getattr(self, 'rnd_grid_lab_'+boost_tag)[:,1], label_x='eta',              
-                                      data_y=getattr(self, 'rnd_grid_lab_'+boost_tag)[:,0], label_y='pt', nbins=60, 
-                                      weights=getattr(self, 'rnd_grid_lab_'+boost_tag)[:,2 + im*n_weights_mass + iA4],
-                                      title=( 'Lab frame, M={:05.3f}, A=[{:03.2f},{:03.2f},{:03.2f},{:03.2f},{:03.2f}] (pt,y)=({:02.1f},{:02.1f})'.format(m, coeff[0], coeff[1], coeff[2], coeff[3], A4, pt, y)), 
-                                      xmin=-3.0,xmax=+3.0, ymin=20, ymax=60,
-                                      name='/grid_lab_'+out_name)
-'''
-
