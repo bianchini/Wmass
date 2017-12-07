@@ -9,7 +9,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from template_parameters import params_test, pdf_test , coefficients_test
+from template_parameters import params_test, pdf_test , coefficients_test, accept_point
 
 class MixData:
 
@@ -74,46 +74,31 @@ class MixData:
 
             for iy in shift_pos:
                 y = y_edges[0]+y_bin_width*iy
-                print "(%s, %s) is in range" % (pt, y)
+                print "\t (pt, y) = (%s, %s) is in range" % (pt, y)
 
                 in_name = 'pt{:02.1f}'.format(pt)+'_'+'y{:03.2f}'.format(0.00)
                 if not self.make_templates:
                     in_name += '_M{:05.3f}'.format( self.output_shapes_mass[0] )
-                in_name_symm = in_name
             
                 for ic,c in enumerate( coefficients(pt_bin[0],y_bin[0]) ):
                     c = c if abs(c)>0. else 0.0
-                    # this is the mass (if make_templates)
                     if self.make_templates and ic==0:                         
                         in_name      += ('_M'+('{:05.3f}'.format(c)))
-                        in_name_symm += ('_M'+('{:05.3f}'.format(c)))
                     # these are the coefficients (if make_templates)
                     elif self.make_templates and ic>0:
                         in_name      += ('_A'+str(ic-1)+('{:03.2f}'.format(c)))
-                        in_name_symm += ('_A'+str(ic-1)+('{:03.2f}'.format( -c if (ic-1) in [1,4] and abs(c)>0. else c )))
                     # these are the coefficients as a functon of (pt,y) (if NOT make_templates)
                     else:
                         in_name      += ('_A'+str(ic)+('{:03.2f}'.format(c)))
-                        in_name_symm += ('_A'+str(ic)+('{:03.2f}'.format( -c if ic in [1,4] and abs(c)>0. else c )))
+                        #in_name_symm += ('_A'+str(ic)+('{:03.2f}'.format( -c if ic in [1,4] and abs(c)>0. else c )))
 
                 # load the file
                 grid = np.load(self.input_dir+'/grid_lab_'+in_name+'.npy')
-                grid_symm = np.array([])
-                if self.symmetrise:
-                    if in_name_symm!=in_name: 
-                        print "\tloading the symmetric file..."
-                        grid_symm = np.load(self.input_dir+'/grid_lab_'+in_name_symm+'.npy')
-                    else:
-                        grid_symm = grid                    
 
+                # mix sub-samples according to a priot pdf
                 weight = pdf(pt=pt,y=y)
-                #weight=1.0
 
-                shifts = [ [iy-middle_point, grid] ]
-                if self.symmetrise and shifts[0][0]!=0:                    
-                    shifts.append( [-(iy-middle_point), grid_symm] )
-                
-                #print shifts[0][0], shifts[-1][0]
+                shifts = [ [iy-middle_point, grid] ]                
                 for [shift,sample] in shifts:
                     sam = copy.deepcopy(sample[0]) 
                     if shift>0:
@@ -147,7 +132,7 @@ class MixData:
                 else:
                     out_name += ('_A'+str(ic-1)+('{:03.2f}'.format(c)))
 
-        
+        mix /= (mix.sum() if mix.sum()>0.0 else 1.0)
         np.save(self.output_dir+'/mixed_dataset_'+out_name, mix)
 
         xx, yy = np.meshgrid(pt_edges, y_edges)        
@@ -170,7 +155,10 @@ class MixData:
                                 for iA2,A2 in enumerate(self.output_shapes_A2):
                                     for iA3,A3 in enumerate(self.output_shapes_A3):
                                         for iA4,A4 in enumerate(self.output_shapes_A4):
+                                            if not accept_point(coeff=[A0,A1,A2,A3,A4]):
+                                                continue
                                             coefficients = lambda x,y : [m,A0,A1,A2,A3,A4]
+                                            print "Mixing template for", coefficients(0.0, 0.0)
                                             self.mix_bin(pt_bin=pt_bin, y_bin=y_bin, pdf=pdf_test, coefficients=coefficients)
 
  

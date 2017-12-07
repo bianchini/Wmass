@@ -8,6 +8,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+from template_parameters import accept_point
+
 # Class that computes grid (pt,y) in the lab
 class TemplateMaker:
 
@@ -171,6 +173,9 @@ class TemplateMaker:
                             for iA2,A2 in enumerate(params['params_W']['A2']):
                                 for iA3,A3 in enumerate(params['params_W']['A3']):
                                     for iA4,A4 in enumerate(params['params_W']['A4']):
+
+                                        if not accept_point(coeff=[A0,A1,A2,A3,A4]):
+                                            continue
                                         # weight angle is the ratio between angular pdfs
                                         weight_angle = self.angular_pdf(toy_CS[0], toy_CS[1], coeff=[A0, A1, A2, A3, A4] )/angle_pdf
                                         this_toy[2+index] = weight_mass*weight_angle
@@ -186,6 +191,9 @@ class TemplateMaker:
                         for iA2,A2 in enumerate(params['params_W']['A2']):
                             for iA3,A3 in enumerate(params['params_W']['A3']):
                                 for iA4,A4 in enumerate(params['params_W']['A4']):
+
+                                    if not accept_point(coeff=[A0,A1,A2,A3,A4]):
+                                        continue
                                     template = np.histogram2d( getattr(self, 'rnd_grid_lab_'+boost_tag)[:,1], getattr(self, 'rnd_grid_lab_'+boost_tag)[:,0],
                                                                weights=getattr(self, 'rnd_grid_lab_'+boost_tag)[:,2+weight_tensor[im][iA0][iA1][iA2][iA3][iA4]],
                                                                normed=True,
