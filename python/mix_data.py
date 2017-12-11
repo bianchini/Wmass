@@ -66,7 +66,9 @@ class MixData:
         shift_pos = range( int((y_bin[0]-y_edges[0])/y_bin_width), 
                            int((y_bin[1]-y_edges[0])/y_bin_width) )        
 
-        
+        # central bin (for symmetrise)        
+        central = np.array([])
+
         for ipt,pt in enumerate(self.input_shapes_pt):
             
             if pt<pt_bin[0] or pt>=pt_bin[1]:
@@ -90,17 +92,22 @@ class MixData:
                     # these are the coefficients as a functon of (pt,y) (if NOT make_templates)
                     else:
                         in_name      += ('_A'+str(ic)+('{:03.2f}'.format(c)))
-                        #in_name_symm += ('_A'+str(ic)+('{:03.2f}'.format( -c if ic in [1,4] and abs(c)>0. else c )))
 
                 # load the file
                 grid = np.load(self.input_dir+'/grid_lab_'+in_name+'.npy')
 
-                # mix sub-samples according to a priot pdf
+                # mix sub-samples according to a prior pdf
                 weight = pdf(pt=pt,y=y)
-
+                
                 shifts = [ [iy-middle_point, grid] ]                
                 for [shift,sample] in shifts:
                     sam = copy.deepcopy(sample[0]) 
+                    if self.symmetrise and shift==0:
+                        if central.shape!=sam.shape:
+                            central = sam*weight
+                        else:
+                            central += sam*weight
+                        continue
                     if shift>0:
                         sam[-shift:, :] = 0.
                     elif shift<0:
@@ -112,14 +119,23 @@ class MixData:
                         mix += sam_shifted*weight
 
         if self.symmetrise:
-            for ipt in range(mix.shape[1]):
+            for ipt in range( mix.shape[1] ):
                 for iy in range( mix.shape[0]/2 ):
                     #print iy, "+", mix.shape[0]-1-iy
+                    # symmetrise varitions
                     left = mix[iy][ipt]
                     right = mix[mix.shape[0]-1-iy][ipt] 
                     mix[iy][ipt] += right
                     mix[mix.shape[0]-1-iy][ipt] += left
-            mix *= 0.5
+                    # symmetrise central bin
+                    if central.shape==mix.shape:
+                        leftC = central[iy][ipt]
+                        rightC = central[mix.shape[0]-1-iy][ipt] 
+                        central[iy][ipt] += rightC
+                        central[mix.shape[0]-1-iy][ipt] += leftC
+            if central.shape==mix.shape:
+                mix += central*0.5
+            
 
         out_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'y{:03.2f}'.format(y_bin[1])
         if not self.make_templates:
@@ -132,7 +148,8 @@ class MixData:
                 else:
                     out_name += ('_A'+str(ic-1)+('{:03.2f}'.format(c)))
 
-        mix /= (mix.sum() if mix.sum()>0.0 else 1.0)
+        # normalisation
+        #mix /= (mix.sum() if mix.sum()>0.0 else 1.0)
         np.save(self.output_dir+'/mixed_dataset_'+out_name, mix)
 
         xx, yy = np.meshgrid(pt_edges, y_edges)        
@@ -159,7 +176,7 @@ class MixData:
                                                 continue
                                             coefficients = lambda x,y : [m,A0,A1,A2,A3,A4]
                                             print "Mixing template for", coefficients(0.0, 0.0)
-                                            self.mix_bin(pt_bin=pt_bin, y_bin=y_bin, pdf=pdf_test, coefficients=coefficients)
+                                            self.mix_bin(pt_bin=pt_bin, y_bin=y_bin, pdf=pdf_test, coefficients=coefficients) 
 
  
 

@@ -3,31 +3,29 @@ import math
 import sys
 from pprint import pprint
 import numpy as np
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 from array import array;
 
 from template_parameters import accept_point, pdf_test
 
 class Unfolder:
 
-    def __init__(self, input_dir='../data/', params={} ):
+    def __init__(self, input_dir='../data/', params={}, num_events=1000000 ):
 
         self.input_dir=input_dir
-
         self.load_files(params=params)
-        self.read_data(num_events=10000000)
+        self.read_data(num_events=num_events)
         self.book_parameters(params=params)
 
-        #p_start = array( 'd' )
-        #p_step = array( 'd' )
-        #to_be_fixed = array('i')
-        #for i in range(self.n_param):  
-        #    p_start.append( 0.0 )
-        #    p_step.append( 0.01 )
-
-            #if p in to_be_fixed:
-            #    self.gMinuit.FixParameter(p)
 
     def load_files(self, params={}):
+
+        self.input_pt_bins = np.linspace(params['params_lep']['pt_range'][0], params['params_lep']['pt_range'][1],  params['params_lep']['pt_bins']+1)
+        self.input_y_bins  = np.linspace(params['params_lep']['y_range'][0], params['params_lep']['y_range'][1],  params['params_lep']['y_bins']+1)
 
         self.input_shapes_pt = params['params_template']['pt']
         self.input_shapes_y  = params['params_template']['y']
@@ -58,38 +56,49 @@ class Unfolder:
                                             input_name += '_A'+str(ic)+('{:03.2f}'.format(c))
                                         print "Loading file...", input_name 
                                         grid = np.load(self.input_dir+'/'+input_name+'.npy')
-                                        grid /= (grid.sum() if grid.sum()>0.0 else 1.0)
+                                        #grid /= (grid.sum() if grid.sum()>0.0 else 1.0)
                                         setattr(self, input_name, grid)
                                         self.shape = grid.shape                                         
 
     def read_data(self, num_events=100000):
 
         self.truth = {}
+        norm_acceptance = 0.0
+        #total_weight = 0.0
 
-        total_weight = 0.0
         for ipt in range(len(self.input_shapes_pt)-1):
             pt_bin=[ self.input_shapes_pt[ipt], self.input_shapes_pt[ipt+1] ]
             for iy in range(len(self.input_shapes_y)-1):
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]
-                total_weight += pdf_test(pt=pt_bin[0], y=y_bin[0])
+                #total_weight += pdf_test(pt=pt_bin[0], y=y_bin[0])
+                input_name = 'mixed_dataset_'+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'y{:03.2f}'.format(y_bin[1])+'_M'+'{:05.3f}'.format(80.000)
+                for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
+                    input_name += '_A'+str(ic)+('{:03.2f}'.format(c))                    
+                norm_acceptance += getattr(self, input_name).sum()
+        
 
         self.data = np.zeros(self.shape)
         for ipt in range(len(self.input_shapes_pt)-1):
             pt_bin=[ self.input_shapes_pt[ipt], self.input_shapes_pt[ipt+1] ]
             for iy in range(len(self.input_shapes_y)-1):
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]
-
-                weight = pdf_test(pt=pt_bin[0], y=y_bin[0])/total_weight
+                #weight = pdf_test(pt=pt_bin[0], y=y_bin[0])/total_weight
+                #print pt_bin, y_bin, weight
                 input_name = 'mixed_dataset_'+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'y{:03.2f}'.format(y_bin[1])+'_M'+'{:05.3f}'.format(80.000)
                 for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))
-                data_rnd = np.random.poisson( getattr(self, input_name)*(num_events*weight))
-                print getattr(self, input_name).sum(), num_events, weight
+                data_rnd = np.random.poisson( getattr(self, input_name)*num_events/norm_acceptance )
                 self.truth['pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'y{:03.2f}'.format(y_bin[1])] = data_rnd.sum()
                 self.data += data_rnd
 
         self.num_events = self.data.sum()
         pprint(self.truth)
+        print "Total number of events in data:", self.num_events
+        xx, yy = np.meshgrid(self.input_pt_bins, self.input_y_bins)        
+        plt.pcolormesh(yy, xx, self.data)
+        plt.show()
+        plt.savefig('data_unfolder.png')
+
         #print self.data
 
         
@@ -108,7 +117,7 @@ class Unfolder:
         self.n_param = 0
         self.gMinuit.mnparm( self.n_param, "mass", 80.000, 0.100,  79.000, 81.000, self.ierflg )        
         self.map_params['mass'] = self.n_param
-        #self.gMinuit.FixParameter(0)
+        self.gMinuit.FixParameter(0)
         self.n_param += 1
 
         for ipt in range(len(self.input_shapes_pt)-1):
@@ -117,8 +126,9 @@ class Unfolder:
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]                
                 par_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'y{:03.2f}'.format(y_bin[1])
                 self.map_params[par_name] = self.n_param
-                self.gMinuit.mnparm( self.n_param, par_name, self.truth[par_name], 10.0, 0.0, self.num_events, self.ierflg )
-                #self.gMinuit.FixParameter(self.n_param)
+                self.gMinuit.mnparm( self.n_param, par_name, self.truth[par_name], 10.0, self.truth[par_name]/10., self.truth[par_name]*10, self.ierflg )
+                #if ipt>3 or iy>5:                    
+                #    self.gMinuit.FixParameter(self.n_param)
                 self.n_param += 1
 
                 for coeff in ['A0', 'A4']:
@@ -181,12 +191,14 @@ class Unfolder:
                         grid_name = load_name + '_M'+'{:05.3f}'.format(self.input_shapes_mass[closest[im]]) 
                         for ic,c in enumerate( load ):
                             grid_name += '_A'+str(ic)+('{:03.2f}'.format(c))
+                        grid = getattr(self, grid_name)
+                        grid /= grid.sum()
                         if iload==0:
-                            pdf_tmp2 += (1-par[count_param+1]-par[count_param+2])*getattr(self, grid_name)
+                            pdf_tmp2 += (1-par[count_param+1]-par[count_param+2])*grid
                         elif iload==1:
-                            pdf_tmp2 += par[count_param+1]*getattr(self, grid_name)
+                            pdf_tmp2 += par[count_param+1]*grid
                         elif iload==2:
-                            pdf_tmp2 += par[count_param+2]*getattr(self, grid_name)
+                            pdf_tmp2 += par[count_param+2]*grid
                     pdf_tmp2 *= mass_weight
                     pdf_tmp1 += pdf_tmp2
                 
