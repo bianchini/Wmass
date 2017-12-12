@@ -57,7 +57,7 @@ class MixData:
         grid_test = np.load(self.input_dir+'/grid_lab_'+test_name+'.npy')
 
         # y and pt bins of the input shape
-        y_edges = grid_test[1]
+        öy_edges = grid_test[1]
         pt_edges = grid_test[2]
 
         # must be odd!
