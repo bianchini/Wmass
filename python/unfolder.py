@@ -1,7 +1,7 @@
 import ROOT
 import math
 import sys
-import csv
+import pickle
 from pprint import pprint
 import numpy as np
 
@@ -15,16 +15,31 @@ from template_parameters import accept_point, pdf_test
 
 class Unfolder:
 
-    def __init__(self, input_dir='../data/', params={},  mass=80.0000, num_events=1000000, fix=[], interp_deg=1 ):
+    def __init__(self, input_dir='../data/', params={},  mass=80.0000, num_events=1000000, fix=[], interp_deg=1, n_points=500000, job_name='TEST', verbose=True, prior_coeff=0.3, prior_xsec=0.3 ):
 
-        self.input_dir=input_dir
-        self.fix=fix
+        self.input_dir = input_dir
+        self.fix = fix
         self.mass = mass
-        self.interp_deg=interp_deg
-        self.num_events=num_events
+        self.interp_deg = interp_deg
+        self.num_events = num_events
+        self.n_points = n_points
+        self.verbose = verbose
+        self.prior_coeff = prior_coeff
+        self.prior_xsec = prior_xsec
+
         self.load_files(params=params)
         self.load_data()
         self.book_parameters(params=params)
+        
+        self.result = {}
+        self.result['fix'] = self.fix
+        self.result['n_points'] = n_points
+        self.result['ntoys'] = 0
+        self.result['num_events'] = num_events
+        self.result['prior_coeff'] = prior_coeff
+        self.result['prior_xsec'] = prior_xsec 
+        self.f = open('result_'+job_name+'.pkl','wb')
+
 
     def load_files(self, params={}):
 
@@ -55,20 +70,23 @@ class Unfolder:
                                     if not accept_point(coeff=[A0,A1,A2,A3,A4]):
                                         continue
                                     for im,m in enumerate(self.input_shapes_mass):
-                                        input_name = 'mixed_dataset_'+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'y{:03.2f}'.format(y_bin[1])+'_M'+'{:05.3f}'.format(m)
+                                        input_name = 'mixed_dataset_'+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_M'+'{:05.3f}'.format(m)
                                         for ic,c in enumerate([A0,A1,A2,A3,A4]):
                                             input_name += '_A'+str(ic)+('{:03.2f}'.format(c))
-                                        print "Loading file...", input_name 
+                                        if self.verbose:
+                                            print "Loading file...", input_name 
                                         grid = np.load(self.input_dir+'/'+input_name+'.npy')
                                         norm = grid.sum() 
-                                        grid /= (norm if norm>0.0 else 1.0)
+                                        #grid /= (norm if norm>0.0 else 1.0)
                                         setattr(self, input_name, grid)
                                         setattr(self, input_name+'_norm', norm)
                                         self.shape = grid.shape                                         
 
+    # generate a rnd sample
     def load_data(self):
         self.toy_data()
 
+    # generate rnd samples
     def toy_data(self, ntoy=0):
 
         self.ntoy=ntoy
@@ -82,7 +100,7 @@ class Unfolder:
             for iy in range(len(self.input_shapes_y)-1):
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]
                 #total_weight += pdf_test(pt=pt_bin[0], y=y_bin[0])
-                input_name = 'mixed_dataset_'+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'y{:03.2f}'.format(y_bin[1])+'_M'+'{:05.3f}'.format(self.mass)
+                input_name = 'mixed_dataset_'+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_M'+'{:05.3f}'.format(self.mass)
                 for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))                    
                 norm_acceptance += getattr(self, input_name+'_norm')
@@ -93,30 +111,32 @@ class Unfolder:
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]
                 #weight = pdf_test(pt=pt_bin[0], y=y_bin[0])/total_weight
                 #print pt_bin, y_bin, weight
-                name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'y{:03.2f}'.format(y_bin[1])
+                name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 input_name = 'mixed_dataset_'+name+'_M'+'{:05.3f}'.format(self.mass)
                 for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))
-                data_rnd = np.random.poisson( getattr(self, input_name)*getattr(self, input_name+'_norm')*self.num_events/norm_acceptance )
+                #data_rnd = np.random.poisson( getattr(self, input_name)*getattr(self, input_name+'_norm')*self.num_events/norm_acceptance )
+                data_rnd = np.random.poisson( getattr(self, input_name)*self.num_events/norm_acceptance )
                 self.truth[name] = data_rnd.sum()
                 self.truth[name+'_A0'] = 0.0
                 self.truth[name+'_A4'] = 0.0
                 self.data += data_rnd
 
         self.truth['mass'] = self.mass
-        self.truth['num_events_toy'] = self.num_events
         self.truth['num_events_toy'] = self.data.sum()
-        #pprint(self.truth)
-        xx, yy = np.meshgrid(self.input_pt_bins, self.input_y_bins)        
-        plt.pcolormesh(yy, xx, self.data)
-        plt.show()
-        plt.savefig('data_toy_'+str(ntoy)+'.png')
+        if ntoy==0:
+            xx, yy = np.meshgrid(self.input_pt_bins, self.input_y_bins)        
+            plt.pcolormesh(yy, xx, self.data)
+            plt.show()
+            plt.savefig('data_toy_'+str(ntoy)+'.png')
         #print self.data
 
         
     def book_parameters(self, params={}):
 
         self.gMinuit = ROOT.TMinuit(500)  
+        if not self.verbose:
+            self.gMinuit.SetPrintLevel(-1)
         self.gMinuit.SetFCN( self.fcn ) 
         self.arglist = array( 'd', 10*[0.] )
         self.ierflg = ROOT.Long(0)
@@ -127,7 +147,8 @@ class Unfolder:
 
         # add mass
         self.n_param = 0
-        self.gMinuit.mnparm( self.n_param, "mass", self.mass, 0.010, self.mass-1.000, self.mass+1.000, self.ierflg )        
+        #self.gMinuit.mnparm( self.n_param, "mass", self.mass, 0.010, self.mass-1.000, self.mass+1.000, self.ierflg )        
+        self.gMinuit.DefineParameter( self.n_param, "mass", self.mass, 0.010, self.mass-1.000, self.mass+1.000 )        
         self.map_params['mass'] = self.n_param
         if 'mass' in self.fix:
             self.gMinuit.FixParameter(0)
@@ -137,9 +158,10 @@ class Unfolder:
             pt_bin=[ self.input_shapes_pt[ipt], self.input_shapes_pt[ipt+1] ]
             for iy in range(len(self.input_shapes_y)-1):
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]                
-                par_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'y{:03.2f}'.format(y_bin[1])
+                par_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 self.map_params[par_name] = self.n_param
-                self.gMinuit.mnparm( self.n_param, par_name, self.truth[par_name], 10.0, self.truth[par_name]/10., self.truth[par_name]*10, self.ierflg )
+                #self.gMinuit.mnparm( self.n_param, par_name, self.truth[par_name], 10.0, self.truth[par_name]/10., self.truth[par_name]*10, self.ierflg )
+                self.gMinuit.DefineParameter( self.n_param, par_name, self.truth[par_name], 10.0, self.truth[par_name]/10., self.truth[par_name]*10  )
                 if 'pt_y' in self.fix: 
                     self.gMinuit.FixParameter(self.n_param)
                 self.n_param += 1
@@ -148,7 +170,8 @@ class Unfolder:
                 # add one parameter per pt/y/Ai bin                    
                     par_name_coeff = par_name+'_'+coeff 
                     self.map_params[par_name_coeff] = self.n_param
-                    self.gMinuit.mnparm( self.n_param, par_name_coeff, 0.00, 0.01, -1.50,  1.50, self.ierflg )
+                    #self.gMinuit.mnparm( self.n_param, par_name_coeff, 0.00, 0.01, -1.50,  1.50, self.ierflg )
+                    self.gMinuit.DefineParameter( self.n_param, par_name_coeff, 0.00, 0.01, -1.50,  1.50)
                     if coeff in self.fix:
                         self.gMinuit.FixParameter(self.n_param)
                     self.n_param += 1            
@@ -157,6 +180,28 @@ class Unfolder:
                        [1.0, 0.0, 0.0, 0.0, 0.0],
                        [0.0, 0.0, 0.0, 0.0, 1.0]
                        ]
+
+
+    def reset_parameters(self):
+        self.arglist[0] = 1
+        self.arglist[1] = self.mass 
+        self.gMinuit.mnexcm("SET PAR", self.arglist, 2, self.ierflg )
+
+        for ipt in range(len(self.input_shapes_pt)-1):
+            pt_bin=[ self.input_shapes_pt[ipt], self.input_shapes_pt[ipt+1] ]
+            for iy in range(len(self.input_shapes_y)-1):
+                y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]                
+                par_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
+                self.arglist[0] = self.map_params[par_name]+1
+                self.arglist[1] = self.truth[par_name] 
+                self.gMinuit.mnexcm("SET PAR", self.arglist, 2, self.ierflg )
+
+                for coeff in ['A0', 'A4']:
+                    par_name_coeff = par_name+'_'+coeff 
+                    self.arglist[0] = self.map_params[par_name_coeff]+1
+                    self.arglist[1] = self.truth[par_name_coeff] 
+                    self.gMinuit.mnexcm("SET PAR", self.arglist, 2, self.ierflg )
+
 
     def find_neighbours(self, mass=80.000):
         mass_neighbours=[]
@@ -190,9 +235,12 @@ class Unfolder:
         #print "Evaluating fcn..."
         pdf = np.zeros(self.shape)
 
-        # find closest teplates for linear interpolation
+        # find closest teplates for interpolation
         mass = par[0]
         mass_neighbours = self.find_neighbours(mass=mass)
+        if len(mass_neighbours)<2:
+            print "No points for mass interpolation at m=%s" % mass
+            return 1.0
 
         # keet track of par mapping: par[0] is mass
         count_param = 1
@@ -206,7 +254,7 @@ class Unfolder:
                 # the pdf of a given pt_y bin
                 pdf_tmp_pt_y = np.zeros(self.shape)
 
-                load_name = 'mixed_dataset_pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'y{:03.2f}'.format(y_bin[1])
+                load_name = 'mixed_dataset_pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
 
                 # mass interpolation and Ai averaging
                 x = np.zeros(len(mass_neighbours))
@@ -229,6 +277,9 @@ class Unfolder:
                             pdf_tmp_coeff += par[count_param+1]*grid
                         elif iload==2:
                             pdf_tmp_coeff += par[count_param+2]*grid                    
+
+                    # normalise 
+                    pdf_tmp_coeff /= pdf_tmp_coeff.sum()
                     grid_points.append( pdf_tmp_coeff )
 
                 # interpolate templates of different mass
@@ -248,11 +299,11 @@ class Unfolder:
             true = self.truth[key]
             # pt_y bins
             if '_A' not in key and 'mass' not in key:                
-                err = 0.30
+                err = self.prior_xsec
                 nll += math.pow( (math.log(par[p])-math.log(true))/err, 2.0)
             # coefficients
             elif '_A' in key:
-                err = 0.30
+                err = self.prior_coeff
                 nll += math.pow((par[p]-true)/err, 2.0)
                 
         nll += ((-self.data*np.log(pdf) + pdf) if np.isfinite(np.log(pdf)).all() else np.ones(self.shape)*sys.float_info.max).sum()
@@ -279,14 +330,11 @@ class Unfolder:
         return grid_points[0]
 
 
-    def run(self, n_points=1000000):
+    def run(self):
 
-        result = {}
-        result['n_points'] = n_points
-        result['mass_gen'] = self.mass
-        result['fix'] = self.fix
+        self.result['ntoys'] += 1 
 
-        self.arglist[0] = n_points
+        self.arglist[0] = self.n_points
         self.arglist[1] = 1.
 
         self.gMinuit.mnexcm( "MIGRAD", self.arglist, 2, self.ierflg )
@@ -295,7 +343,8 @@ class Unfolder:
         amin, edm, errdef = ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.)
         nvpar, nparx, icstat = ROOT.Long(1983), ROOT.Long(1984), ROOT.Long(1985)
         self.gMinuit.mnstat( amin, edm, errdef, nvpar, nparx, icstat )
-        self.gMinuit.mnprin( 3, amin )
+        if self.verbose:
+            self.gMinuit.mnprin( 3, amin )
 
         self.cov = ROOT.TMatrixDSym(self.n_param)
         self.gMinuit.mnemat(self.cov.GetMatrixArray(), self.n_param)
@@ -305,11 +354,18 @@ class Unfolder:
         for key,p in self.map_params.items():            
             self.gMinuit.GetParameter(p, val, err)
             true = self.truth[key]
-            print key, p, ":", true, " ==> ", val, "+/-", err
-            result[key]={ 'true' : true, 'fit' : val, 'fit_err' : err}
-            
-        f = open('mycsvfile'+str(self.ntoy)+'.txt','wb')
-        #w = csv.DictWriter(f, result.keys())
-        #w.writerows(result)
-        f.write(result)
-        f.close()
+            if self.verbose:
+                print key, p, ":", true, " ==> ", val, "+/-", err
+            if not self.result.has_key(key):
+                self.result[key] = {'true' : [true], 'fit' : [float(val)], 'err' : [float(err)] }
+            else:
+                self.result[key]['true'].append(true) 
+                self.result[key]['fit'].append(float(val)) 
+                self.result[key]['err'].append(float(err)) 
+
+    # save the result to a pickle file
+    def save_result(self):            
+        pickle.dump(self.result, self.f)
+        self.f.close()
+        print "Result saved in file", self.f.name
+        return

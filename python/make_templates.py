@@ -1,6 +1,7 @@
 import ROOT
 import math
 import sys
+import copy
 import numpy as np
 import numpy.random as ran
 
@@ -17,7 +18,7 @@ class TemplateMaker:
     def __init__(self, out_dir='../test/'):
         print "Initialize TemplateMaker"
         self.out_dir = out_dir
-        self.save_plots = True
+        self.save_plots = False
         self.width = 2.0
         return
 
@@ -196,16 +197,20 @@ class TemplateMaker:
                                         continue
                                     template = np.histogram2d( getattr(self, 'rnd_grid_lab_'+boost_tag)[:,1], getattr(self, 'rnd_grid_lab_'+boost_tag)[:,0],
                                                                weights=getattr(self, 'rnd_grid_lab_'+boost_tag)[:,2+weight_tensor[im][iA0][iA1][iA2][iA3][iA4]],
-                                                               normed=True,
+                                                               normed=False,
                                                                bins=[params['params_lep']['y_bins'], params['params_lep']['pt_bins']],
                                                                range=[ params['params_lep']['y_range'], params['params_lep']['pt_range']]
                                                                )
+                                    # nornalise to acceptance
+                                    histo = copy.deepcopy(template[0])
+                                    histo /= self.ntoys
+                                    norm_template = (histo, template[1], template[2])
 
                                     # save to disk
                                     out_name = boost_tag+'_M{:05.3f}'.format(m)
                                     out_name += ('_A0{:03.2f}'.format(A0)+'_A1{:03.2f}'.format(A1)+'_A2{:03.2f}'.format(A2)+'_A3{:03.2f}'.format(A3)+'_A4{:03.2f}'.format(A4))
-                                    print "Saving histogram for "+out_name
-                                    np.save(self.out_dir+'/grid_lab_'+out_name, template)
+                                    print "Saving histogram for "+out_name+" : acc. %s" %  norm_template[0].sum()                                    
+                                    np.save(self.out_dir+'/grid_lab_'+out_name, norm_template)
 
                                     if self.save_plots:            
                                         self.plot(data_x=getattr(self, 'rnd_grid_lab_'+boost_tag)[:,1], label_x='eta',              

@@ -57,7 +57,7 @@ class MixData:
         grid_test = np.load(self.input_dir+'/grid_lab_'+test_name+'.npy')
 
         # y and pt bins of the input shape
-        öy_edges = grid_test[1]
+        y_edges = grid_test[1]
         pt_edges = grid_test[2]
 
         # must be odd!
@@ -137,7 +137,7 @@ class MixData:
                 mix += central*0.5
             
 
-        out_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'y{:03.2f}'.format(y_bin[1])
+        out_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
         if not self.make_templates:
             out_name += '_M{:05.3f}'.format( self.output_shapes_mass[0] )
         else:
@@ -154,8 +154,10 @@ class MixData:
 
         xx, yy = np.meshgrid(pt_edges, y_edges)        
         plt.pcolormesh(yy, xx, mix)
+        plt.colorbar()
         plt.show()
         plt.savefig(self.output_dir+'/mixed_dataset_'+out_name+'.png')
+        plt.close()
 
     def mix_all_bins(self):
         for ipt in range(len(self.output_shapes_pt)-1):

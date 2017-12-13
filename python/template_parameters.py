@@ -49,7 +49,7 @@ def pdf_test(pt,y):
     val *= math.exp(-(pt+lambdaQCD)/pt_max)*(pt+lambdaQCD)/pt_max/pt_max
 
     # y        
-    y_width = 1.5
+    y_width = 2.5
     val *= 1./math.sqrt(2*math.pi)/(y_width)*math.exp(-0.5*y*y/y_width/y_width)
     
     return val
@@ -63,7 +63,7 @@ def coefficients_test(pt=0.0,y=0.0):
     #coeff[2] = coeff[20] 
     #coeff[3] = 0.0
 
-    coeff[4] = -math.tanh(y)
+    #coeff[4] = -math.tanh(y)
 
     #if y > 0.0:
     #    coeff[4] = -1.
@@ -71,31 +71,34 @@ def coefficients_test(pt=0.0,y=0.0):
     #    coeff[4] = +1.
 
     #coeff[4] = 0.0
-
     return coeff
 
 
-params_test = copy.deepcopy(Parameters)
-params_test['params_W']['pt'] = np.linspace(0.0, 10.0, 11)
-#params_test['params_W']['pt'] = np.linspace(0.0, 2.0, 2) 
-params_test['params_W']['y'] = np.array([0.0])
-params_test['params_W']['mass'] = np.array([80.000])
-params_test['params_W']['A0'] = np.array([0.0]) 
-params_test['params_W']['A1'] = np.array([0.0]) 
-params_test['params_W']['A2'] = np.array([0.0])
-params_test['params_W']['A3'] = np.array([0.0]) 
-#params_test['params_W']['A4'] = np.array([-1.0, +1.0])
-A4_realistic = np.zeros(37)
-for iy, y in enumerate(np.linspace(-3.6, 3.6, 37)):
-    A4_realistic[iy] = -math.tanh(y) if abs(y)>0 else 0.0
-params_test['params_W']['A4'] = A4_realistic 
-#params_test['params_W']['A4'] = np.array([0.0]) 
+def accept_point(coeff=[], verbose=False):
+    #return True
+    if coeff.count(1.0)==1 or coeff.count(0.0)==len(coeff):
+        return True
+    else:
+        if verbose:
+            print "Point", coeff, "is excluded: continue" 
+        return False
 
-#params_test['params_template']['pt'] = np.linspace(0.0, 10.0, 5)
-#params_test['params_template']['y']  = np.linspace(0.0, 3.6, 19)
-params_test['params_template']['pt'] = np.linspace(0.0, 1.0, 2)
-params_test['params_template']['y']  = np.linspace(0.5, 0.55, 2)
-params_test['params_template']['mass'] = np.array([80.000])
+
+params_test = copy.deepcopy(Parameters)
+params_test['params_W']['pt'] = np.linspace(0.0, 20.0, 11)
+params_test['params_W']['y'] = np.array([0.0])
+params_test['params_W']['mass'] = np.array([79.500,80.000,80.500])
+params_test['params_W']['A0'] = np.array([ 0.0, 1.0 ]) 
+params_test['params_W']['A1'] = np.array([ 0.0 ]) 
+params_test['params_W']['A2'] = np.array([ 0.0 ])
+params_test['params_W']['A3'] = np.array([ 0.0 ]) 
+params_test['params_W']['A4'] = np.array([ 0.0, 1.0 ])
+
+params_test['params_template']['pt'] = np.linspace(0.0, 20.0, 6)
+#params_test['params_template']['pt'] = np.linspace(0.0, 20.0, 2)
+params_test['params_template']['y']  = np.linspace(0.0, 3.6, 10)
+#params_test['params_template']['y']  = np.linspace(0.0, 3.6, 2)
+params_test['params_template']['mass'] = params_test['params_W']['mass']
 params_test['params_template']['A0'] = params_test['params_W']['A0']
 params_test['params_template']['A1'] = params_test['params_W']['A1']
 params_test['params_template']['A2'] = params_test['params_W']['A2']
