@@ -1,26 +1,40 @@
 #!/usr/bin/env python
 import os
-import ROOT
-#from PhysicsTools.NanoAODTools.postprocessing.framework.postprocessor import * 
+import numpy as np
 
-#this takes care of converting the input files from CRAB
-from crabhelper import inputFiles,runsAndLumis
+import sys
+sys.path.append('./')
 
-# here I place the actual job
-inFile = ROOT.TFile.Open(os.environ['CMSSW_BASE']+"/src/Wmass/data/"+"result.root") 
-inTree = inFile.Get("tree") 
-print inTree.GetEntries() 
-outFile = ROOT.TFile.Open("tree.root", "RECREATE")
-outTree = inTree.CloneTree(10,"")
-print outTree.GetEntries() 
-outTree.Write() 
-outFile.Close()
-inFile.Close()
+from unfolder import Unfolder
+from template_parameters import params_test
 
-#for fname in inputFiles():
-#    inFile = ROOT.TFile.Open(fname)
-#    inTree = inFile.Get("tree")
-#    print inTree.GetEntries()
+#params_test['params_template']['pt'] = np.linspace(0.0, 20.0, 2) #01
+#params_test['params_template']['y']  = np.linspace(0.0, 3.6, 2)  #10
+
+job_name =
+num_events =
+ntoys = 10
+fix =
+prior_coeff = 
+prior_xsec = 
+
+unfolder = Unfolder(input_dir=(os.environ['CMSSW_BASE']+'/src/Wmass/data/'), 
+                    params=params_test, 
+                    mass=80.000, 
+                    num_events=num_events, 
+                    fix=fix, 
+                    interp_deg=1, 
+                    job_name=job_name, 
+                    verbose=False, 
+                    prior_coeff=prior_coeff, 
+                    prior_xsec=prior_xsec)
+
+for itoy in range(ntoys):
+    print "Process toy n.", itoy
+    unfolder.toy_data(itoy)
+    unfolder.reset_parameters()
+    unfolder.run()
+unfolder.save_result()
 
 print "DONE"
 os.system("ls -lR")

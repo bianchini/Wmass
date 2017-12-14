@@ -10,6 +10,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from array import array;
+import copy
 
 from template_parameters import accept_point, pdf_test
 
@@ -26,11 +27,12 @@ class Unfolder:
         self.verbose = verbose
         self.prior_coeff = prior_coeff
         self.prior_xsec = prior_xsec
+        self.job_name = job_name
 
         self.load_files(params=params)
         self.load_data()
         self.book_parameters(params=params)
-        
+
         self.result = {}
         self.result['fix'] = self.fix
         self.result['n_points'] = n_points
@@ -39,7 +41,6 @@ class Unfolder:
         self.result['prior_coeff'] = prior_coeff
         self.result['prior_xsec'] = prior_xsec 
         self.f = open('result_'+job_name+'.pkl','wb')
-
 
     def load_files(self, params={}):
 
@@ -85,6 +86,7 @@ class Unfolder:
     # generate a rnd sample
     def load_data(self):
         self.toy_data()
+        self.truth_unbiased = copy.deepcopy(self.truth)
 
     # generate rnd samples
     def toy_data(self, ntoy=0):
@@ -128,7 +130,7 @@ class Unfolder:
             xx, yy = np.meshgrid(self.input_pt_bins, self.input_y_bins)        
             plt.pcolormesh(yy, xx, self.data)
             plt.show()
-            plt.savefig('data_toy_'+str(ntoy)+'.png')
+            plt.savefig('data_toy_'+str(ntoy)+'_'+self.job_name+'.png')
         #print self.data
 
         
@@ -193,13 +195,13 @@ class Unfolder:
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]                
                 par_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 self.arglist[0] = self.map_params[par_name]+1
-                self.arglist[1] = self.truth[par_name] 
+                self.arglist[1] = self.truth_unbiased[par_name] 
                 self.gMinuit.mnexcm("SET PAR", self.arglist, 2, self.ierflg )
 
                 for coeff in ['A0', 'A4']:
                     par_name_coeff = par_name+'_'+coeff 
                     self.arglist[0] = self.map_params[par_name_coeff]+1
-                    self.arglist[1] = self.truth[par_name_coeff] 
+                    self.arglist[1] = self.truth_unbiased[par_name_coeff] 
                     self.gMinuit.mnexcm("SET PAR", self.arglist, 2, self.ierflg )
 
 
@@ -296,7 +298,7 @@ class Unfolder:
 
         # prior
         for key,p in self.map_params.items():            
-            true = self.truth[key]
+            true = self.truth_unbiased[key]
             # pt_y bins
             if '_A' not in key and 'mass' not in key:                
                 err = self.prior_xsec
