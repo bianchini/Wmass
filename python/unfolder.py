@@ -86,12 +86,11 @@ class Unfolder:
     # generate a rnd sample
     def load_data(self):
         self.toy_data()
-        self.truth_unbiased = copy.deepcopy(self.truth)
 
     # generate rnd samples
     def toy_data(self, ntoy=0):
 
-        self.ntoy=ntoy
+        self.ntoy = ntoy
         self.data = np.zeros(self.shape)
         self.truth = {}
 
@@ -119,7 +118,9 @@ class Unfolder:
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))
                 #data_rnd = np.random.poisson( getattr(self, input_name)*getattr(self, input_name+'_norm')*self.num_events/norm_acceptance )
                 data_rnd = np.random.poisson( getattr(self, input_name)*self.num_events/norm_acceptance )
-                self.truth[name] = data_rnd.sum()
+                #print data_rnd.sum()
+                #self.truth[name] = data_rnd.sum()
+                self.truth[name] = (getattr(self, input_name)*self.num_events/norm_acceptance).sum()
                 self.truth[name+'_A0'] = 0.0
                 self.truth[name+'_A4'] = 0.0
                 self.data += data_rnd
@@ -129,8 +130,10 @@ class Unfolder:
         if ntoy==0:
             xx, yy = np.meshgrid(self.input_pt_bins, self.input_y_bins)        
             plt.pcolormesh(yy, xx, self.data)
+            plt.colorbar()
             plt.show()
             plt.savefig('data_toy_'+str(ntoy)+'_'+self.job_name+'.png')
+            plt.close()
         #print self.data
 
         
@@ -142,7 +145,9 @@ class Unfolder:
         self.gMinuit.SetFCN( self.fcn ) 
         self.arglist = array( 'd', 10*[0.] )
         self.ierflg = ROOT.Long(0)
-        self.arglist[0] = 0.5
+        
+        # 0.5: chi2, 1.0: -2nll
+        self.arglist[0] = 1.0
         self.gMinuit.mnexcm( "SET ERR", self.arglist, 1, self.ierflg )
 
         self.map_params={}
@@ -163,7 +168,7 @@ class Unfolder:
                 par_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 self.map_params[par_name] = self.n_param
                 #self.gMinuit.mnparm( self.n_param, par_name, self.truth[par_name], 10.0, self.truth[par_name]/10., self.truth[par_name]*10, self.ierflg )
-                self.gMinuit.DefineParameter( self.n_param, par_name, self.truth[par_name], 10.0, self.truth[par_name]/10., self.truth[par_name]*10  )
+                self.gMinuit.DefineParameter( self.n_param, par_name, self.truth[par_name], 10.0, self.truth[par_name]/3.0, self.truth[par_name]*3.0  )
                 if 'pt_y' in self.fix: 
                     self.gMinuit.FixParameter(self.n_param)
                 self.n_param += 1
@@ -195,13 +200,13 @@ class Unfolder:
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]                
                 par_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 self.arglist[0] = self.map_params[par_name]+1
-                self.arglist[1] = self.truth_unbiased[par_name] 
+                self.arglist[1] = self.truth[par_name] 
                 self.gMinuit.mnexcm("SET PAR", self.arglist, 2, self.ierflg )
 
                 for coeff in ['A0', 'A4']:
                     par_name_coeff = par_name+'_'+coeff 
                     self.arglist[0] = self.map_params[par_name_coeff]+1
-                    self.arglist[1] = self.truth_unbiased[par_name_coeff] 
+                    self.arglist[1] = self.truth[par_name_coeff] 
                     self.gMinuit.mnexcm("SET PAR", self.arglist, 2, self.ierflg )
 
 
@@ -284,7 +289,7 @@ class Unfolder:
                     pdf_tmp_coeff /= pdf_tmp_coeff.sum()
                     grid_points.append( pdf_tmp_coeff )
 
-                # interpolate templates of different mass
+                # interpolate templates of different mass                
                 pdf_tmp_pt_y += self.interpolate_mass(mass=mass, x=x, grid_points=grid_points, deg=self.interp_deg, shape=pdf.shape)
                 # normalise bin using norm_bin
                 pdf_tmp_pt_y *= norm_bin
@@ -293,12 +298,12 @@ class Unfolder:
                 # increase par counter by 3 units: (pt_y, A0, A4)
                 count_param += 3
 
-        # compute the negative log likelihood
+        # compute -2*log likelihood
         nll = 0.0
 
         # prior
         for key,p in self.map_params.items():            
-            true = self.truth_unbiased[key]
+            true = self.truth[key]
             # pt_y bins
             if '_A' not in key and 'mass' not in key:                
                 err = self.prior_xsec
@@ -308,7 +313,12 @@ class Unfolder:
                 err = self.prior_coeff
                 nll += math.pow((par[p]-true)/err, 2.0)
                 
-        nll += ((-self.data*np.log(pdf) + pdf) if np.isfinite(np.log(pdf)).all() else np.ones(self.shape)*sys.float_info.max).sum()
+        #nll += 2*((-self.data*np.log(pdf) + pdf) if np.isfinite(np.log(pdf)).all() else np.ones(self.shape)*sys.float_info.max).sum()
+
+        # prevent from any zeros in the pdf
+        pdf += (np.ones(self.shape)*sys.float_info.min)
+        nll += 2*(-self.data*np.log(pdf) + pdf).sum()
+        #print("{:16f}".format(nll))
 
         f[0] = nll
         return
@@ -340,6 +350,7 @@ class Unfolder:
         self.arglist[1] = 1.
 
         self.gMinuit.mnexcm( "MIGRAD", self.arglist, 2, self.ierflg )
+        #self.gMinuit.mnmnos()
 
         # Print results
         amin, edm, errdef = ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.)
@@ -350,6 +361,19 @@ class Unfolder:
 
         self.cov = ROOT.TMatrixDSym(self.n_param)
         self.gMinuit.mnemat(self.cov.GetMatrixArray(), self.n_param)
+
+        if not self.result.has_key('edm'):
+            self.result['edm'] = [float(edm)]
+        else:
+            self.result['edm'].append(float(edm))
+        if not self.result.has_key('amin'):
+            self.result['amin'] = [float(amin)]
+        else:
+            self.result['amin'].append(float(amin))
+        if not self.result.has_key('status'):
+            self.result['status'] = [ self.gMinuit.GetStatus() ]
+        else:
+            self.result['status'].append( self.gMinuit.GetStatus() )
 
         val = ROOT.Double(0.)
         err = ROOT.Double(0.)

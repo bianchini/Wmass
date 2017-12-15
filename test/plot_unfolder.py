@@ -12,7 +12,18 @@ from pprint import pprint
 ROOT.TGaxis.SetMaxDigits(2)
 
 jobs = [ 
-    ['1e5_pt_y', 50], 
+    #['1e6_pt_y_A0_A4_mass_prior02',  40],
+    ['1e6_pt_y_A0_A4_mass_prior02',  40],
+    #['1e6_pt_y_A0_A4_mass_prior03',  40],
+    #['5e6_pt_y_A0_A4_mass_prior03',  40],
+    #['1e7_pt_y_A0_A4_mass_prior03',  40],
+    #['1e6_pt_y_A0_A4_mass_prior02',  40],
+    #['5e6_pt_y_A0_A4_mass_prior02',  40],
+    #['1e7_pt_y_A0_A4_mass_prior02',  40],
+    #['1e6_pt_y_A0_A4_mass_prior01',  40],
+    #['5e6_pt_y_A0_A4_mass_prior01',  40],
+    #['1e7_pt_y_A0_A4_mass_prior01',  40],
+    #['1e5_pt_y', 50], 
     #['1e6_pt_y', 50], 
     #['1e7_pt_y', 50], 
     #['1e5_pt_y_A0_A4', 50], 
@@ -29,6 +40,7 @@ jobs = [
     #['1e7_y_A0_A4', 50], 
     ]
 
+dir_name = 'V2'
 
 for ijob,job in enumerate(jobs):
     #print job
@@ -58,6 +70,8 @@ for ijob,job in enumerate(jobs):
                 histos[key+'_relerr'] = ROOT.TH1F(key+'_relerr', key+'_relerr', 100, ranges[0], ranges[1]) 
 
             for toy in range(res['ntoys']):        
+                if res['status'][toy] != 0:
+                    continue
                 pull = (res[key]['fit'][toy]-res[key]['true'][toy])/res[key]['err'][toy] if res[key]['err'][toy]>0 else 0.0            
                 relerr = res[key]['err'][toy]/res[key]['fit'][toy] if '_A' not in key and res[key]['fit'][toy]>0. else res[key]['err'][toy]
                 histos[key+'_pull'].Fill(pull)
@@ -107,5 +121,5 @@ for ijob,job in enumerate(jobs):
             p.SetLineColor(ROOT.kRed)
             p.Draw("HIST")
             #raw_input()
-        c.SaveAs('plots/'+key+'_'+job[0]+'.png')
+        c.SaveAs('plots/'+dir_name+'/'+key+'_'+job[0]+'.png')
         c.IsA().Destructor( c )

@@ -13,7 +13,7 @@ from template_parameters import params_test
 
 job_name =
 num_events =
-ntoys = 10
+ntoys = 5
 fix =
 prior_coeff = 
 prior_xsec = 
