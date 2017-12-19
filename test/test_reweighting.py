@@ -3,15 +3,16 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-A4 = 0.50
-ul = np.load('../data/grid_lab_pt6.0_y0.00_M80.000_A00.00_A10.00_A20.00_A30.00_A40.00.npy')
-p1 = np.load('../data/grid_lab_pt6.0_y0.00_M80.000_A00.00_A10.00_A20.00_A30.00_A41.00.npy')
-p2 = np.load('../data/grid_lab_pt6.0_y0.00_M80.000_A00.00_A10.00_A20.00_A30.00_A4'+'{:03.2f}'.format(A4)+'.npy')
+A4 = 1.0
+ul = np.load('../root//grid_lab_pt6.0_y0.00_M80.000_A00.00_A10.00_A20.00_A30.00_A40.00.npy')
+p1 = np.load('../root//grid_lab_pt6.0_y0.00_M80.000_A00.00_A10.00_A20.00_A30.00_A42.00.npy')
+p2 = np.load('../root//grid_lab_pt6.0_y0.00_M80.000_A00.00_A10.00_A20.00_A30.00_A4'+'{:03.2f}'.format(A4)+'.npy')
 
-print ul[0].sum(), p1[0].sum(), p2[0].sum()
 
 p2a = np.zeros(ul[0].shape) 
-p2a += (ul[0]*(1-A4) + p1[0]*A4)
+p2a += (ul[0]*(1-A4/2) + p1[0]*A4/2)
+
+print p2a.sum(), '<=>' , p2[0].sum()
 
 xx, yy = np.meshgrid(ul[2], ul[1])        
 plt.subplot(2, 2, 1)

@@ -12,8 +12,14 @@ from pprint import pprint
 ROOT.TGaxis.SetMaxDigits(2)
 
 jobs = [ 
+    ['1e6_pt_y_A0_A4_prior03',  40],
+    ['1e7_pt_y_A0_A4_prior02',  40],
     #['1e6_pt_y_A0_A4_mass_prior02',  40],
-    ['1e6_pt_y_A0_A4_mass_prior02',  40],
+    #['1e6_pt_y_A0_A4_mass_prior03', 40],
+    #['1e7_pt_y_A0_A4_mass_prior01', 40],
+    #['1e7_pt_y_A0_A4_mass_prior02', 40],
+    #['1e6_pt_y_A0_A4_mass_prior02',  40],
+    #['1e6_pt_y_A0_A4_mass_prior02',  40],
     #['1e6_pt_y_A0_A4_mass_prior03',  40],
     #['5e6_pt_y_A0_A4_mass_prior03',  40],
     #['1e7_pt_y_A0_A4_mass_prior03',  40],

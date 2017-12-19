@@ -14,14 +14,16 @@ from template_parameters import params_test
 #params_test['params_template']['y']  = np.linspace(0.0, 3.6, 10)
 #params_test['params_template']['y']  = np.linspace(0.0, 3.6, 2)
 #params_test['params_template']['y']  = np.linspace(0.0, 0.4, 2)
+#params_test['params_template']['pt'] = np.linspace(0.0, 12.0, 4)
 
 # predictable
 np.random.seed(0)
 
-num_events = 1e+6
+num_events = 1e+5
 ntoys = 1
 job_name = 'TEST'
-fix = [ 'A0', 'mass', 'A4' ]
+fix = [ 'A0', 'A1', 'A2', 'A3', 'A4', 'pt_y' ]
+#fix = []
 if len(argv)==4:
     num_events = int(argv[1])
     ntoys = int(argv[2])
@@ -35,7 +37,7 @@ unfolder = Unfolder(input_dir=(os.environ['CMSSW_BASE']+'/src/Wmass/data/'),
                     interp_deg=1, 
                     job_name=job_name, 
                     verbose=True, 
-                    prior_coeff=0.3, prior_xsec=0.3)
+                    prior_coeff=0.1, prior_xsec=0.1)
 
 for itoy in range(ntoys):
     print "Process toy n.", itoy

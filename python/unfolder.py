@@ -2,6 +2,7 @@ import ROOT
 import math
 import sys
 import pickle
+import time
 from pprint import pprint
 import numpy as np
 
@@ -16,7 +17,7 @@ from template_parameters import accept_point, pdf_test
 
 class Unfolder:
 
-    def __init__(self, input_dir='../data/', params={},  mass=80.0000, num_events=1000000, fix=[], interp_deg=1, n_points=500000, job_name='TEST', verbose=True, prior_coeff=0.3, prior_xsec=0.3 ):
+    def __init__(self, input_dir='../data/', params={},  mass=80.0000, num_events=1000000, fix=[], interp_deg=1, n_points=500000, job_name='TEST', verbose=True, prior_coeff=0.3, prior_xsec=0.3, strategy=0 ):
 
         self.input_dir = input_dir
         self.fix = fix
@@ -28,6 +29,7 @@ class Unfolder:
         self.prior_coeff = prior_coeff
         self.prior_xsec = prior_xsec
         self.job_name = job_name
+        self.strategy = strategy
 
         self.load_files(params=params)
         self.load_data()
@@ -94,7 +96,7 @@ class Unfolder:
         self.data = np.zeros(self.shape)
         self.truth = {}
 
-        norm_acceptance = 0.0
+        normalisation = 0.0
         #total_weight = 0.0
         for ipt in range(len(self.input_shapes_pt)-1):
             pt_bin=[ self.input_shapes_pt[ipt], self.input_shapes_pt[ipt+1] ]
@@ -104,24 +106,26 @@ class Unfolder:
                 input_name = 'mixed_dataset_'+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_M'+'{:05.3f}'.format(self.mass)
                 for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))                    
-                norm_acceptance += getattr(self, input_name+'_norm')
+                normalisation += getattr(self, input_name+'_norm')*pdf_test(pt=pt_bin[0], y=y_bin[0])
         
         for ipt in range(len(self.input_shapes_pt)-1):
             pt_bin=[ self.input_shapes_pt[ipt], self.input_shapes_pt[ipt+1] ]
             for iy in range(len(self.input_shapes_y)-1):
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]
-                #weight = pdf_test(pt=pt_bin[0], y=y_bin[0])/total_weight
+                weight = pdf_test(pt=pt_bin[0], y=y_bin[0]) #/total_weight
                 #print pt_bin, y_bin, weight
                 name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 input_name = 'mixed_dataset_'+name+'_M'+'{:05.3f}'.format(self.mass)
                 for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))
                 #data_rnd = np.random.poisson( getattr(self, input_name)*getattr(self, input_name+'_norm')*self.num_events/norm_acceptance )
-                data_rnd = np.random.poisson( getattr(self, input_name)*self.num_events/norm_acceptance )
-                #print data_rnd.sum()
-                #self.truth[name] = data_rnd.sum()
-                self.truth[name] = (getattr(self, input_name)*self.num_events/norm_acceptance).sum()
+                n_true = self.num_events*weight/normalisation
+                data_rnd = np.random.poisson( getattr(self, input_name)*n_true )
+                self.truth[name] = n_true
                 self.truth[name+'_A0'] = 0.0
+                self.truth[name+'_A1'] = 0.0
+                self.truth[name+'_A2'] = 0.0
+                self.truth[name+'_A3'] = 0.0
                 self.truth[name+'_A4'] = 0.0
                 self.data += data_rnd
 
@@ -167,25 +171,26 @@ class Unfolder:
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]                
                 par_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 self.map_params[par_name] = self.n_param
-                #self.gMinuit.mnparm( self.n_param, par_name, self.truth[par_name], 10.0, self.truth[par_name]/10., self.truth[par_name]*10, self.ierflg )
                 self.gMinuit.DefineParameter( self.n_param, par_name, self.truth[par_name], 10.0, self.truth[par_name]/3.0, self.truth[par_name]*3.0  )
                 if 'pt_y' in self.fix: 
                     self.gMinuit.FixParameter(self.n_param)
                 self.n_param += 1
 
-                for coeff in ['A0', 'A4']:
+                for coeff in ['A0', 'A1', 'A2', 'A3', 'A4']:
                 # add one parameter per pt/y/Ai bin                    
                     par_name_coeff = par_name+'_'+coeff 
-                    self.map_params[par_name_coeff] = self.n_param
-                    #self.gMinuit.mnparm( self.n_param, par_name_coeff, 0.00, 0.01, -1.50,  1.50, self.ierflg )
-                    self.gMinuit.DefineParameter( self.n_param, par_name_coeff, 0.00, 0.01, -1.50,  1.50)
+                    self.map_params[par_name_coeff] = self.n_param            
+                    self.gMinuit.DefineParameter( self.n_param, par_name_coeff, 0.00, 0.001, -0.75,  0.75)
                     if coeff in self.fix:
                         self.gMinuit.FixParameter(self.n_param)
                     self.n_param += 1            
 
         self.loads = [ [0.0, 0.0, 0.0, 0.0, 0.0],
-                       [1.0, 0.0, 0.0, 0.0, 0.0],
-                       [0.0, 0.0, 0.0, 0.0, 1.0]
+                       [2.0, 0.0, 0.0, 0.0, 0.0],
+                       [0.0, 1.0, 0.0, 0.0, 0.0],
+                       [0.0, 0.0, 1.0, 0.0, 0.0],
+                       [0.0, 0.0, 0.0, 1.0, 0.0],
+                       [0.0, 0.0, 0.0, 0.0, 2.0]
                        ]
 
 
@@ -203,7 +208,7 @@ class Unfolder:
                 self.arglist[1] = self.truth[par_name] 
                 self.gMinuit.mnexcm("SET PAR", self.arglist, 2, self.ierflg )
 
-                for coeff in ['A0', 'A4']:
+                for coeff in ['A0', 'A1', 'A2', 'A3', 'A4']:
                     par_name_coeff = par_name+'_'+coeff 
                     self.arglist[0] = self.map_params[par_name_coeff]+1
                     self.arglist[1] = self.truth[par_name_coeff] 
@@ -278,15 +283,20 @@ class Unfolder:
                         for ic,c in enumerate( load ):
                             grid_name += '_A'+str(ic)+('{:03.2f}'.format(c))
                         grid = getattr(self, grid_name)
+                        # this is [0,0,0,0,0]
                         if iload==0:
-                            pdf_tmp_coeff += (1-par[count_param+1]-par[count_param+2])*grid
-                        elif iload==1:
-                            pdf_tmp_coeff += par[count_param+1]*grid
-                        elif iload==2:
-                            pdf_tmp_coeff += par[count_param+2]*grid                    
+                            norm = 1.0
+                            for p in range(0, len(load)):
+                                shift_gen = self.loads[p+1][p]
+                                norm -= par[count_param + (p+1)]/shift_gen
+                            pdf_tmp_coeff += norm*grid
+                        # these are [2,0,0,0,0], [0,1,0,0,0], ...
+                        else:
+                            shift_gen = load[iload-1]
+                            pdf_tmp_coeff += par[count_param+iload]/shift_gen*grid
 
                     # normalise 
-                    pdf_tmp_coeff /= pdf_tmp_coeff.sum()
+                    #pdf_tmp_coeff /= pdf_tmp_coeff.sum()
                     grid_points.append( pdf_tmp_coeff )
 
                 # interpolate templates of different mass                
@@ -296,7 +306,7 @@ class Unfolder:
                 # add tis bin to the total pdf
                 pdf += pdf_tmp_pt_y
                 # increase par counter by 3 units: (pt_y, A0, A4)
-                count_param += 3
+                count_param += (1+len(self.loads[0]))
 
         # compute -2*log likelihood
         nll = 0.0
@@ -307,14 +317,13 @@ class Unfolder:
             # pt_y bins
             if '_A' not in key and 'mass' not in key:                
                 err = self.prior_xsec
-                nll += math.pow( (math.log(par[p])-math.log(true))/err, 2.0)
+                #nll += math.pow( (math.log(par[p])-math.log(true))/err, 2.0)
+                nll += math.pow((par[p]-true)/(err*true), 2.0)
             # coefficients
             elif '_A' in key:
                 err = self.prior_coeff
                 nll += math.pow((par[p]-true)/err, 2.0)
                 
-        #nll += 2*((-self.data*np.log(pdf) + pdf) if np.isfinite(np.log(pdf)).all() else np.ones(self.shape)*sys.float_info.max).sum()
-
         # prevent from any zeros in the pdf
         pdf += (np.ones(self.shape)*sys.float_info.min)
         nll += 2*(-self.data*np.log(pdf) + pdf).sum()
@@ -346,11 +355,33 @@ class Unfolder:
 
         self.result['ntoys'] += 1 
 
+        # function calls
         self.arglist[0] = self.n_points
+        # convergence
         self.arglist[1] = 1.
 
-        self.gMinuit.mnexcm( "MIGRAD", self.arglist, 2, self.ierflg )
-        #self.gMinuit.mnmnos()
+        ##########################################
+        self.update_result('time', -time.time())
+        
+        # make a global fit (DEFAULT)
+        if self.strategy == 0:
+            self.gMinuit.mnexcm( "MIGRAD", self.arglist, 2, self.ierflg )
+
+        # first fit for the cross sections, then fit for the coefficients
+        elif strategy == 1:
+            for key,p in self.map_params.items():            
+                if 'A' in key:
+                    self.gMinuit.FixParameter(p)
+            self.gMinuit.mnexcm( "MIGRAD", self.arglist, 2, self.ierflg )
+            for key,p in self.map_params.items():            
+                if 'A' in key:
+                    self.gMinuit.Release(p)
+            self.gMinuit.mnexcm( "MIGRAD", self.arglist, 2, self.ierflg )
+        else:
+            "Strategy not implemented"
+
+        self.result['time'][-1] += time.time()
+        ##########################################
 
         # Print results
         amin, edm, errdef = ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.)
@@ -362,18 +393,9 @@ class Unfolder:
         self.cov = ROOT.TMatrixDSym(self.n_param)
         self.gMinuit.mnemat(self.cov.GetMatrixArray(), self.n_param)
 
-        if not self.result.has_key('edm'):
-            self.result['edm'] = [float(edm)]
-        else:
-            self.result['edm'].append(float(edm))
-        if not self.result.has_key('amin'):
-            self.result['amin'] = [float(amin)]
-        else:
-            self.result['amin'].append(float(amin))
-        if not self.result.has_key('status'):
-            self.result['status'] = [ self.gMinuit.GetStatus() ]
-        else:
-            self.result['status'].append( self.gMinuit.GetStatus() )
+        self.update_result('edm', float(edm))
+        self.update_result('amin', float(amin))
+        self.update_result('status', self.gMinuit.GetStatus())
 
         val = ROOT.Double(0.)
         err = ROOT.Double(0.)
@@ -381,13 +403,21 @@ class Unfolder:
             self.gMinuit.GetParameter(p, val, err)
             true = self.truth[key]
             if self.verbose:
-                print key, p, ":", true, " ==> ", val, "+/-", err
+                print key, p, ":", true, " ==> ", val, "+/-", err            
             if not self.result.has_key(key):
                 self.result[key] = {'true' : [true], 'fit' : [float(val)], 'err' : [float(err)] }
             else:
                 self.result[key]['true'].append(true) 
                 self.result[key]['fit'].append(float(val)) 
                 self.result[key]['err'].append(float(err)) 
+        print('Fit done in '+'{:4.1f}'.format(self.result['time'][-1])+' seconds')
+
+    def update_result(self, var, val):
+        if not self.result.has_key(var):
+            self.result[var] = [val]
+        else:
+            self.result[val].append(val)
+        
 
     # save the result to a pickle file
     def save_result(self):            

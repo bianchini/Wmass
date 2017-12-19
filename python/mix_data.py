@@ -69,6 +69,10 @@ class MixData:
         # central bin (for symmetrise)        
         central = np.array([])
 
+        # total weight
+        total_weight = 0.0
+        weight_central = 0.0
+        
         for ipt,pt in enumerate(self.input_shapes_pt):
             
             if pt<pt_bin[0] or pt>=pt_bin[1]:
@@ -76,7 +80,6 @@ class MixData:
 
             for iy in shift_pos:
                 y = y_edges[0]+y_bin_width*iy
-                print "\t (pt, y) = (%s, %s) is in range" % (pt, y)
 
                 in_name = 'pt{:02.1f}'.format(pt)+'_'+'y{:03.2f}'.format(0.00)
                 if not self.make_templates:
@@ -98,11 +101,14 @@ class MixData:
 
                 # mix sub-samples according to a prior pdf
                 weight = pdf(pt=pt,y=y)
-                
+                total_weight += weight
+                print "\t (pt, y) = (%s, %s) is in range. Norm = %s, weight = %s" % (pt, y, grid[0].sum(), weight)
+
                 shifts = [ [iy-middle_point, grid] ]                
                 for [shift,sample] in shifts:
                     sam = copy.deepcopy(sample[0]) 
                     if self.symmetrise and shift==0:
+                        weight_central = weight
                         if central.shape!=sam.shape:
                             central = sam*weight
                         else:
@@ -117,6 +123,10 @@ class MixData:
                         mix = sam_shifted*weight
                     else:
                         mix += sam_shifted*weight
+
+        # a protection for empty mix shape (only central bin filled)
+        if central.shape != (0,) and mix.shape == (0,):
+            mix = np.zeros(central.shape)
 
         if self.symmetrise:
             for ipt in range( mix.shape[1] ):
@@ -133,10 +143,11 @@ class MixData:
                         rightC = central[mix.shape[0]-1-iy][ipt] 
                         central[iy][ipt] += rightC
                         central[mix.shape[0]-1-iy][ipt] += leftC
+            #mix *= 0.5
             if central.shape==mix.shape:
                 mix += central*0.5
+    
             
-
         out_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
         if not self.make_templates:
             out_name += '_M{:05.3f}'.format( self.output_shapes_mass[0] )
@@ -150,11 +161,17 @@ class MixData:
 
         # normalisation
         #mix /= (mix.sum() if mix.sum()>0.0 else 1.0)
+        mix /= (2*total_weight - weight_central)
+        print('Template created with norm = %s' % mix.sum())
         np.save(self.output_dir+'/mixed_dataset_'+out_name, mix)
 
         xx, yy = np.meshgrid(pt_edges, y_edges)        
         plt.pcolormesh(yy, xx, mix)
         plt.colorbar()
+        plt.title(out_name)
+        plt.figtext(0.2, 0.83, 'norm = {:05.4f}'.format(mix.sum()), color='white')
+        plt.xlabel('eta')
+        plt.ylabel('pt')
         plt.show()
         plt.savefig(self.output_dir+'/mixed_dataset_'+out_name+'.png')
         plt.close()

@@ -57,26 +57,18 @@ def pdf_test(pt,y):
 
 def coefficients_test(pt=0.0,y=0.0):
     coeff=[0.,0.,0.,0.,0.]
-
-    #coeff[0] = pt/10.
-    #coeff[1] = 0.0
-    #coeff[2] = coeff[20] 
-    #coeff[3] = 0.0
-
-    #coeff[4] = -math.tanh(y)
-
-    #if y > 0.0:
-    #    coeff[4] = -1.
-    #elif y < 0.0:
-    #    coeff[4] = +1.
-
-    #coeff[4] = 0.0
     return coeff
 
 
 def accept_point(coeff=[], verbose=False):
     #return True
-    if coeff.count(1.0)==1 or coeff.count(0.0)==len(coeff):
+    if coeff in  [ [0.0, 0.0, 0.0, 0.0, 0.0],
+                   [2.0, 0.0, 0.0, 0.0, 0.0],
+                   [0.0, 1.0, 0.0, 0.0, 0.0],
+                   [0.0, 0.0, 1.0, 0.0, 0.0],
+                   [0.0, 0.0, 0.0, 1.0, 0.0],
+                   [0.0, 0.0, 0.0, 0.0, 2.0]
+                   ]:                  
         return True
     else:
         if verbose:
@@ -85,16 +77,18 @@ def accept_point(coeff=[], verbose=False):
 
 
 params_test = copy.deepcopy(Parameters)
-params_test['params_W']['pt'] = np.linspace(0.0, 20.0, 11)
+params_test['params_W']['pt'] = np.linspace(0.0, 32.0, 33)
+#params_test['params_W']['pt'] = np.array([6.0])
 params_test['params_W']['y'] = np.array([0.0])
 params_test['params_W']['mass'] = np.array([79.500,80.000,80.500])
-params_test['params_W']['A0'] = np.array([ 0.0, 1.0 ]) 
-params_test['params_W']['A1'] = np.array([ 0.0 ]) 
-params_test['params_W']['A2'] = np.array([ 0.0 ])
-params_test['params_W']['A3'] = np.array([ 0.0 ]) 
-params_test['params_W']['A4'] = np.array([ 0.0, 1.0 ])
+#params_test['params_W']['mass'] = np.array([80.000])
+params_test['params_W']['A0'] = np.array([ 0.0, 2.0 ]) 
+params_test['params_W']['A1'] = np.array([ 0.0, 1.0 ]) 
+params_test['params_W']['A2'] = np.array([ 0.0, 1.0 ])
+params_test['params_W']['A3'] = np.array([ 0.0, 1.0 ]) 
+params_test['params_W']['A4'] = np.array([ 0.0, 2.0 ])
 
-params_test['params_template']['pt'] = np.linspace(0.0, 20.0, 6)
+params_test['params_template']['pt'] = np.append(np.linspace(0.0, 20.0, 6), np.array([26.0, 32.0]))
 #params_test['params_template']['pt'] = np.linspace(0.0, 20.0, 2)
 params_test['params_template']['y']  = np.linspace(0.0, 3.6, 10)
 #params_test['params_template']['y']  = np.linspace(0.0, 3.6, 2)

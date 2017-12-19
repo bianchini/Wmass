@@ -16,7 +16,7 @@ config.JobType.outputFiles = ['result_TEST.pkl']
 config.section_("Data")
 config.Data.splitting = 'EventBased'
 config.Data.unitsPerJob = 1
-config.Data.totalUnits = 40
+config.Data.totalUnits = 50
 config.Data.publication = False
 config.Data.outputDatasetTag = 'TEST'
 
@@ -31,10 +31,21 @@ if __name__ == '__main__':
     from CRABAPI.RawCommand import crabCommand
 
     jobs = [ 
-        ['1e6_pt_y_A0_A4_mass_prior02',  1000000,  [], 1, 1, 0.2, 0.2],
-        ['1e6_pt_y_A0_A4_mass_prior03',  1000000,  [], 1, 1, 0.3, 0.3],
-        ['1e7_pt_y_A0_A4_mass_prior01', 10000000,  [], 1, 1, 0.1, 0.1],
-        ['1e7_pt_y_A0_A4_mass_prior02', 10000000,  [], 1, 1, 0.2, 0.2],
+        #['1e6_pt_y_A0_A4_prior02',  1000000,  ['mass'], 1, 1, 0.2, 0.2],
+        #['1e6_pt_y_A0_A4_prior03',  1000000,  [], 1, 1, 0.3, 0.3],
+        ['1e7_pt_y_prior02',                     10000000,  ['mass', 'A0', 'A1', 'A2', 'A3', 'A4'], 1, 1, 0.2, 0.2],
+        ['1e7_pt_y_prior01',                     10000000,  ['mass', 'A0', 'A1', 'A2', 'A3', 'A4'], 1, 1, 0.1, 0.1],
+        ['1e7_pt_y_A0_A4_prior02',               10000000,  ['mass', 'A1', 'A2', 'A3'], 1, 1, 0.2, 0.2],
+        ['1e7_pt_y_A0_A4_prior01',               10000000,  ['mass', 'A1', 'A2', 'A3'], 1, 1, 0.1, 0.1],
+        ['1e7_pt_y_A0_A1_A2_A3_A4_prior02',      10000000,  ['mass'], 1, 1, 0.2, 0.2],
+        ['1e7_pt_y_A0_A1_A2_A3_A4_prior01',      10000000,  ['mass'], 1, 1, 0.1, 0.1],
+        ['1e7_pt_y_A0_A1_A2_A3_A4_mass_prior02', 10000000,  [], 1, 1, 0.2, 0.2],
+        ['1e7_pt_y_A0_A1_A2_A3_A4_mass_prior01', 10000000,  [], 1, 1, 0.1, 0.1],
+        #['1e7_pt_y_A0_A4_prior02', 10000000,  [], 1, 1, 0.2, 0.2],
+        #['1e6_pt_y_A0_A4_mass_prior02',  1000000,  [], 1, 1, 0.2, 0.2],
+        #['1e6_pt_y_A0_A4_mass_prior03',  1000000,  [], 1, 1, 0.3, 0.3],
+        #['1e7_pt_y_A0_A4_mass_prior01', 10000000,  [], 1, 1, 0.1, 0.1],
+        #['1e7_pt_y_A0_A4_mass_prior02', 10000000,  [], 1, 1, 0.2, 0.2],
         #['1e5_pt_y', 100000,   ['mass', 'A0', 'A4'], 1, 1, 0.3, 0.3],
         #['1e6_pt_y', 1000000,  ['mass', 'A0', 'A4'], 1, 1, 0.3, 0.3],
         #['1e7_pt_y', 10000000, ['mass', 'A0', 'A4'], 1, 1, 0.3, 0.3],
