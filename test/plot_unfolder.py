@@ -1,5 +1,4 @@
 import os.path
-
 from sys import argv
 argv.append( '-b-' )
 import ROOT
@@ -12,44 +11,20 @@ from pprint import pprint
 ROOT.TGaxis.SetMaxDigits(2)
 
 jobs = [ 
-    ['1e6_pt_y_A0_A4_prior03',  40],
-    ['1e7_pt_y_A0_A4_prior02',  40],
-    #['1e6_pt_y_A0_A4_mass_prior02',  40],
-    #['1e6_pt_y_A0_A4_mass_prior03', 40],
-    #['1e7_pt_y_A0_A4_mass_prior01', 40],
-    #['1e7_pt_y_A0_A4_mass_prior02', 40],
-    #['1e6_pt_y_A0_A4_mass_prior02',  40],
-    #['1e6_pt_y_A0_A4_mass_prior02',  40],
-    #['1e6_pt_y_A0_A4_mass_prior03',  40],
-    #['5e6_pt_y_A0_A4_mass_prior03',  40],
-    #['1e7_pt_y_A0_A4_mass_prior03',  40],
-    #['1e6_pt_y_A0_A4_mass_prior02',  40],
-    #['5e6_pt_y_A0_A4_mass_prior02',  40],
-    #['1e7_pt_y_A0_A4_mass_prior02',  40],
-    #['1e6_pt_y_A0_A4_mass_prior01',  40],
-    #['5e6_pt_y_A0_A4_mass_prior01',  40],
-    #['1e7_pt_y_A0_A4_mass_prior01',  40],
-    #['1e5_pt_y', 50], 
-    #['1e6_pt_y', 50], 
-    #['1e7_pt_y', 50], 
-    #['1e5_pt_y_A0_A4', 50], 
-    #['1e6_pt_y_A0_A4', 50], 
-    #['1e7_pt_y_A0_A4', 50], 
-    #['1e5_pt_y_A0_A4_prior05', 50], 
-    #['1e6_pt_y_A0_A4_prior05', 50], 
-    #['1e7_pt_y_A0_A4_prior05', 50], 
-    #['1e5_pt_y_A0_A4_mass', 50], 
-    #['1e6_pt_y_A0_A4_mass', 50], 
-    #['1e7_pt_y_A0_A4_mass', 50], 
-    #['1e5_y_A0_A4', 50], 
-    #['1e6_y_A0_A4', 50], 
-    #['1e7_y_A0_A4', 50], 
+    #['1e7_pt_y_prior02_pdf',  50],
+    #['1e7_pt_y_prior02',  50],
+    #['1e7_pt_y_A0_A4_prior02', 50]
+    ['1e7_pt_y_A0_A1_A2_A3_A4_mass_prior02_pdf', 100]
+    #['1e7_pt_y_A0_A1_A2_A3_A4_mass_prior01', 50]
+    #['1e7_pt_y_prior01',  50],
     ]
 
-dir_name = 'V2'
+dir_name = 'TEST'
+os.system('mkdir plots/'+dir_name)
 
 for ijob,job in enumerate(jobs):
     #print job
+    os.system('mkdir plots/'+dir_name+'/'+job[0])
     histos = {} 
     first = 0
     for j in range(job[1]):
@@ -60,12 +35,18 @@ for ijob,job in enumerate(jobs):
         #pprint(a)
         for key,p in res.items():        
 
+            if key != 'mass':
+                continue
             if not (key=='mass' or 'pt' in key):
                 continue
 
             if first==0: 
                 #print "fill for ", key
                 histos[key+'_pull'] = ROOT.TH1F(key+'_pull', key+'_pull', 21, -4, 4) 
+                ranges = [0.5, 1.5]
+                if key=='mass':
+                    ranges = [1-1e-03, 1+1e-03]
+                histos[key+'_ratio'] = ROOT.TH1F(key+'_ratio', key+'_ratio', 51, ranges[0], ranges[1])                 
                 ranges = [0., 1.0]
                 if key=='mass':
                     ranges = [0., 1e-03]
@@ -78,15 +59,22 @@ for ijob,job in enumerate(jobs):
             for toy in range(res['ntoys']):        
                 if res['status'][toy] != 0:
                     continue
-                pull = (res[key]['fit'][toy]-res[key]['true'][toy])/res[key]['err'][toy] if res[key]['err'][toy]>0 else 0.0            
+                print res['edm'][toy]
+                pull = 0.
+                if res[key].has_key('toy'):
+                    pull = (res[key]['fit'][toy]-res[key]['toy'][toy])/res[key]['err'][toy] if res[key]['err'][toy]>0 else 0.0            
+                else:
+                    pull = (res[key]['fit'][toy]-res[key]['true'][toy])/res[key]['err'][toy] if res[key]['err'][toy]>0 else 0.0            
+                ratio = res[key]['fit'][toy]/res[key]['true'][toy] if res[key]['true'][toy]>0 else 0.0            
                 relerr = res[key]['err'][toy]/res[key]['fit'][toy] if '_A' not in key and res[key]['fit'][toy]>0. else res[key]['err'][toy]
                 histos[key+'_pull'].Fill(pull)
+                histos[key+'_ratio'].Fill(ratio)
                 histos[key+'_relerr'].Fill(relerr)
         f.close()
         first = 1
 
     for key, p in res.items():
-        if not (histos.has_key(key+'_pull') or histos.has_key(key+'_relerr') ):
+        if not (histos.has_key(key+'_pull') or histos.has_key(key+'_relerr') or histos.has_key(key+'_ratio') ):
             continue
         if 'pt_y' in key and 'pt_y' not in job[0]:
             continue
@@ -96,16 +84,19 @@ for ijob,job in enumerate(jobs):
             continue
 
         print "Plot", key
-        c = ROOT.TCanvas("c_"+job[0]+"_"+key, "canvas for "+job[0]+"_"+key, 1200, 600) 
-        c.Divide(2,1)
+        c = ROOT.TCanvas("c_"+job[0]+"_"+key, "canvas for "+job[0]+"_"+key, 1200, 400) 
+        c.Divide(3,1)
         p = None
-        for var in ['pull', 'relerr']:
+        for var in ['pull', 'relerr', 'ratio']:
             if var=='pull':
                 c.cd(1)
                 p = histos[key+'_pull']
             elif var=='relerr':
                 c.cd(2)
                 p = histos[key+'_relerr']
+            elif var=='ratio':
+                c.cd(3)
+                p = histos[key+'_ratio']
             title = var.title()+' of '+key+', N_{ev}='+str(res['num_events'])+', fix: '
             for ic,k in enumerate( res['fix'] ):
                 title += (k+',')
@@ -127,5 +118,6 @@ for ijob,job in enumerate(jobs):
             p.SetLineColor(ROOT.kRed)
             p.Draw("HIST")
             #raw_input()
-        c.SaveAs('plots/'+dir_name+'/'+key+'_'+job[0]+'.png')
+        
+        c.SaveAs('plots/'+dir_name+'/'+job[0]+'/'+key+'_'+job[0]+'.png')
         c.IsA().Destructor( c )

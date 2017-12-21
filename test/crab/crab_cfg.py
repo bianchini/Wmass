@@ -16,7 +16,7 @@ config.JobType.outputFiles = ['result_TEST.pkl']
 config.section_("Data")
 config.Data.splitting = 'EventBased'
 config.Data.unitsPerJob = 1
-config.Data.totalUnits = 50
+config.Data.totalUnits = 100
 config.Data.publication = False
 config.Data.outputDatasetTag = 'TEST'
 
@@ -31,36 +31,15 @@ if __name__ == '__main__':
     from CRABAPI.RawCommand import crabCommand
 
     jobs = [ 
-        #['1e6_pt_y_A0_A4_prior02',  1000000,  ['mass'], 1, 1, 0.2, 0.2],
-        #['1e6_pt_y_A0_A4_prior03',  1000000,  [], 1, 1, 0.3, 0.3],
-        ['1e7_pt_y_prior02',                     10000000,  ['mass', 'A0', 'A1', 'A2', 'A3', 'A4'], 1, 1, 0.2, 0.2],
-        ['1e7_pt_y_prior01',                     10000000,  ['mass', 'A0', 'A1', 'A2', 'A3', 'A4'], 1, 1, 0.1, 0.1],
-        ['1e7_pt_y_A0_A4_prior02',               10000000,  ['mass', 'A1', 'A2', 'A3'], 1, 1, 0.2, 0.2],
-        ['1e7_pt_y_A0_A4_prior01',               10000000,  ['mass', 'A1', 'A2', 'A3'], 1, 1, 0.1, 0.1],
-        ['1e7_pt_y_A0_A1_A2_A3_A4_prior02',      10000000,  ['mass'], 1, 1, 0.2, 0.2],
-        ['1e7_pt_y_A0_A1_A2_A3_A4_prior01',      10000000,  ['mass'], 1, 1, 0.1, 0.1],
-        ['1e7_pt_y_A0_A1_A2_A3_A4_mass_prior02', 10000000,  [], 1, 1, 0.2, 0.2],
-        ['1e7_pt_y_A0_A1_A2_A3_A4_mass_prior01', 10000000,  [], 1, 1, 0.1, 0.1],
-        #['1e7_pt_y_A0_A4_prior02', 10000000,  [], 1, 1, 0.2, 0.2],
-        #['1e6_pt_y_A0_A4_mass_prior02',  1000000,  [], 1, 1, 0.2, 0.2],
-        #['1e6_pt_y_A0_A4_mass_prior03',  1000000,  [], 1, 1, 0.3, 0.3],
-        #['1e7_pt_y_A0_A4_mass_prior01', 10000000,  [], 1, 1, 0.1, 0.1],
-        #['1e7_pt_y_A0_A4_mass_prior02', 10000000,  [], 1, 1, 0.2, 0.2],
-        #['1e5_pt_y', 100000,   ['mass', 'A0', 'A4'], 1, 1, 0.3, 0.3],
-        #['1e6_pt_y', 1000000,  ['mass', 'A0', 'A4'], 1, 1, 0.3, 0.3],
-        #['1e7_pt_y', 10000000, ['mass', 'A0', 'A4'], 1, 1, 0.3, 0.3],
-        #['1e5_pt_y_A0_A4', 100000,   ['mass'], 1, 1, 0.3, 0.3],
-        #['1e6_pt_y_A0_A4', 1000000,  ['mass'], 1, 1, 0.3, 0.3],
-        #['1e7_pt_y_A0_A4', 10000000, ['mass'], 1, 1, 0.3, 0.3],
-        #['1e5_pt_y_A0_A4_prior05', 100000,   ['mass'], 1, 1, 0.5, 0.5],
-        #['1e6_pt_y_A0_A4_prior05', 1000000,  ['mass'], 1, 1, 0.5, 0.5],
-        #['1e7_pt_y_A0_A4_prior05', 10000000, ['mass'], 1, 1, 0.5, 0.5],
-        #['1e5_pt_y_A0_A4_mass', 100000,   [], 1, 1, 0.3, 0.3],
-        #['1e6_pt_y_A0_A4_mass', 1000000,  [], 1, 1, 0.3, 0.3],
-        #['1e7_pt_y_A0_A4_mass', 10000000, [], 1, 1, 0.3, 0.3],
-        #['1e5_y_A0_A4', 100000,   ['mass'], 0, 1, 0.3, 0.3],
-        #['1e6_y_A0_A4', 1000000,  ['mass'], 0, 1, 0.3, 0.3],
-        #['1e7_y_A0_A4', 10000000, ['mass'], 0, 1, 0.3, 0.3],
+        #['1e7_pt_y_prior02_pdf'  ,                10000000,  ['mass', 'A0', 'A1', 'A2', 'A3', 'A4'], 1, 1, 0.2, 0.2],
+        #['1e7_pt_y_prior02',                     10000000,  ['mass', 'A0', 'A1', 'A2', 'A3', 'A4'], 1, 1, 0.2, 0.2],
+        #['1e7_pt_y_prior01',                     10000000,  ['mass', 'A0', 'A1', 'A2', 'A3', 'A4'], 1, 1, 0.1, 0.1],
+        #['1e7_pt_y_A0_A4_prior02',               10000000,  ['mass', 'A1', 'A2', 'A3'], 1, 1, 0.2, 0.2],
+        #['1e7_pt_y_A0_A4_prior01',               10000000,  ['mass', 'A1', 'A2', 'A3'], 1, 1, 0.1, 0.1],
+        #['1e7_pt_y_A0_A1_A2_A3_A4_prior02',      10000000,  ['mass'], 1, 1, 0.2, 0.2],
+        #['1e7_pt_y_A0_A1_A2_A3_A4_prior01',      10000000,  ['mass'], 1, 1, 0.1, 0.1],
+        ['1e7_pt_y_A0_A1_A2_A3_A4_mass_prior02_pdf', 10000000,  [], 1, 1, 0.2, 0.2],
+        #['1e7_pt_y_A0_A1_A2_A3_A4_mass_prior01', 10000000,  [], 1, 1, 0.1, 0.1],
         ]
 
     if argv[1]=='create':

@@ -5,6 +5,7 @@ import pickle
 import time
 from pprint import pprint
 import numpy as np
+import numpy.random as ran
 
 import matplotlib
 matplotlib.use('Agg')
@@ -106,22 +107,25 @@ class Unfolder:
                 input_name = 'mixed_dataset_'+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_M'+'{:05.3f}'.format(self.mass)
                 for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))                    
-                normalisation += getattr(self, input_name+'_norm')*pdf_test(pt=pt_bin[0], y=y_bin[0])
+                for pt in np.linspace(pt_bin[0],pt_bin[1]-1,4):
+                    normalisation += getattr(self, input_name+'_norm')*pdf_test(pt, y=y_bin[0])
         
         for ipt in range(len(self.input_shapes_pt)-1):
             pt_bin=[ self.input_shapes_pt[ipt], self.input_shapes_pt[ipt+1] ]
             for iy in range(len(self.input_shapes_y)-1):
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]
-                weight = pdf_test(pt=pt_bin[0], y=y_bin[0]) #/total_weight
-                #print pt_bin, y_bin, weight
+                weight = 0.0
+                for pt in np.linspace(pt_bin[0],pt_bin[1]-1,4):
+                    weight += pdf_test(pt, y=y_bin[0]) #/total_weight
                 name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 input_name = 'mixed_dataset_'+name+'_M'+'{:05.3f}'.format(self.mass)
                 for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))
                 #data_rnd = np.random.poisson( getattr(self, input_name)*getattr(self, input_name+'_norm')*self.num_events/norm_acceptance )
                 n_true = self.num_events*weight/normalisation
-                data_rnd = np.random.poisson( getattr(self, input_name)*n_true )
+                data_rnd = np.random.poisson( getattr(self, input_name)*n_true ) #* (max(np.random.normal(1.0, self.prior_xsec), 0.0))
                 self.truth[name] = n_true
+                self.truth[name+'_gen'] = data_rnd.sum()/getattr(self, input_name+'_norm')
                 self.truth[name+'_A0'] = 0.0
                 self.truth[name+'_A1'] = 0.0
                 self.truth[name+'_A2'] = 0.0
@@ -144,6 +148,7 @@ class Unfolder:
     def book_parameters(self, params={}):
 
         self.gMinuit = ROOT.TMinuit(500)  
+        self.gMinuit.SetPrintLevel(1)
         if not self.verbose:
             self.gMinuit.SetPrintLevel(-1)
         self.gMinuit.SetFCN( self.fcn ) 
@@ -171,7 +176,8 @@ class Unfolder:
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]                
                 par_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 self.map_params[par_name] = self.n_param
-                self.gMinuit.DefineParameter( self.n_param, par_name, self.truth[par_name], 10.0, self.truth[par_name]/3.0, self.truth[par_name]*3.0  )
+                # 1/3 -- 3 with 10 step
+                self.gMinuit.DefineParameter( self.n_param, par_name, self.truth[par_name], 10., self.truth[par_name]/3.0, self.truth[par_name]*3.0  )
                 if 'pt_y' in self.fix: 
                     self.gMinuit.FixParameter(self.n_param)
                 self.n_param += 1
@@ -305,7 +311,7 @@ class Unfolder:
                 pdf_tmp_pt_y *= norm_bin
                 # add tis bin to the total pdf
                 pdf += pdf_tmp_pt_y
-                # increase par counter by 3 units: (pt_y, A0, A4)
+                # increase par counter by 3 units: (pt_y, A0, A1, ..., A4)
                 count_param += (1+len(self.loads[0]))
 
         # compute -2*log likelihood
@@ -313,21 +319,26 @@ class Unfolder:
 
         # prior
         for key,p in self.map_params.items():            
-            true = self.truth[key]
             # pt_y bins
             if '_A' not in key and 'mass' not in key:                
+                #true = self.truth[key+'_gen']
+                true = self.truth[key]
                 err = self.prior_xsec
-                #nll += math.pow( (math.log(par[p])-math.log(true))/err, 2.0)
                 nll += math.pow((par[p]-true)/(err*true), 2.0)
             # coefficients
             elif '_A' in key:
+                true = self.truth[key]
                 err = self.prior_coeff
                 nll += math.pow((par[p]-true)/err, 2.0)
                 
         # prevent from any zeros in the pdf
         pdf += (np.ones(self.shape)*sys.float_info.min)
         nll += 2*(-self.data*np.log(pdf) + pdf).sum()
+
         #print("{:16f}".format(nll))
+        #for key,p in self.map_params.items():          
+        #    if '_A' not in key and 'mass' not in key:                
+        #        print key, par[p]
 
         f[0] = nll
         return
@@ -359,13 +370,15 @@ class Unfolder:
         self.arglist[0] = self.n_points
         # convergence
         self.arglist[1] = 1.
-
+        print("Convergence at EDM %s" % (self.arglist[1]*0.001))
         ##########################################
         self.update_result('time', -time.time())
         
         # make a global fit (DEFAULT)
+        status = -1
         if self.strategy == 0:
-            self.gMinuit.mnexcm( "MIGRAD", self.arglist, 2, self.ierflg )
+            #self.gMinuit.mnexcm( "MIGRAD", self.arglist, 2, self.ierflg )
+            status = self.gMinuit.Migrad()
 
         # first fit for the cross sections, then fit for the coefficients
         elif strategy == 1:
@@ -380,6 +393,8 @@ class Unfolder:
         else:
             "Strategy not implemented"
 
+        self.update_result('status', status)
+        
         self.result['time'][-1] += time.time()
         ##########################################
 
@@ -395,19 +410,22 @@ class Unfolder:
 
         self.update_result('edm', float(edm))
         self.update_result('amin', float(amin))
-        self.update_result('status', self.gMinuit.GetStatus())
 
         val = ROOT.Double(0.)
         err = ROOT.Double(0.)
         for key,p in self.map_params.items():            
             self.gMinuit.GetParameter(p, val, err)
             true = self.truth[key]
+            true_gen = true
+            if '_A' not in key and 'mass' not in key:
+                true_gen = self.truth[key+'_gen']
             if self.verbose:
                 print key, p, ":", true, " ==> ", val, "+/-", err            
             if not self.result.has_key(key):
-                self.result[key] = {'true' : [true], 'fit' : [float(val)], 'err' : [float(err)] }
+                self.result[key] = {'true' : [true], 'toy' : [true_gen], 'fit' : [float(val)], 'err' : [float(err)] }
             else:
                 self.result[key]['true'].append(true) 
+                self.result[key]['toy'].append(true_gen) 
                 self.result[key]['fit'].append(float(val)) 
                 self.result[key]['err'].append(float(err)) 
         print('Fit done in '+'{:4.1f}'.format(self.result['time'][-1])+' seconds')
@@ -416,8 +434,8 @@ class Unfolder:
         if not self.result.has_key(var):
             self.result[var] = [val]
         else:
-            self.result[val].append(val)
-        
+            self.result[var].append(val)
+        print "Unfolder: ", var, " = ", val
 
     # save the result to a pickle file
     def save_result(self):            
