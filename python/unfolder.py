@@ -18,9 +18,10 @@ from template_parameters import accept_point, pdf_test, bin_ndarray
 
 class Unfolder:
 
-    def __init__(self, input_dir='../data/', params={},  rebin=(1,1), mass=80.0000, num_events=1000000, fix=[], interp_deg=1, n_points=500000, job_name='TEST', verbose=True, prior_coeff=0.3, prior_xsec=0.3, strategy=0 ):
+    def __init__(self, input_dir='../data/', params={},  rebin=(1,1), mass=80.0000, num_events=1000000, fix=[], interp_deg=1, n_points=500000, job_name='TEST', verbose=True, prior_coeff=0.3, prior_xsec=0.3, strategy=0, decorrelate=True, decorrelate_full=True ):
 
-        self.use_prime = True
+        self.decorrelate = decorrelate
+        self.decorrelate_full = decorrelate_full
         self.input_dir = input_dir
         self.fix = fix
         self.mass = mass
@@ -33,6 +34,14 @@ class Unfolder:
         self.job_name = job_name
         self.strategy = strategy
         self.truth = {}
+
+        self.loads = [ [0.0, 0.0, 0.0, 0.0, 0.0],
+                       [2.0, 0.0, 0.0, 0.0, 0.0],
+                       [0.0, 1.0, 0.0, 0.0, 0.0],
+                       [0.0, 0.0, 1.0, 0.0, 0.0],
+                       [0.0, 0.0, 0.0, 1.0, 0.0],
+                       [0.0, 0.0, 0.0, 0.0, 2.0]
+                       ]
 
         self.load_files(params=params, rebin=rebin)
         self.load_data()
@@ -97,8 +106,10 @@ class Unfolder:
     # generate a rnd sample
     def load_data(self):
         self.toy_data()
-        if self.use_prime:
+        if self.decorrelate and not self.decorrelate_full:
             self.prefit_covariance()
+        elif self.decorrelate_full:
+            self.prefit_covariance_full()
 
     # generate rnd samples
     def toy_data(self, ntoy=0):
@@ -131,10 +142,11 @@ class Unfolder:
                 input_name = 'mixed_dataset_'+name+'_M'+'{:05.3f}'.format(self.mass)
                 for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))
-                #data_rnd = np.random.poisson( getattr(self, input_name)*getattr(self, input_name+'_norm')*self.num_events/norm_acceptance )
+
                 n_true = self.num_events*weight/normalisation
                 data_asymov = getattr(self, input_name)*n_true 
                 data_rnd = np.random.poisson( data_asymov ) #* (max(np.random.normal(1.0, self.prior_xsec), 0.0))
+
                 self.truth[name] = n_true
                 self.truth[name+'_gen'] = data_rnd.sum()/getattr(self, input_name+'_norm')
                 self.truth[name+'_A0'] = 0.0
@@ -144,6 +156,7 @@ class Unfolder:
                 self.truth[name+'_A4'] = 0.0
                 self.data += data_rnd
                 self.data_asymov += data_asymov
+
 
         self.truth['mass'] = self.mass
         self.truth['num_events_toy'] = self.data.sum()
@@ -187,40 +200,55 @@ class Unfolder:
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]                
                 par_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 self.map_params[par_name] = self.n_param
+
                 # 1/3 -- 3 with 10 step
-                if not self.use_prime:
-                    self.gMinuit.DefineParameter( self.n_param, par_name, self.truth[par_name], 100, self.truth[par_name]/2.0, self.truth[par_name]*2.0  )
-                else:
-                    scale_range = 2.0 if self.truth[par_name+'_prime']>0. else 1./2.
-                    self.gMinuit.DefineParameter( self.n_param, par_name, self.truth[par_name+'_prime'], 100, self.truth[par_name+'_prime']/scale_range, self.truth[par_name+'_prime']*scale_range  )
+                if not (self.decorrelate or self.decorrelate_full):
+                    self.gMinuit.DefineParameter( self.n_param, par_name, self.truth[par_name], 
+                                                  100, 
+                                                  self.truth[par_name]/2.0, 
+                                                  self.truth[par_name]*2.0  )
+                elif self.decorrelate:
+                    index = ipt*(len(self.input_shapes_y)-1) + iy
+                    scale_range = self.sigmaU[index]
+                    self.gMinuit.DefineParameter( self.n_param, par_name, 
+                                                  self.truth[par_name+'_prime'], 
+                                                  scale_range*0.1, 
+                                                  self.truth[par_name+'_prime']-scale_range*10, self.truth[par_name+'_prime']+scale_range*10 )
+                elif self.decorrelate_full:
+                    index = (ipt*(len(self.input_shapes_y)-1) + iy)*len(self.loads)
+                    scale_range = self.sigmaU_full[index]
+                    self.gMinuit.DefineParameter( self.n_param, par_name, 
+                                                  self.truth[par_name+'_prime'], 
+                                                  scale_range*0.1, 
+                                                  self.truth[par_name+'_prime']-scale_range*5, self.truth[par_name+'_prime']+scale_range*5 )
+
                 if 'pt_y' in self.fix: 
                     self.gMinuit.FixParameter(self.n_param)
-                #if y_bin[0]>=2.4 or pt_bin[0]>=20:
-                #    self.gMinuit.FixParameter(self.n_param)
                 self.n_param += 1
 
-                for coeff in ['A0', 'A1', 'A2', 'A3', 'A4']:
+                for icoeff,coeff in enumerate(['A0', 'A1', 'A2', 'A3', 'A4']):
                 # add one parameter per pt/y/Ai bin                    
                     par_name_coeff = par_name+'_'+coeff 
                     self.map_params[par_name_coeff] = self.n_param            
-                    self.gMinuit.DefineParameter( self.n_param, par_name_coeff, 0.00, 0.001, -0.75,  0.75)
+
+                    if not self.decorrelate_full:
+                        self.gMinuit.DefineParameter( self.n_param, par_name_coeff, 0.0, 0.01, -0.2, +0.2)
+                    else:
+                        index = (ipt*(len(self.input_shapes_y)-1) + iy)*len(self.loads) + icoeff + 1
+                        scale_range = self.sigmaU_full[index]
+                        self.gMinuit.DefineParameter( self.n_param, par_name_coeff, 
+                                                      self.truth[par_name_coeff+'_prime'], 
+                                                      scale_range*1.0, 
+                                                      self.truth[par_name_coeff+'_prime']-scale_range*5, self.truth[par_name_coeff+'_prime']+scale_range*5 )                        
                     if coeff in self.fix:
                         self.gMinuit.FixParameter(self.n_param)
                     self.n_param += 1            
 
-        self.loads = [ [0.0, 0.0, 0.0, 0.0, 0.0],
-                       [2.0, 0.0, 0.0, 0.0, 0.0],
-                       [0.0, 1.0, 0.0, 0.0, 0.0],
-                       [0.0, 0.0, 1.0, 0.0, 0.0],
-                       [0.0, 0.0, 0.0, 1.0, 0.0],
-                       [0.0, 0.0, 0.0, 0.0, 2.0]
-                       ]
-
 
     def prefit_covariance(self):
-        dim = (len(self.input_shapes_pt)-1)*(len(self.input_shapes_y)-1)
-        covinv = np.zeros((dim,dim))
-        x =  np.zeros(dim)
+        self.dim = (len(self.input_shapes_pt)-1)*(len(self.input_shapes_y)-1)
+        covinv = np.zeros((self.dim,self.dim))
+        x =  np.zeros(self.dim)
         # first index
         for ipt1 in range(len(self.input_shapes_pt)-1):
             pt_bin1=[ self.input_shapes_pt[ipt1], self.input_shapes_pt[ipt1+1] ]
@@ -231,7 +259,8 @@ class Unfolder:
                 input_name1 = 'mixed_dataset_'+name1+'_M'+'{:05.3f}'.format(self.mass)
                 for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
                     input_name1 += '_A'+str(ic)+('{:03.2f}'.format(c))                    
-                tj = getattr(self, input_name1)
+                tj = copy.deepcopy(getattr(self, input_name1))
+                self.ignore_from_sum(tj)
                 x[index1] = self.truth[name1]
 
                 # second index
@@ -244,9 +273,15 @@ class Unfolder:
                         input_name2 = 'mixed_dataset_'+name2+'_M'+'{:05.3f}'.format(self.mass)
                         for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
                             input_name2 += '_A'+str(ic)+('{:03.2f}'.format(c))                                                
-                        tk = getattr(self, input_name2)
-                        
-                        covinv[index1][index2] = (tj*tk/self.data_asymov).sum()
+                        tk = copy.deepcopy(getattr(self, input_name2))
+                        self.ignore_from_sum(tk)
+
+                        asymov = copy.deepcopy(self.data_asymov)
+                        # make sure there are no 0.0
+                        if not asymov.all():
+                            asymov += np.ones(self.shape)*sys.float_info.min
+
+                        covinv[index1][index2] = (tj*tk/asymov).sum()
 
         covinv *= self.data_asymov.sum()
         cov = np.linalg.inv(covinv)
@@ -255,6 +290,7 @@ class Unfolder:
         res =  np.linalg.eig(cov)
         #print res
         self.U = res[1]
+        self.sigmaU = np.sqrt(res[0]*self.data_asymov.sum())
         #print x.sum()
         x_prime = np.dot((self.U).T, x)
 
@@ -269,7 +305,131 @@ class Unfolder:
         #print x_prime
         #print np.dot(U, x_prime) - x
         #print np.dot(np.dot(U.T, cov), U)
-        
+
+
+    def ignore_from_sum(self, a):
+        #np.set_printoptions(threshold=np.inf)
+        #b = copy.deepcopy(a)
+        #print self.data_asymov.all()
+        np.place(a, self.data_asymov<=0., 0.0)      
+        #print b-a
+
+    def prefit_covariance_full(self):
+        self.dim = (len(self.input_shapes_pt)-1)*(len(self.input_shapes_y)-1)*len(self.loads)
+        covinv = np.zeros((self.dim,self.dim))
+        x =  np.zeros(self.dim)
+
+        # first index
+        for ipt1 in range(len(self.input_shapes_pt)-1):
+            pt_bin1=[ self.input_shapes_pt[ipt1], self.input_shapes_pt[ipt1+1] ]
+            for iy1 in range(len(self.input_shapes_y)-1):
+                y_bin1=[ self.input_shapes_y[iy1], self.input_shapes_y[iy1+1] ]                
+                name1 = 'pt{:02.1f}'.format(pt_bin1[0])+'-'+'{:02.1f}'.format(pt_bin1[1])+'_'+'y{:03.2f}'.format(y_bin1[0])+'-'+'{:03.2f}'.format(y_bin1[1])
+                input_name_all1   = 'mixed_dataset_'+name1+'_M'+'{:05.3f}'.format(self.mass)
+                for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
+                    input_name_all1 += '_A'+str(ic)+('{:03.2f}'.format(c))                    
+                tj = copy.deepcopy(getattr(self, input_name_all1))
+                self.ignore_from_sum(tj)
+
+                for iload1,load1 in enumerate(self.loads):
+                    input_name_coeff1 = 'mixed_dataset_'+name1+'_M'+'{:05.3f}'.format(self.mass)
+                    for ic,c in enumerate( load1 ):
+                        input_name_coeff1 += '_A'+str(ic)+('{:03.2f}'.format(c))
+                    tjC = copy.deepcopy(getattr(self, input_name_coeff1))
+                    tjC -= tj
+                    tjC /= (load1[iload1-1] if iload1>0 else 1.0)
+                    self.ignore_from_sum(tjC)
+
+                    index1 =  (ipt1*(len(self.input_shapes_y)-1) + iy1)*len(self.loads) + iload1
+                    par_name1 = name1+('' if iload1==0 else '_A'+str(iload1-1))
+                    par_name_norm1 = name1
+                    #print index1 , '-->', par_name1, '=', self.truth[par_name1]
+                    x[index1] = self.truth[par_name1]
+
+                    # second index
+                    for ipt2 in range(len(self.input_shapes_pt)-1):
+                        pt_bin2=[ self.input_shapes_pt[ipt2], self.input_shapes_pt[ipt2+1] ]
+                        for iy2 in range(len(self.input_shapes_y)-1):
+                            y_bin2=[ self.input_shapes_y[iy2], self.input_shapes_y[iy2+1] ]                
+                            name2 = 'pt{:02.1f}'.format(pt_bin2[0])+'-'+'{:02.1f}'.format(pt_bin2[1])+'_'+'y{:03.2f}'.format(y_bin2[0])+'-'+'{:03.2f}'.format(y_bin2[1])
+                            input_name_all2   = 'mixed_dataset_'+name2+'_M'+'{:05.3f}'.format(self.mass)
+                            for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
+                                input_name_all2 += '_A'+str(ic)+('{:03.2f}'.format(c))                    
+                            tk = copy.deepcopy(getattr(self, input_name_all2))
+                            self.ignore_from_sum(tk)
+
+                            for iload2,load2 in enumerate(self.loads):
+                                input_name_coeff2 = 'mixed_dataset_'+name2+'_M'+'{:05.3f}'.format(self.mass)
+                                for ic,c in enumerate( load2 ):
+                                    input_name_coeff2 += '_A'+str(ic)+('{:03.2f}'.format(c))
+                                tkD = copy.deepcopy(getattr(self, input_name_coeff2))
+                                tkD -= tk
+                                tkD /= (load2[iload2-1] if iload2>0 else 1.0)
+                                self.ignore_from_sum(tkD)
+
+                                index2 =  (ipt2*(len(self.input_shapes_y)-1) + iy2)*len(self.loads) + iload2
+                                par_name2 = name2+('' if iload2==0 else '_A'+str(iload2-1))
+                                par_name_norm2 = name2
+                                #print '\t', index2 , '-->', par_name2, '=', self.truth[par_name2]
+
+                                asymov = copy.deepcopy(self.data_asymov)
+                                # make sure there are no 0.0
+                                if not asymov.all():
+                                    asymov += np.ones(self.shape)*sys.float_info.min
+
+                                covinv[index1][index2] = 0.0
+                                if iload1==0 and iload2==0:
+                                    covinv[index1][index2] = (tj*tk/asymov).sum()
+                                elif iload1==0 and iload2>0:
+                                    covinv[index1][index2] = (tj*tkD/asymov).sum()*self.truth[par_name_norm2]
+                                elif iload1>0 and iload2==0:
+                                    covinv[index1][index2] = (tjC*tk/asymov).sum()*self.truth[par_name_norm1]
+                                else: 
+                                    covinv[index1][index2] = (tjC*tkD/asymov).sum()*self.truth[par_name_norm1]*self.truth[par_name_norm2]
+                                #print '\t\t (', index1,index2, ') ===>', covinv[index1][index2]
+
+        np.set_printoptions(threshold=np.inf)
+        #print covinv
+
+        cov = np.linalg.inv(covinv)
+        #print cov
+        res =  np.linalg.eig(cov)
+        #U = res[1]
+        #print res
+
+        self.U_full = res[1]
+        self.sigmaU_full = np.sqrt(res[0])
+        print self.sigmaU_full
+        x_prime = np.dot((self.U_full).T, x)
+
+        for ipt1 in range(len(self.input_shapes_pt)-1):
+            pt_bin1=[ self.input_shapes_pt[ipt1], self.input_shapes_pt[ipt1+1] ]
+            for iy1 in range(len(self.input_shapes_y)-1):
+                y_bin1=[ self.input_shapes_y[iy1], self.input_shapes_y[iy1+1] ]                
+                name1 = 'pt{:02.1f}'.format(pt_bin1[0])+'-'+'{:02.1f}'.format(pt_bin1[1])+'_'+'y{:03.2f}'.format(y_bin1[0])+'-'+'{:03.2f}'.format(y_bin1[1])
+                input_name_all1   = 'mixed_dataset_'+name1+'_M'+'{:05.3f}'.format(self.mass)
+                for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
+                    input_name_all1 += '_A'+str(ic)+('{:03.2f}'.format(c))                    
+                tj = copy.deepcopy(getattr(self, input_name_all1))
+                self.ignore_from_sum(tj)
+
+                for iload1,load1 in enumerate(self.loads):
+                    input_name_coeff1 = 'mixed_dataset_'+name1+'_M'+'{:05.3f}'.format(self.mass)
+                    for ic,c in enumerate( load1 ):
+                        input_name_coeff1 += '_A'+str(ic)+('{:03.2f}'.format(c))
+                    tjC = copy.deepcopy(getattr(self, input_name_coeff1))
+                    tjC -= tj
+                    tjC /= (load1[iload1-1] if iload1>0 else 1.0)
+                    self.ignore_from_sum(tjC)
+
+                    index1 =  (ipt1*(len(self.input_shapes_y)-1) + iy1)*len(self.loads) + iload1
+                    par_name1 = name1+('' if iload1==0 else '_A'+str(iload1-1))
+                    self.truth[par_name1+"_prime"] = x_prime[index1]
+                    print par_name1+"_prime", x_prime[index1]
+
+        #x_prime = np.dot( U.T, x )
+        #print np.dot(U, x_prime) - x
+                    
 
     def reset_parameters(self):
         self.arglist[0] = 1
@@ -282,16 +442,21 @@ class Unfolder:
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]                
                 par_name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 self.arglist[0] = self.map_params[par_name]+1
-                if not self.use_prime:
+                if not (self.decorrelate or self.decorrelate_full):
                     self.arglist[1] = self.truth[par_name] 
                 else:
                     self.arglist[1] = self.truth[par_name+'_prime'] 
+
                 self.gMinuit.mnexcm("SET PAR", self.arglist, 2, self.ierflg )
 
-                for coeff in ['A0', 'A1', 'A2', 'A3', 'A4']:
+                for icoeff,coeff in enumerate(['A0', 'A1', 'A2', 'A3', 'A4']):
                     par_name_coeff = par_name+'_'+coeff 
                     self.arglist[0] = self.map_params[par_name_coeff]+1
-                    self.arglist[1] = self.truth[par_name_coeff] 
+                    if not self.decorrelate_full:
+                        self.arglist[1] = self.truth[par_name_coeff] 
+                    else:
+                        self.arglist[1] = self.truth[par_name_coeff+'_prime'] 
+
                     self.gMinuit.mnexcm("SET PAR", self.arglist, 2, self.ierflg )
 
 
@@ -331,11 +496,23 @@ class Unfolder:
             if (p-1)%(len(self.loads[0])+1) == 0:
                 par[p] = x[counter]
                 counter += 1
-                #print "Set new par" , p, "with value", new_par[p]
+                #print "Set new par" , p, "with value", par[p]
 
-    # pdf at a given (pt,y):
-    # pdf_tmp_pt_y = Norm*{(1-w)*[(1-A0-A2)*pdf(M,  pt,y,UL) + A0*pdf(M,  pt,y,L) + A1*pdf(M,  pt,y,P)] + 
-    #                      w*[(1-A0-A2)*pdf(M+1,pt,y,UL) + A0*pdf(M+1,pt,y,L) + A1*pdf(M+1,pt,y,P)] } 
+    def convert_to_norm_full(self, par):
+        #print "convert_to_norm_full..."
+        x_prime = []
+        for p in range(self.n_param):
+            if p>0:
+                x_prime.append(par[p])
+                #print "Append par" , p, "with value", par[p]
+        x = np.dot(self.U_full, x_prime) 
+        counter = 0
+        for p in range(self.n_param):
+            if p>0:
+                par[p] = x[counter]
+                counter += 1
+                #print "Set new par" , p, "with value", par[p]
+
     def fcn(self, npar, gin, f, par, iflag ):
 
         # compute -2*log likelihood
@@ -345,22 +522,25 @@ class Unfolder:
         for key,p in self.map_params.items():            
             # pt_y bins
             if '_A' not in key and 'mass' not in key:                
-                #true = self.truth[key+'_gen']
-                true = self.truth[key] if not self.use_prime else self.truth[key+'_prime']
+                true = self.truth[key]
+                if self.decorrelate:
+                    true = self.truth[key+'_prime']
                 err = self.prior_xsec
-                nll += math.pow((par[p]-true)/(err*true), 2.0)
+                #nll += math.pow((par[p]-true)/(err*true), 2.0)
             # coefficients
             elif '_A' in key:
                 true = self.truth[key]
                 err = self.prior_coeff
-                nll += math.pow((par[p]-true)/err, 2.0)        
+                #nll += math.pow((par[p]-true)/err, 2.0)        
 
         #print "Evaluating fcn..."
         pdf = np.zeros(self.shape)
 
         # parameters
-        if self.use_prime:
+        if self.decorrelate and not self.decorrelate_full:
             self.convert_to_norm(par)
+        elif self.decorrelate_full:
+            self.convert_to_norm_full(par)
 
         # find closest teplates for interpolation
         mass = par[0]
@@ -378,7 +558,6 @@ class Unfolder:
 
                 # the normalisation of a given pt_y bin
                 norm_bin = par[count_param]
-
 
                 # the pdf of a given pt_y bin
                 pdf_tmp_pt_y = np.zeros(self.shape)
@@ -410,10 +589,9 @@ class Unfolder:
                         # these are [2,0,0,0,0], [0,1,0,0,0], ...
                         else:
                             shift_gen = load[iload-1]
-                            pdf_tmp_coeff += par[count_param+iload]/shift_gen*grid
+                            pdf_tmp_coeff += par[count_param+iload]/shift_gen*grid                            
 
-                    # normalise 
-                    #pdf_tmp_coeff /= pdf_tmp_coeff.sum()
+                    # avoid negative values
                     grid_points.append( pdf_tmp_coeff )
 
                 # interpolate templates of different mass                
@@ -425,14 +603,17 @@ class Unfolder:
                 # increase par counter by 3 units: (pt_y, A0, A1, ..., A4)
                 count_param += (1+len(self.loads[0]))
 
+
         # prevent from any zeros in the pdf
         pdf += (np.ones(self.shape)*sys.float_info.min)
+        pdf = np.absolute(pdf)
+
         nll += 2*(-self.data*np.log(pdf) + pdf).sum()
 
-        print("{:16f}".format(nll))
+        #print("{:16f}".format(nll))
         #for key,p in self.map_params.items():          
-        #    if '_A' not in key and 'mass' not in key:                
-        #        print '\t', key, par[p], self.truth[key]
+        #    #if '_A' not in key and 'mass' not in key:                
+        #    print '\t', key, par[p], self.truth[key]
 
         f[0] = nll
         return
@@ -463,7 +644,7 @@ class Unfolder:
         # function calls
         self.arglist[0] = self.n_points
         # convergence
-        self.arglist[1] = 1.
+        self.arglist[1] = 1.0
         print("Convergence at EDM %s" % (self.arglist[1]*0.001))
         ##########################################
         self.update_result('time', -time.time())
@@ -507,12 +688,16 @@ class Unfolder:
 
         val = ROOT.Double(0.)
         err = ROOT.Double(0.)
+
         for key,p in self.map_params.items():            
             self.gMinuit.GetParameter(p, val, err)                
             true = self.truth[key]
             true_gen = true
             if '_A' not in key and 'mass' not in key:
                 true_gen = self.truth[key+'_gen']
+                if self.decorrelate:
+                    true = self.truth[key+'_prime']
+
             if self.verbose:
                 print key, p, ":", true, " ==> ", val, "+/-", err            
             if not self.result.has_key(key):
