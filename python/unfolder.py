@@ -98,7 +98,6 @@ class Unfolder:
                                         grid_raw = np.load(self.input_dir+'/'+input_name+'.npy')
                                         grid = bin_ndarray( grid_raw, (grid_raw.shape[0]/rebin[0], grid_raw.shape[1]/rebin[1]), 'sum' )
                                         norm = grid.sum() 
-                                        #grid /= (norm if norm>0.0 else 1.0)
                                         setattr(self, input_name, grid)
                                         setattr(self, input_name+'_norm', norm)
                                         self.shape = grid.shape                                         
@@ -187,8 +186,7 @@ class Unfolder:
 
         # add mass
         self.n_param = 0
-        #self.gMinuit.mnparm( self.n_param, "mass", self.mass, 0.010, self.mass-1.000, self.mass+1.000, self.ierflg )        
-        self.gMinuit.DefineParameter( self.n_param, "mass", self.mass, 0.010, self.mass-1.000, self.mass+1.000 )        
+        self.gMinuit.DefineParameter( self.n_param, "mass", self.mass, 0.010, self.mass-0.200, self.mass+0.200 )        
         self.map_params['mass'] = self.n_param
         if 'mass' in self.fix:
             self.gMinuit.FixParameter(0)
@@ -212,15 +210,15 @@ class Unfolder:
                     scale_range = self.sigmaU[index]
                     self.gMinuit.DefineParameter( self.n_param, par_name, 
                                                   self.truth[par_name+'_prime'], 
-                                                  scale_range*0.1, 
+                                                  scale_range*1.0, 
                                                   self.truth[par_name+'_prime']-scale_range*10, self.truth[par_name+'_prime']+scale_range*10 )
                 elif self.decorrelate_full:
                     index = (ipt*(len(self.input_shapes_y)-1) + iy)*len(self.loads)
                     scale_range = self.sigmaU_full[index]
                     self.gMinuit.DefineParameter( self.n_param, par_name, 
                                                   self.truth[par_name+'_prime'], 
-                                                  scale_range*0.1, 
-                                                  self.truth[par_name+'_prime']-scale_range*5, self.truth[par_name+'_prime']+scale_range*5 )
+                                                  scale_range*1.0, 
+                                                  self.truth[par_name+'_prime']-scale_range*10, self.truth[par_name+'_prime']+scale_range*10 )
 
                 if 'pt_y' in self.fix: 
                     self.gMinuit.FixParameter(self.n_param)
@@ -232,7 +230,7 @@ class Unfolder:
                     self.map_params[par_name_coeff] = self.n_param            
 
                     if not self.decorrelate_full:
-                        self.gMinuit.DefineParameter( self.n_param, par_name_coeff, 0.0, 0.01, -0.2, +0.2)
+                        self.gMinuit.DefineParameter( self.n_param, par_name_coeff, 0.0, 0.01, -1.0, +1.0)
                     else:
                         index = (ipt*(len(self.input_shapes_y)-1) + iy)*len(self.loads) + icoeff + 1
                         scale_range = self.sigmaU_full[index]
@@ -308,11 +306,7 @@ class Unfolder:
 
 
     def ignore_from_sum(self, a):
-        #np.set_printoptions(threshold=np.inf)
-        #b = copy.deepcopy(a)
-        #print self.data_asymov.all()
         np.place(a, self.data_asymov<=0., 0.0)      
-        #print b-a
 
     def prefit_covariance_full(self):
         self.dim = (len(self.input_shapes_pt)-1)*(len(self.input_shapes_y)-1)*len(self.loads)
@@ -407,21 +401,7 @@ class Unfolder:
             for iy1 in range(len(self.input_shapes_y)-1):
                 y_bin1=[ self.input_shapes_y[iy1], self.input_shapes_y[iy1+1] ]                
                 name1 = 'pt{:02.1f}'.format(pt_bin1[0])+'-'+'{:02.1f}'.format(pt_bin1[1])+'_'+'y{:03.2f}'.format(y_bin1[0])+'-'+'{:03.2f}'.format(y_bin1[1])
-                input_name_all1   = 'mixed_dataset_'+name1+'_M'+'{:05.3f}'.format(self.mass)
-                for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
-                    input_name_all1 += '_A'+str(ic)+('{:03.2f}'.format(c))                    
-                tj = copy.deepcopy(getattr(self, input_name_all1))
-                self.ignore_from_sum(tj)
-
                 for iload1,load1 in enumerate(self.loads):
-                    input_name_coeff1 = 'mixed_dataset_'+name1+'_M'+'{:05.3f}'.format(self.mass)
-                    for ic,c in enumerate( load1 ):
-                        input_name_coeff1 += '_A'+str(ic)+('{:03.2f}'.format(c))
-                    tjC = copy.deepcopy(getattr(self, input_name_coeff1))
-                    tjC -= tj
-                    tjC /= (load1[iload1-1] if iload1>0 else 1.0)
-                    self.ignore_from_sum(tjC)
-
                     index1 =  (ipt1*(len(self.input_shapes_y)-1) + iy1)*len(self.loads) + iload1
                     par_name1 = name1+('' if iload1==0 else '_A'+str(iload1-1))
                     self.truth[par_name1+"_prime"] = x_prime[index1]
@@ -652,24 +632,34 @@ class Unfolder:
         # make a global fit (DEFAULT)
         status = -1
         if self.strategy == 0:
-            self.gMinuit.mnexcm( "MIGRAD", self.arglist, 2, self.ierflg )
-            #status = self.gMinuit.Migrad()
+            #self.gMinuit.mnexcm( "MIGRAD", self.arglist, 2, self.ierflg )                        
+            self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
+            self.arglist[0] = 2
+            self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
+            status = self.gMinuit.Migrad()
+            if status>0:
+                #self.arglist[0] = self.n_points
+                #self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
+                self.arglist[0] = 1
+                self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
+                status = self.gMinuit.Migrad()
+            #self.arglist[1] = 2
+            #self.gMinuit.mnexcm( "MINO", self.arglist, 2, self.ierflg )
 
         # first fit for the cross sections, then fit for the coefficients
-        elif strategy == 1:
+        elif self.strategy == 1:
             for key,p in self.map_params.items():            
                 if 'A' in key:
                     self.gMinuit.FixParameter(p)
-            self.gMinuit.mnexcm( "MIGRAD", self.arglist, 2, self.ierflg )
+            status = self.gMinuit.Migrad()
             for key,p in self.map_params.items():            
                 if 'A' in key:
                     self.gMinuit.Release(p)
-            self.gMinuit.mnexcm( "MIGRAD", self.arglist, 2, self.ierflg )
+            status = self.gMinuit.Migrad()
         else:
             "Strategy not implemented"
 
-        self.update_result('status', status)
-        
+        self.update_result('status', status)        
         self.result['time'][-1] += time.time()
         ##########################################
 
