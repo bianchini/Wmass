@@ -18,9 +18,11 @@ from template_parameters import accept_point, pdf_test, bin_ndarray
 
 class Unfolder:
 
-    def __init__(self, input_dir='../data/', params={},  rebin=(1,1), mass=80.0000, num_events=1000000, fix=[], interp_deg=1, n_points=500000, job_name='TEST', verbose=True, prior_coeff=0.3, prior_xsec=0.3, strategy=0, decorrelate=True, decorrelate_full=True,  do_semianalytic=True, do_taylor_expansion=False ):
+    def __init__(self, input_dir='../data/', params={},  rebin=(1,1), mass=80.0000, num_events=1000000, fix=[], interp_deg=1, n_points=500000, job_name='TEST', verbose=True, prior_coeff=0.3, prior_xsec=0.3, strategy=0, decorrelate=True, decorrelate_full=True,  do_semianalytic=True, do_taylor_expansion=False, n_taylor=2, run_minos=False ):
 
+        self.run_minos=run_minos
         self.do_taylor_expansion = do_taylor_expansion
+        self.n_taylor = n_taylor
         self.do_semianalytic = do_semianalytic
         self.decorrelate = decorrelate
         self.decorrelate_full = decorrelate_full
@@ -80,6 +82,9 @@ class Unfolder:
         self.num_pt_bins = len(self.input_shapes_pt)-1
         self.num_y_bins = len(self.input_shapes_y)-1
 
+        if self.verbose:
+            print "Loading files..."
+
         for ipt in range(len(self.input_shapes_pt)-1):
             pt_bin=[ self.input_shapes_pt[ipt], self.input_shapes_pt[ipt+1] ]
             for iy in range(len(self.input_shapes_y)-1):
@@ -95,8 +100,6 @@ class Unfolder:
                                         input_name = 'mixed_dataset_'+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_M'+'{:05.3f}'.format(m)
                                         for ic,c in enumerate([A0,A1,A2,A3,A4]):
                                             input_name += '_A'+str(ic)+('{:03.2f}'.format(c))
-                                        if self.verbose:
-                                            print "Loading file...", input_name 
                                         grid_raw = np.load(self.input_dir+'/'+input_name+'.npy')
                                         grid = bin_ndarray( grid_raw, (grid_raw.shape[0]/rebin[0], grid_raw.shape[1]/rebin[1]), 'sum' )
                                         norm = grid.sum() 
@@ -248,16 +251,24 @@ class Unfolder:
                                                       self.truth[par_name_coeff+'_prime']-scale_range*5, self.truth[par_name_coeff+'_prime']+scale_range*5 )                        
                     if coeff in self.fix:
                         self.gMinuit.FixParameter(self.n_param)
-                    else:
-                        self.ndof -= 1
+                    if (coeff not in self.fix) or self.do_semianalytic:
+                        if self.do_taylor_expansion and ipt==0:
+                            self.ndof -= (self.n_taylor)                        
+                        elif not self.do_taylor_expansion:
+                            self.ndof -= 1
 
                     self.n_param += 1            
 
         # dimension of Ai parameter vector
         self.dim_A = (len(self.input_shapes_pt)-1)*(len(self.input_shapes_y)-1)*(len(self.loads)-1)
+        self.dim_beta = self.n_taylor*(len(self.input_shapes_y)-1)*(len(self.loads)-1)
         if self.do_semianalytic:
             self.theta = np.zeros((self.dim_A))
             self.theta_err = np.diag( np.ones(self.dim_A) )
+        if self.do_taylor_expansion:
+            self.beta = np.zeros((self.dim_beta))
+            self.beta_err = np.diag( np.ones(self.dim_beta) )
+            
 
 
     def prefit_covariance(self):
@@ -449,9 +460,6 @@ class Unfolder:
 
         # prior
         priors = np.ones(self.dim_A)*self.prior_coeff
-        #for i in range(self.dim_A):
-            #if i%5==0:
-            #    priors[i] *= 0.01
         Vinv_prior = np.diag(1./priors)
         theta_prior = np.zeros(self.dim_A)
 
@@ -506,11 +514,14 @@ class Unfolder:
         #print "n':", nprime
 
         aux1 =  np.linalg.multi_dot([A.T, Vinv, A])
-        aux1 += Vinv_prior
+        if self.prior_coeff>0.0:
+            aux1 += Vinv_prior
         aux1_inv = np.linalg.inv(aux1)
         aux2 = np.linalg.multi_dot( [ A.T, Vinv, nprime ] )
         aux3 = np.linalg.multi_dot( [ Vinv_prior, theta_prior ])
-        theta = np.linalg.multi_dot( [aux1_inv, (aux2+aux3) ] )
+        if self.prior_coeff>0.0:
+            aux2 += aux3
+        theta = np.linalg.multi_dot( [aux1_inv, aux2 ] )
         #theta = theta_prior
         self.theta = theta
 
@@ -520,13 +531,13 @@ class Unfolder:
         res1 = (nprime - np.dot(A, theta))
         res2 = (theta_prior - theta)
         chi2min = np.linalg.multi_dot( [res1.T, Vinv, res1 ] )
-        chi2min += np.linalg.multi_dot( [res2.T, Vinv_prior, res2] )
+        if self.prior_coeff>0.0:
+            chi2min += np.linalg.multi_dot( [res2.T, Vinv_prior, res2] )
         return chi2min
 
 
     def chi2_analytic_parametric(self, par):
 
-        # find closest teplates for interpolation
         mass = par[0]
         mass_neighbours = self.find_neighbours(mass=mass)
         if len(mass_neighbours)<2:
@@ -543,13 +554,11 @@ class Unfolder:
 
         Vinv = np.diag(1./n)
 
-        n_taylor = 2
-        dim = n_taylor*(len(self.input_shapes_y)-1)*(len(self.loads)-1)
-        K = np.zeros( ( self.dim_A, dim) )
+        K = np.zeros( ( self.dim_A, self.dim_beta) )
 
         # prior
-        priors = np.ones( dim )
-        for i in range(dim):
+        priors = np.ones( self.dim_beta )
+        for i in range(self.dim_beta):
             if i%3==0:
                 priors[i] *= 1e-03
             elif i%3==1:
@@ -557,7 +566,7 @@ class Unfolder:
             elif i%3==2:
                 priors[i] *= 1e-05
         Vinv_prior = np.diag(1./priors)
-        theta_prior = np.zeros(dim)
+        beta_prior = np.zeros(self.dim_beta)
 
         for iim,im in enumerate(mass_neighbours):
             mass_point = self.input_shapes_mass[im]
@@ -576,7 +585,6 @@ class Unfolder:
                     for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
                         input_name_all += '_A'+str(ic)+('{:03.2f}'.format(c))                    
                     tj = copy.deepcopy(getattr(self, input_name_all))
-                    #self.ignore_from_sum(tj)
 
                     for iload,load in enumerate(self.loads):
                         index     =  (ipt*(len(self.input_shapes_y)-1) + iy)*(len(self.loads)-1) + (iload-1)
@@ -585,9 +593,9 @@ class Unfolder:
                             bm += tj.flatten()*par[index_par+1]
                             continue
 
-                        for e in range(n_taylor):
-                            K[index, (iy*(len(self.loads)-1) + (iload-1))*n_taylor + e] = math.pow( 0.5*(pt_bin[0]+pt_bin[1]), e+1)/math.factorial(e+1)
-                            #print "K[", index, "][", (iy*(len(self.loads)-1) + (iload-1))*n_taylor + e, "] = ", math.pow( 0.5*(pt_bin[0]+pt_bin[1]), e+1)
+                        for e in range(self.n_taylor):
+                            K[index, (iy*(len(self.loads)-1) + (iload-1))*self.n_taylor + e] = math.pow( 0.5*(pt_bin[0]+pt_bin[1]), e+1)/math.factorial(e+1)
+                            #print "K[", index, "][", (iy*(len(self.loads)-1) + (iload-1))*self.n_taylor + e, "] = ", math.pow( 0.5*(pt_bin[0]+pt_bin[1]), e+1)
 
                         input_name_coeff = 'mixed_dataset_'+name+'_M'+'{:05.3f}'.format(mass_point)
                         for ic,c in enumerate( load ):
@@ -595,36 +603,36 @@ class Unfolder:
                         tjC = copy.deepcopy(getattr(self, input_name_coeff))
                         tjC -= tj
                         tjC /= load[iload-1]
-                        #self.ignore_from_sum(tjC)
 
                         for i in range(n.size):
                             Am[i][index] = tjC.flatten()[i]*par[index_par+1] 
 
-            #print "=>", mass_point, Am .sum()
             grid_points_A.append( Am )
             grid_points_b.append( bm )
 
         nprime =  n-self.interpolate_mass(mass=mass, x=x, grid_points=grid_points_b, deg=self.interp_deg, shape=(self.data.size))
         A = self.interpolate_mass(mass=mass, x=x, grid_points=grid_points_A, deg=self.interp_deg, shape=(self.data.size, self.dim_A))
-        #nprime = n-b
-        #np.set_printoptions(threshold=np.inf)
-        #print A.shape
-        #print "A:", A
-        #print "V-1:", Vinv
-        #print "b:", b
-        #print "n':", nprime
 
         aux1 =  np.linalg.multi_dot([K.T, A.T, Vinv, A, K])
-        #aux1 += Vinv_prior
+        if self.prior_coeff>0.0:
+            aux1 += Vinv_prior
         aux1_inv = np.linalg.inv(aux1)
         aux2 = np.linalg.multi_dot( [ K.T, A.T, Vinv, nprime ] )
-        aux3 = np.linalg.multi_dot( [ Vinv_prior, theta_prior ])
-        #aux2 += aux3
-        theta = np.linalg.multi_dot( [aux1_inv, aux2 ] )
-        res1 = (nprime - np.linalg.multi_dot( [A, K, theta]) )
-        res2 = (theta_prior - theta)
+        aux3 = np.linalg.multi_dot( [ Vinv_prior, beta_prior ])
+        if self.prior_coeff>0.0:
+            aux2 += aux3
+        beta = np.linalg.multi_dot( [aux1_inv, aux2 ] )        
+
+        self.beta = beta
+        # FIX!!!
+        self.beta_err = aux1_inv
+
+        res1 = (nprime - np.linalg.multi_dot( [A, K, beta]) )
+        res2 = (beta_prior -beta)
         chi2min = np.linalg.multi_dot( [res1.T, Vinv, res1 ] )
-        #chi2min += np.linalg.multi_dot( [res2.T, Vinv_prior, res2] )
+        if self.prior_coeff>0.0:
+            chi2min += np.linalg.multi_dot( [res2.T, Vinv_prior, res2] )
+
         return chi2min
 
 
@@ -808,6 +816,21 @@ class Unfolder:
 
         nll += 2*(-self.data*np.log(pdf) + pdf).sum()
 
+        # prior
+        if self.prior_coeff>0.0 or self.prior_xsec>0.0:
+            for key,p in self.map_params.items():            
+                if self.prior_xsec>0.0 and ('_A' not in key and 'mass' not in key):                
+                    true = self.truth[key]
+                    if self.decorrelate:
+                        true = self.truth[key+'_prime']
+                    err = self.prior_xsec
+                    nll += math.pow((par[p]-true)/(err*true), 2.0)
+                elif self.prior_coeff>0.0 and ('_A' in key):
+                    fit = par[p]
+                    true = self.truth[key]
+                    err = self.prior_coeff
+                    nll += math.pow((fit-true)/err, 2.0)        
+
         print "nll:", nll
         return nll
 
@@ -820,24 +843,6 @@ class Unfolder:
             nll = self.chi2(par)
         else:
             nll = self.nll(par)
-
-        # prior
-        for key,p in self.map_params.items():            
-            # pt_y bins
-            if '_A' not in key and 'mass' not in key:                
-                true = self.truth[key]
-                if self.decorrelate:
-                    true = self.truth[key+'_prime']
-                err = self.prior_xsec
-                #nll += math.pow((par[p]-true)/(err*true), 2.0)
-            # coefficients
-            elif '_A' in key:
-                fit = par[p]
-                #if self.do_semianalytic:
-                #    fit = self.theta[(p-1)/6*5 + (p-1)%6 - 1]
-                true = self.truth[key]
-                err = self.prior_coeff
-                #nll += math.pow((fit-true)/err, 2.0)        
 
         #print("{:16f}".format(nll))
         #for key,p in self.map_params.items():          
@@ -879,6 +884,7 @@ class Unfolder:
         self.update_result('time', -time.time())
         
         # make a global fit (DEFAULT)
+        massL, massH =  ROOT.Double(0.), ROOT.Double(0.) 
         status = -1
         if self.strategy == 0:
             self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
@@ -890,13 +896,15 @@ class Unfolder:
             #self.gMinuit.mnexcm( "MIGRAD", self.arglist, 2, self.ierflg )                        
 
             if status>0:
-                #self.arglist[0] = self.n_points
-                #self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
                 self.arglist[0] = 2
                 self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
                 status = self.gMinuit.Migrad()
-            #self.arglist[1] = 2
-            #self.gMinuit.mnexcm( "MINO", self.arglist, 2, self.ierflg )
+
+            if self.run_minos:
+                #self.arglist[0] = self.n_points
+                #self.arglist[1] = 1
+                #self.gMinuit.mnexcm( "MINO", self.arglist, 2, self.ierflg )
+                self.gMinuit.mnmnot(1, 1, massH, massL)
 
         # first fit for the cross sections, then fit for the coefficients
         elif self.strategy == 1:
@@ -927,9 +935,12 @@ class Unfolder:
 
         self.update_result('edm', float(edm))
         self.update_result('amin', float(amin))
+        self.update_result('ndof', self.ndof)
 
         val = ROOT.Double(0.)
         err = ROOT.Double(0.)
+        errL = ROOT.Double(0.)
+        errH = ROOT.Double(0.)
 
         for key,p in self.map_params.items():            
             self.gMinuit.GetParameter(p, val, err)                
@@ -945,15 +956,64 @@ class Unfolder:
                 val = ROOT.Double(self.theta[index])
                 err = ROOT.Double(math.sqrt(self.theta_err[index][index]))
 
+            if key=='mass' and self.run_minos:
+                errL = massL-val
+                errH = massH-val
+            else:
+                errL = -err
+                errH = err
+
             if self.verbose:
-                print key, p, ":", true, " ==> ", val, "+/-", err            
+                print key, p, ":", true, " ==> ", val, "+/-", err, ' (', errL, ',', errH, ')'            
+
             if not self.result.has_key(key):
-                self.result[key] = {'true' : [true], 'toy' : [true_gen], 'fit' : [float(val)], 'err' : [float(err)] }
+                self.result[key] = {'true' : [true], 
+                                    'toy' : [true_gen], 
+                                    'fit' : [float(val)], 
+                                    'err' : [float(err)], 
+                                    'errL' :  [float(errL)],  
+                                    'errH' :  [float(errH)] }
             else:
                 self.result[key]['true'].append(true) 
                 self.result[key]['toy'].append(true_gen) 
                 self.result[key]['fit'].append(float(val)) 
                 self.result[key]['err'].append(float(err)) 
+                self.result[key]['errL'].append(float(errL)) 
+                self.result[key]['errH'].append(float(errH)) 
+
+        if self.do_taylor_expansion:
+            for iy in range(len(self.input_shapes_y)-1):
+                y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]
+                for iload,load in enumerate(self.loads):
+                    if iload==0:
+                        continue
+                    for e in range(self.n_taylor):
+                        index = (iy*(len(self.loads)-1) + (iload-1))*self.n_taylor + e
+                        name = 'coeff'+str(e)+'_y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_A'+str(iload-1)
+                        val = ROOT.Double(self.beta[index])
+                        err = ROOT.Double(math.sqrt(self.beta_err[index][index]))
+                        errL = -err
+                        errH = +err
+                        if self.verbose:
+                            print name, ":", 0.0, " ==> ", val, "+/-", err            
+                        if not self.result.has_key(name):
+                            self.result[name] = {'true' : [0.0], 'toy' : [0.0], 'fit' : [float(val)], 'err' : [float(err)] }
+                        else:
+                            self.result[name]['true'].append(0.0) 
+                            self.result[name]['toy'].append(0.0) 
+                            self.result[name]['fit'].append(float(val)) 
+                            self.result[name]['err'].append(float(err)) 
+                            self.result[name]['errL'].append(float(errL)) 
+                            self.result[name]['errH'].append(float(errH)) 
+
+        pvalue = -1.0
+        if self.do_semianalytic:
+            from scipy import stats
+            pvalue = 1-stats.chi2.cdf(float(amin), self.ndof)
+        self.update_result('pvalue', pvalue)
+
+        if self.do_semianalytic:
+            print 'Bins: ', self.data.size, ', number of d.o.f.: ', self.ndof, ' chi2: '+'{:4.1f}'.format(float(amin)), ' (p-value: '+'{:4.3f}'.format(pvalue)+')'
         print('Fit done in '+'{:4.1f}'.format(self.result['time'][-1])+' seconds')
 
     def update_result(self, var, val):

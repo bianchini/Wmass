@@ -16,7 +16,7 @@ config.JobType.outputFiles = ['result_TEST.pkl']
 config.section_("Data")
 config.Data.splitting = 'EventBased'
 config.Data.unitsPerJob = 1
-config.Data.totalUnits = 100
+config.Data.totalUnits = 10
 config.Data.publication = False
 config.Data.outputDatasetTag = 'TEST'
 
@@ -31,15 +31,30 @@ if __name__ == '__main__':
     from CRABAPI.RawCommand import crabCommand
 
     jobs = [ 
-        #['1e7_pt_y_prior02_pdf'  ,                10000000,  ['mass', 'A0', 'A1', 'A2', 'A3', 'A4'], 1, 1, 0.2, 0.2],
-        #['1e7_pt_y_prior02',                     10000000,  ['mass', 'A0', 'A1', 'A2', 'A3', 'A4'], 1, 1, 0.2, 0.2],
-        #['1e7_pt_y_prior01',                     10000000,  ['mass', 'A0', 'A1', 'A2', 'A3', 'A4'], 1, 1, 0.1, 0.1],
-        #['1e7_pt_y_A0_A4_prior02',               10000000,  ['mass', 'A1', 'A2', 'A3'], 1, 1, 0.2, 0.2],
-        #['1e7_pt_y_A0_A4_prior01',               10000000,  ['mass', 'A1', 'A2', 'A3'], 1, 1, 0.1, 0.1],
-        #['1e7_pt_y_A0_A1_A2_A3_A4_prior02',      10000000,  ['mass'], 1, 1, 0.2, 0.2],
-        #['1e7_pt_y_A0_A1_A2_A3_A4_prior01',      10000000,  ['mass'], 1, 1, 0.1, 0.1],
-        ['1e7_pt_y_A0_A1_A2_A3_A4_mass_prior02_pdf', 10000000,  [], 1, 1, 0.2, 0.2],
-        #['1e7_pt_y_A0_A1_A2_A3_A4_mass_prior01', 10000000,  [], 1, 1, 0.1, 0.1],
+        ['1e7_decorr_taylor2_rebin10-1', 10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  2, 10, 1],
+        ['1e7_decorr_taylor2_rebin5-1',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  2, 5,  1],
+        ['1e7_decorr_taylor2_rebin4-1',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  2, 4,  1],
+        ['1e7_decorr_taylor2_rebin2-1',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  2, 2,  1],
+        ['1e7_decorr_taylor2_rebin1-1',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  2, 1,  1],
+        ['1e7_decorr_taylor3_rebin10-1', 10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  3, 10, 1],
+        ['1e7_decorr_taylor3_rebin5-1',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  3, 5,  1],
+        ['1e7_decorr_taylor3_rebin4-1',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  3, 4,  1],
+        ['1e7_decorr_taylor3_rebin2-1',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  3, 2,  1],
+        ['1e7_decorr_taylor3_rebin1-1',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  3, 1,  1],
+        ['1e7_decorr_taylor2_rebin10-2', 10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  2, 10, 2],
+        ['1e7_decorr_taylor2_rebin5-2',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  2, 5,  2],
+        ['1e7_decorr_taylor2_rebin4-2',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  2, 4,  2],
+        ['1e7_decorr_taylor2_rebin2-2',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  2, 2,  2],
+        ['1e7_decorr_taylor2_rebin1-2',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  2, 1,  2],
+        ['1e7_decorr_taylor3_rebin10-2', 10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  3, 10, 2],
+        ['1e7_decorr_taylor3_rebin5-2',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  3, 5,  2],
+        ['1e7_decorr_taylor3_rebin4-2',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  3, 4,  2],
+        ['1e7_decorr_taylor3_rebin2-2',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  3, 2,  2],
+        ['1e7_decorr_taylor3_rebin1-2',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 1,  3, 1,  2],
+        #['1e7_decorr_full_rebin10-1',    10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 0, -1, 10, 1],
+        #['1e7_decorr_full_rebin5-1',     10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 0, -1, 5,  1],
+        #['1e7_decorr_full_rebin4-1',     10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 0, -1, 4,  1],
+        #['1e7_decorr_full_rebin2-1',     10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  1, 0, -1, 2,  1],
         ]
 
     if argv[1]=='create':
@@ -73,6 +88,14 @@ if __name__ == '__main__':
                     line += (' '+str(job[5]))
                 elif 'prior_xsec =' in line:
                     line += (' '+str(job[6]))
+                elif 'decorrelate =' in line:
+                    line += (' '+str(job[7]))
+                elif 'do_taylor_expansion =' in line:
+                    line += (' '+str(job[8]))
+                elif 'n_taylor =' in line:
+                    line += (' '+str(job[9]))
+                elif 'rebin =' in line:
+                    line += (' ('+str(job[10])+','+str(job[11])+')')
                 line += '\n'
                 fout.write(line)
             fout.close()

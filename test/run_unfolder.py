@@ -13,6 +13,7 @@ params_test['params_template']['pt'] = np.array([0.0, 4.0, 8.0, 12.0, 16.0, 20.0
 #params_test['params_template']['pt'] = np.linspace(0.0, 20.0, 6)
 #params_test['params_template']['y']  = np.linspace(0.0, 0.8, 3)
 params_test['params_template']['y']  = np.array([0.0, 0.4, 0.8, 1.2, 1.6, 2.0, 2.4])
+#params_test['params_template']['y']  = np.array([0.0, 0.4])
 #params_test['params_template']['y']  = np.array([0.0, 0.40])
 #params_test['params_template']['y']  = np.linspace(0.0, 0.4, 2)
 #params_test['params_template']['y']  = np.linspace(0.0, 3.6, 10)
@@ -35,7 +36,7 @@ if len(argv)==4:
 
 unfolder = Unfolder(input_dir=(os.environ['CMSSW_BASE']+'/src/Wmass/data/'), 
                     params=params_test, 
-                    rebin=(5,1),
+                    rebin=(1,1),
                     mass=80.000, 
                     num_events=num_events, 
                     fix=fix, 
@@ -43,12 +44,14 @@ unfolder = Unfolder(input_dir=(os.environ['CMSSW_BASE']+'/src/Wmass/data/'),
                     n_points=1000000,
                     job_name=job_name, 
                     verbose=True, 
-                    prior_coeff=0.10, prior_xsec=0.1,
+                    prior_coeff=-1, prior_xsec=0.1,
                     strategy=0,
                     decorrelate=True,
                     decorrelate_full=False,
                     do_semianalytic=True,
-                    do_taylor_expansion=True
+                    do_taylor_expansion=True,
+                    n_taylor=2,
+                    run_minos=False
                     )
 
 for itoy in range(ntoys):
