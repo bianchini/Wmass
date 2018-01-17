@@ -43,6 +43,7 @@ unfolder = Unfolder(input_dir=(os.environ['CMSSW_BASE']+'/src/Wmass/data/'),
                     do_semianalytic=True,
                     do_taylor_expansion=do_taylor_expansion,
                     n_taylor=n_taylor,
+                    add_constant_A4=True,
                     run_minos=False
                     )
 

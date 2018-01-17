@@ -18,11 +18,12 @@ from template_parameters import accept_point, pdf_test, bin_ndarray
 
 class Unfolder:
 
-    def __init__(self, input_dir='../data/', params={},  rebin=(1,1), mass=80.0000, num_events=1000000, fix=[], interp_deg=1, n_points=500000, job_name='TEST', verbose=True, prior_coeff=0.3, prior_xsec=0.3, strategy=0, decorrelate=True, decorrelate_full=True,  do_semianalytic=True, do_taylor_expansion=False, n_taylor=2, run_minos=False ):
+    def __init__(self, input_dir='../data/', params={},  rebin=(1,1), mass=80.0000, num_events=1000000, fix=[], interp_deg=1, n_points=500000, job_name='TEST', verbose=True, prior_coeff=0.3, prior_xsec=0.3, strategy=0, decorrelate=True, decorrelate_full=True,  do_semianalytic=True, do_taylor_expansion=False, n_taylor=2, add_constant_A4=True, run_minos=False ):
 
         self.run_minos=run_minos
         self.do_taylor_expansion = do_taylor_expansion
         self.n_taylor = n_taylor
+        self.add_constant_A4 = add_constant_A4
         self.do_semianalytic = do_semianalytic
         self.decorrelate = decorrelate
         self.decorrelate_full = decorrelate_full
@@ -253,7 +254,10 @@ class Unfolder:
                         self.gMinuit.FixParameter(self.n_param)
                     if (coeff not in self.fix) or self.do_semianalytic:
                         if self.do_taylor_expansion and ipt==0:
-                            self.ndof -= (self.n_taylor)                        
+                            self.ndof -= (self.n_taylor)
+                            if self.add_constant_A4 and coeff=='A4':
+                                self.ndof -= 1
+
                         elif not self.do_taylor_expansion:
                             self.ndof -= 1
 
@@ -261,7 +265,11 @@ class Unfolder:
 
         # dimension of Ai parameter vector
         self.dim_A = (len(self.input_shapes_pt)-1)*(len(self.input_shapes_y)-1)*(len(self.loads)-1)
+
         self.dim_beta = self.n_taylor*(len(self.input_shapes_y)-1)*(len(self.loads)-1)
+        if self.add_constant_A4:
+            self.dim_beta = self.n_taylor*(len(self.input_shapes_y)-1)*(len(self.loads)-2) + (self.n_taylor+1)*(len(self.input_shapes_y)-1)
+
         if self.do_semianalytic:
             self.theta = np.zeros((self.dim_A))
             self.theta_err = np.diag( np.ones(self.dim_A) )
@@ -593,9 +601,26 @@ class Unfolder:
                             bm += tj.flatten()*par[index_par+1]
                             continue
 
-                        for e in range(self.n_taylor):
-                            K[index, (iy*(len(self.loads)-1) + (iload-1))*self.n_taylor + e] = math.pow( 0.5*(pt_bin[0]+pt_bin[1]), e+1)/math.factorial(e+1)
-                            #print "K[", index, "][", (iy*(len(self.loads)-1) + (iload-1))*self.n_taylor + e, "] = ", math.pow( 0.5*(pt_bin[0]+pt_bin[1]), e+1)
+                        if not self.add_constant_A4:
+                            # all coefficients
+                            for e in range(self.n_taylor):
+                                index_e = (iy*(len(self.loads)-1) + (iload-1))*self.n_taylor + e
+                                power = e+2
+                                K[index, index_e] = math.pow( 0.5*(pt_bin[0]+pt_bin[1]), power)/math.factorial(power)
+                        else:
+                            # A4
+                            if iload==5:
+                                for e in range(self.n_taylor+1):
+                                    index_e = iy*( (len(self.loads)-2)*self.n_taylor + 1*(self.n_taylor+1) ) + (len(self.loads)-2)*self.n_taylor + e
+                                    power = e+1 if e>0 else 0
+                                    K[index, index_e] = math.pow( 0.5*(pt_bin[0]+pt_bin[1]), power)/math.factorial(power)                          
+                            # all others
+                            else:
+                                for e in range(self.n_taylor):
+                                    index_e = iy*( (len(self.loads)-2)*self.n_taylor + 1*(self.n_taylor+1) ) + (iload-1)*self.n_taylor + e
+                                    power = e+2
+                                    K[index, index_e] = math.pow( 0.5*(pt_bin[0]+pt_bin[1]), power)/math.factorial(power)
+
 
                         input_name_coeff = 'mixed_dataset_'+name+'_M'+'{:05.3f}'.format(mass_point)
                         for ic,c in enumerate( load ):
@@ -987,24 +1012,68 @@ class Unfolder:
                 for iload,load in enumerate(self.loads):
                     if iload==0:
                         continue
-                    for e in range(self.n_taylor):
-                        index = (iy*(len(self.loads)-1) + (iload-1))*self.n_taylor + e
-                        name = 'coeff'+str(e)+'_y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_A'+str(iload-1)
-                        val = ROOT.Double(self.beta[index])
-                        err = ROOT.Double(math.sqrt(self.beta_err[index][index]))
-                        errL = -err
-                        errH = +err
-                        if self.verbose:
-                            print name, ":", 0.0, " ==> ", val, "+/-", err            
-                        if not self.result.has_key(name):
-                            self.result[name] = {'true' : [0.0], 'toy' : [0.0], 'fit' : [float(val)], 'err' : [float(err)] }
+
+                    if not self.add_constant_A4:
+                        for e in range(self.n_taylor):
+                            index_e = (iy*(len(self.loads)-1) + (iload-1))*self.n_taylor + e
+                            name = 'coeff'+str(e)+'_y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_A'+str(iload-1)
+                            val = ROOT.Double(self.beta[index_e])
+                            err = ROOT.Double(math.sqrt(self.beta_err[index_e][index_e]))
+                            errL = -err
+                            errH = +err
+                            if self.verbose:
+                                print name, ":", 0.0, " ==> ", val, "+/-", err            
+                            if not self.result.has_key(name):
+                                self.result[name] = {'true' : [0.0], 'toy' : [0.0], 'fit' : [float(val)], 'err' : [float(err)] }
+                            else:
+                                self.result[name]['true'].append(0.0) 
+                                self.result[name]['toy'].append(0.0) 
+                                self.result[name]['fit'].append(float(val)) 
+                                self.result[name]['err'].append(float(err)) 
+                                self.result[name]['errL'].append(float(errL)) 
+                                self.result[name]['errH'].append(float(errH)) 
+                    else:
+                        # A4
+                        if iload==5:
+                            for e in range(self.n_taylor+1):
+                                index_e = iy*( (len(self.loads)-2)*self.n_taylor + 1*(self.n_taylor+1) ) + (len(self.loads)-2)*self.n_taylor + e
+                                name = 'coeff'+str(e)+'_y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_A'+str(iload-1)
+                                val = ROOT.Double(self.beta[index_e])
+                                err = ROOT.Double(math.sqrt(self.beta_err[index_e][index_e]))
+                                errL = -err
+                                errH = +err
+                                if self.verbose:
+                                    print name, ":", 0.0, " ==> ", val, "+/-", err            
+                                if not self.result.has_key(name):
+                                    self.result[name] = {'true' : [0.0], 'toy' : [0.0], 'fit' : [float(val)], 'err' : [float(err)] }
+                                else:
+                                    self.result[name]['true'].append(0.0) 
+                                    self.result[name]['toy'].append(0.0) 
+                                    self.result[name]['fit'].append(float(val)) 
+                                    self.result[name]['err'].append(float(err)) 
+                                    self.result[name]['errL'].append(float(errL)) 
+                                    self.result[name]['errH'].append(float(errH))                                     
+                        # all others
                         else:
-                            self.result[name]['true'].append(0.0) 
-                            self.result[name]['toy'].append(0.0) 
-                            self.result[name]['fit'].append(float(val)) 
-                            self.result[name]['err'].append(float(err)) 
-                            self.result[name]['errL'].append(float(errL)) 
-                            self.result[name]['errH'].append(float(errH)) 
+                            for e in range(self.n_taylor):
+                                index_e = iy*( (len(self.loads)-2)*self.n_taylor + 1*(self.n_taylor+1) ) + (iload-1)*self.n_taylor + e
+                                name = 'coeff'+str(e)+'_y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_A'+str(iload-1)
+                                val = ROOT.Double(self.beta[index_e])
+                                err = ROOT.Double(math.sqrt(self.beta_err[index_e][index_e]))
+                                errL = -err
+                                errH = +err
+                                if self.verbose:
+                                    print name, ":", 0.0, " ==> ", val, "+/-", err            
+                                if not self.result.has_key(name):
+                                    self.result[name] = {'true' : [0.0], 'toy' : [0.0], 'fit' : [float(val)], 'err' : [float(err)] }
+                                else:
+                                    self.result[name]['true'].append(0.0) 
+                                    self.result[name]['toy'].append(0.0) 
+                                    self.result[name]['fit'].append(float(val)) 
+                                    self.result[name]['err'].append(float(err)) 
+                                    self.result[name]['errL'].append(float(errL)) 
+                                    self.result[name]['errH'].append(float(errH)) 
+
 
         pvalue = -1.0
         if self.do_semianalytic:
