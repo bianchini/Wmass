@@ -41,15 +41,16 @@ for ijob,job in enumerate(jobs):
                 continue
 
             if first==0: 
+                ROOT.TGaxis.SetMaxDigits(2)
                 #print "fill for ", key
-                histos[key+'_pull'] = ROOT.TH1F(key+'_pull', key+'_pull', 21, -4, 4) 
+                histos[key+'_pull'] = ROOT.TH1F(key+'_pull', key+'_pull', 21, -5, 5) 
                 ranges = [0.5, 1.5]
                 if key=='mass':
-                    ranges = [1-1e-03, 1+1e-03]
-                histos[key+'_ratio'] = ROOT.TH1F(key+'_ratio', key+'_ratio', 51, ranges[0], ranges[1])                 
+                    ranges = [0.999, 1.001]
+                histos[key+'_ratio'] = ROOT.TH1F(key+'_ratio', key+'_ratio', 21, ranges[0], ranges[1])                 
                 ranges = [0., 1.0]
                 if key=='mass':
-                    ranges = [0., 1e-03]
+                    ranges = [0., 0.5e-03]
                 elif '_A' in key:
                     ranges = [-1.0, 1.0]
                 else:
@@ -59,7 +60,7 @@ for ijob,job in enumerate(jobs):
             for toy in range(res['ntoys']):        
                 if res['status'][toy] != 0:
                     continue
-                print res['edm'][toy]
+                #print res['edm'][toy]
                 pull = 0.
                 if res[key].has_key('toy'):
                     pull = (res[key]['fit'][toy]-res[key]['toy'][toy])/res[key]['err'][toy] if res[key]['err'][toy]>0 else 0.0            
@@ -106,7 +107,7 @@ for ijob,job in enumerate(jobs):
             p.GetXaxis().SetTitleFont(43)
             p.GetXaxis().SetTitleOffset(1.0)
             p.GetXaxis().SetLabelFont(43) 
-            p.GetXaxis().SetLabelSize(20)
+            p.GetXaxis().SetLabelSize(10)
             p.GetYaxis().SetTitle('toys')
             p.GetYaxis().SetTitleSize(25)
             p.GetYaxis().SetTitleFont(43)
