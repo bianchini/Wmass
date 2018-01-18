@@ -52,7 +52,8 @@ unfolder = Unfolder(input_dir=(os.environ['CMSSW_BASE']+'/src/Wmass/data/'),
                     do_taylor_expansion=True,
                     n_taylor=1,
                     add_constant_A4=True,
-                    run_minos=False
+                    run_minos=False,
+                    gen_toy=[0.0, 0.0, 0.0, 0.0, 0.0]
                     )
 
 for itoy in range(ntoys):

@@ -18,7 +18,7 @@ from template_parameters import accept_point, pdf_test, bin_ndarray
 
 class Unfolder:
 
-    def __init__(self, input_dir='../data/', params={},  rebin=(1,1), mass=80.0000, num_events=1000000, fix=[], interp_deg=1, n_points=500000, job_name='TEST', verbose=True, prior_coeff=0.3, prior_xsec=0.3, strategy=0, decorrelate=True, decorrelate_full=True,  do_semianalytic=True, do_taylor_expansion=False, n_taylor=2, add_constant_A4=True, run_minos=False ):
+    def __init__(self, input_dir='../data/', params={},  rebin=(1,1), mass=80.0000, num_events=1000000, fix=[], interp_deg=1, n_points=500000, job_name='TEST', verbose=True, prior_coeff=0.3, prior_xsec=0.3, strategy=0, decorrelate=True, decorrelate_full=True,  do_semianalytic=True, do_taylor_expansion=False, n_taylor=2, add_constant_A4=True, run_minos=False, gen_toy=[0.0, 0.0, 0.0, 0.0, 0.0] ):
 
         self.run_minos=run_minos
         self.do_taylor_expansion = do_taylor_expansion
@@ -38,6 +38,7 @@ class Unfolder:
         self.prior_xsec = prior_xsec
         self.job_name = job_name
         self.strategy = strategy
+        self.gen_toy = gen_toy
         self.truth = {}
 
         self.loads = [ [0.0, 0.0, 0.0, 0.0, 0.0],
@@ -131,7 +132,7 @@ class Unfolder:
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]
                 #total_weight += pdf_test(pt=pt_bin[0], y=y_bin[0])
                 input_name = 'mixed_dataset_'+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_M'+'{:05.3f}'.format(self.mass)
-                for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
+                for ic,c in enumerate(self.gen_toy):
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))                    
                 for pt in np.linspace(pt_bin[0],pt_bin[1]-1,4):
                     normalisation += getattr(self, input_name+'_norm')*pdf_test(pt, y=y_bin[0])
@@ -145,7 +146,7 @@ class Unfolder:
                     weight += pdf_test(pt, y=y_bin[0]) #/total_weight
                 name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 input_name = 'mixed_dataset_'+name+'_M'+'{:05.3f}'.format(self.mass)
-                for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
+                for ic,c in enumerate(self.gen_toy):
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))
 
                 n_true = self.num_events*weight/normalisation
@@ -154,11 +155,8 @@ class Unfolder:
 
                 self.truth[name] = n_true
                 self.truth[name+'_gen'] = data_rnd.sum()/getattr(self, input_name+'_norm')
-                self.truth[name+'_A0'] = 0.0
-                self.truth[name+'_A1'] = 0.0
-                self.truth[name+'_A2'] = 0.0
-                self.truth[name+'_A3'] = 0.0
-                self.truth[name+'_A4'] = 0.0
+                for ic,c in enumerate(self.gen_toy):
+                    self.truth[name+'_A'+str(ic)] = c
                 self.data += data_rnd
                 self.data_asymov += data_asymov
 
@@ -242,7 +240,7 @@ class Unfolder:
                     self.map_params[par_name_coeff] = self.n_param            
 
                     if not self.decorrelate_full:
-                        self.gMinuit.DefineParameter( self.n_param, par_name_coeff, 0.0, 0.01, -1.0, +1.0)
+                        self.gMinuit.DefineParameter( self.n_param, par_name_coeff, self.truth[par_name_coeff], 0.01, self.truth[par_name_coeff]-0.5, self.truth[par_name_coeff]+0.5)
                     else:
                         index = (ipt*(len(self.input_shapes_y)-1) + iy)*len(self.loads) + icoeff + 1
                         scale_range = self.sigmaU_full[index]
@@ -291,7 +289,7 @@ class Unfolder:
                 index1 = ipt1*(len(self.input_shapes_y)-1) + iy1
                 name1 = 'pt{:02.1f}'.format(pt_bin1[0])+'-'+'{:02.1f}'.format(pt_bin1[1])+'_'+'y{:03.2f}'.format(y_bin1[0])+'-'+'{:03.2f}'.format(y_bin1[1])
                 input_name1 = 'mixed_dataset_'+name1+'_M'+'{:05.3f}'.format(self.mass)
-                for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
+                for ic,c in enumerate(self.loads[0]):
                     input_name1 += '_A'+str(ic)+('{:03.2f}'.format(c))                    
                 tj = copy.deepcopy(getattr(self, input_name1))
                 self.ignore_from_sum(tj)
@@ -305,7 +303,7 @@ class Unfolder:
                         index2 = ipt2*(len(self.input_shapes_y)-1) + iy2
                         name2 = 'pt{:02.1f}'.format(pt_bin2[0])+'-'+'{:02.1f}'.format(pt_bin2[1])+'_'+'y{:03.2f}'.format(y_bin2[0])+'-'+'{:03.2f}'.format(y_bin2[1])
                         input_name2 = 'mixed_dataset_'+name2+'_M'+'{:05.3f}'.format(self.mass)
-                        for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
+                        for ic,c in enumerate(self.loads[0]):
                             input_name2 += '_A'+str(ic)+('{:03.2f}'.format(c))                                                
                         tk = copy.deepcopy(getattr(self, input_name2))
                         self.ignore_from_sum(tk)
@@ -356,7 +354,7 @@ class Unfolder:
                 y_bin1=[ self.input_shapes_y[iy1], self.input_shapes_y[iy1+1] ]                
                 name1 = 'pt{:02.1f}'.format(pt_bin1[0])+'-'+'{:02.1f}'.format(pt_bin1[1])+'_'+'y{:03.2f}'.format(y_bin1[0])+'-'+'{:03.2f}'.format(y_bin1[1])
                 input_name_all1   = 'mixed_dataset_'+name1+'_M'+'{:05.3f}'.format(self.mass)
-                for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
+                for ic,c in enumerate(self.loads[0]):
                     input_name_all1 += '_A'+str(ic)+('{:03.2f}'.format(c))                    
                 tj = copy.deepcopy(getattr(self, input_name_all1))
                 self.ignore_from_sum(tj)
@@ -383,7 +381,7 @@ class Unfolder:
                             y_bin2=[ self.input_shapes_y[iy2], self.input_shapes_y[iy2+1] ]                
                             name2 = 'pt{:02.1f}'.format(pt_bin2[0])+'-'+'{:02.1f}'.format(pt_bin2[1])+'_'+'y{:03.2f}'.format(y_bin2[0])+'-'+'{:03.2f}'.format(y_bin2[1])
                             input_name_all2   = 'mixed_dataset_'+name2+'_M'+'{:05.3f}'.format(self.mass)
-                            for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
+                            for ic,c in enumerate(self.loads[0]):
                                 input_name_all2 += '_A'+str(ic)+('{:03.2f}'.format(c))                    
                             tk = copy.deepcopy(getattr(self, input_name_all2))
                             self.ignore_from_sum(tk)
@@ -485,7 +483,7 @@ class Unfolder:
                     y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]                
                     name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                     input_name_all   = 'mixed_dataset_'+name+'_M'+'{:05.3f}'.format(mass_point)
-                    for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
+                    for ic,c in enumerate( self.loads[0] ):
                         input_name_all += '_A'+str(ic)+('{:03.2f}'.format(c))                    
                     tj = copy.deepcopy(getattr(self, input_name_all))
                     #self.ignore_from_sum(tj)
@@ -590,7 +588,7 @@ class Unfolder:
                     y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]                
                     name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                     input_name_all   = 'mixed_dataset_'+name+'_M'+'{:05.3f}'.format(mass_point)
-                    for ic,c in enumerate([0.0, 0.0, 0.0, 0.0, 0.0]):
+                    for ic,c in enumerate( self.loads[0] ):
                         input_name_all += '_A'+str(ic)+('{:03.2f}'.format(c))                    
                     tj = copy.deepcopy(getattr(self, input_name_all))
 
@@ -988,23 +986,7 @@ class Unfolder:
                 errL = -err
                 errH = err
 
-            if self.verbose:
-                print key, p, ":", true, " ==> ", val, "+/-", err, ' (', errL, ',', errH, ')'            
-
-            if not self.result.has_key(key):
-                self.result[key] = {'true' : [true], 
-                                    'toy' : [true_gen], 
-                                    'fit' : [float(val)], 
-                                    'err' : [float(err)], 
-                                    'errL' :  [float(errL)],  
-                                    'errH' :  [float(errH)] }
-            else:
-                self.result[key]['true'].append(true) 
-                self.result[key]['toy'].append(true_gen) 
-                self.result[key]['fit'].append(float(val)) 
-                self.result[key]['err'].append(float(err)) 
-                self.result[key]['errL'].append(float(errL)) 
-                self.result[key]['errH'].append(float(errH)) 
+            self.update_result_array(key=key, vals=(true, true_gen, float(val), float(err), float(errL), float(errH)) )
 
         if self.do_taylor_expansion:
             for iy in range(len(self.input_shapes_y)-1):
@@ -1021,17 +1003,7 @@ class Unfolder:
                             err = ROOT.Double(math.sqrt(self.beta_err[index_e][index_e]))
                             errL = -err
                             errH = +err
-                            if self.verbose:
-                                print name, ":", 0.0, " ==> ", val, "+/-", err            
-                            if not self.result.has_key(name):
-                                self.result[name] = {'true' : [0.0], 'toy' : [0.0], 'fit' : [float(val)], 'err' : [float(err)] }
-                            else:
-                                self.result[name]['true'].append(0.0) 
-                                self.result[name]['toy'].append(0.0) 
-                                self.result[name]['fit'].append(float(val)) 
-                                self.result[name]['err'].append(float(err)) 
-                                self.result[name]['errL'].append(float(errL)) 
-                                self.result[name]['errH'].append(float(errH)) 
+                            self.update_result_array(key=name, vals=(0.0, 0.0, float(val), float(err), float(errL), float(errH)) )
                     else:
                         # A4
                         if iload==5:
@@ -1042,17 +1014,7 @@ class Unfolder:
                                 err = ROOT.Double(math.sqrt(self.beta_err[index_e][index_e]))
                                 errL = -err
                                 errH = +err
-                                if self.verbose:
-                                    print name, ":", 0.0, " ==> ", val, "+/-", err            
-                                if not self.result.has_key(name):
-                                    self.result[name] = {'true' : [0.0], 'toy' : [0.0], 'fit' : [float(val)], 'err' : [float(err)] }
-                                else:
-                                    self.result[name]['true'].append(0.0) 
-                                    self.result[name]['toy'].append(0.0) 
-                                    self.result[name]['fit'].append(float(val)) 
-                                    self.result[name]['err'].append(float(err)) 
-                                    self.result[name]['errL'].append(float(errL)) 
-                                    self.result[name]['errH'].append(float(errH))                                     
+                                self.update_result_array(key=name, vals=(0.0, 0.0, float(val), float(err), float(errL), float(errH)) )
                         # all others
                         else:
                             for e in range(self.n_taylor):
@@ -1062,18 +1024,7 @@ class Unfolder:
                                 err = ROOT.Double(math.sqrt(self.beta_err[index_e][index_e]))
                                 errL = -err
                                 errH = +err
-                                if self.verbose:
-                                    print name, ":", 0.0, " ==> ", val, "+/-", err            
-                                if not self.result.has_key(name):
-                                    self.result[name] = {'true' : [0.0], 'toy' : [0.0], 'fit' : [float(val)], 'err' : [float(err)] }
-                                else:
-                                    self.result[name]['true'].append(0.0) 
-                                    self.result[name]['toy'].append(0.0) 
-                                    self.result[name]['fit'].append(float(val)) 
-                                    self.result[name]['err'].append(float(err)) 
-                                    self.result[name]['errL'].append(float(errL)) 
-                                    self.result[name]['errH'].append(float(errH)) 
-
+                                self.update_result_array(key=name, vals=(0.0, 0.0, float(val), float(err), float(errL), float(errH)) )
 
         pvalue = -1.0
         if self.do_semianalytic:
@@ -1091,6 +1042,32 @@ class Unfolder:
         else:
             self.result[var].append(val)
         print "Unfolder: ", var, " = ", val
+
+    def update_result_array(self, key='', vals=()):
+        true      = vals[0]
+        true_gen  = vals[1]
+        val  = vals[2]
+        err  = vals[3]
+        errL = vals[4]
+        errH = vals[5]
+        if self.verbose:
+            print key, ":", true, " ==> ", val, "+/-", err, ' (', errL, ',', errH, ')'            
+        if not self.result.has_key(key):
+            self.result[key] = {'true' : [true], 
+                                'toy' : [true_gen], 
+                                'fit' : [val], 
+                                'err' : [err], 
+                                'errL' :  [errL],  
+                                'errH' :  [errH] }
+        else:
+            self.result[key]['true'].append(true) 
+            self.result[key]['toy'].append(true_gen) 
+            self.result[key]['fit'].append(val) 
+            self.result[key]['err'].append(err) 
+            self.result[key]['errL'].append(errL) 
+            self.result[key]['errH'].append(errH) 
+            
+
 
     # save the result to a pickle file
     def save_result(self):            

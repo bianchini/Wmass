@@ -2,6 +2,8 @@ import ROOT
 import math
 import sys
 import copy
+import os.path
+
 import numpy as np
 import numpy.random as ran
 
@@ -81,8 +83,6 @@ class TemplateMaker:
 
     # fill (cos,phi) grid in CS frame
     def make_grid_CS(self, coeff=[0., 0., 0., 0., 0.], mass=80., ntoys=1000):
-        # number of toys used to fill the template
-        self.ntoys=ntoys
 
         # array that stores the rnd values
         rnd_grid = np.zeros((ntoys,3))
@@ -115,6 +115,9 @@ class TemplateMaker:
                       boost_vecs=[], weights_mass=[], 
                       coeff=[0.,0.,0.,0.,0.], mass=80., ntoys=100000):
 
+        # number of toys used to fill the template
+        self.ntoys=ntoys
+
         # read from params how many templates we need
         boost_vecs = []
         for ipt,pt in enumerate(params['params_W']['pt']):
@@ -132,8 +135,11 @@ class TemplateMaker:
         for ic,c in enumerate(coeff):
             grid_tag += '_A'+str(ic)+('{:03.2f}'.format(c))
 
-        rnd_grid_CS = self.make_grid_CS( coeff=coeff, mass=mass, ntoys=ntoys )
-        np.save(self.out_dir+'/grid_CS_'+grid_tag, rnd_grid_CS)
+        if not os.path.isfile(self.out_dir+'/grid_CS_'+grid_tag+'.npy'):
+            rnd_grid_CS = self.make_grid_CS( coeff=coeff, mass=mass, ntoys=ntoys )
+            np.save(self.out_dir+'/grid_CS_'+grid_tag, rnd_grid_CS)
+        else:
+            rnd_grid_CS = np.load(self.out_dir+'/grid_CS_'+grid_tag+'.npy')
 
         if self.save_plots:
             self.plot(data_x=rnd_grid_CS[:,0], label_x='cos(theta)',              

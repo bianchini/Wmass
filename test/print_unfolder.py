@@ -7,6 +7,10 @@ from pprint import pprint
 import numpy as np
 
 jobs = [ 
+        ['1e7_decorr_quad_rebin4-1', 10 ],
+        ['1e7_decorr_cube_rebin4-1',  10 ],
+        ['1e7_corr_quad_rebin4-1', 10 ],
+        ['1e7_corr_cube_rebin4-1',  10 ],
         #['1e7_decorr_taylor2_rebin10-1', 10 ],
         #['1e7_decorr_taylor2_rebin5-1',  10 ],
         #['1e7_decorr_taylor2_rebin4-1',  10 ],
@@ -31,7 +35,7 @@ jobs = [
 
 for ijob,job in enumerate(jobs):
     print "............................................"
-    print "Fit: ", job
+    print "Fit: ", job[0]
 
     nrun = 0
     for j in range(job[1]):
@@ -50,6 +54,9 @@ for ijob,job in enumerate(jobs):
 
     status = []
     nstatus = np.zeros((nrun))
+
+    ndof = []
+    nndof = np.zeros((nrun))
 
     pvalue = []
     npvalue = np.zeros((nrun))
@@ -79,6 +86,9 @@ for ijob,job in enumerate(jobs):
             status.append( "{:01.0f}".format(res['status'][toy]) )
             nstatus[nrun] = res['status'][toy]
 
+            ndof.append( "{:02.0f}".format(res['ndof'][toy]) )
+            nndof[nrun] = res['ndof'][toy]
+
             mass.append( "{:05.3f}".format(res['mass']['fit'][toy]))
             nmass[nrun] = res['mass']['fit'][toy]
 
@@ -92,7 +102,8 @@ for ijob,job in enumerate(jobs):
 
     print "\t - status   = ", nstatus.mean(), "    ", status
     print "\t - edm*1e-4 = ", "{:03.3f}".format(nedm.mean()),  "  ", edm
-    print "\t - amin     = ", "{:03.0f}".format(namin.mean()),  "   ", amin
+    print "\t - chi2     = ", "{:03.0f}".format(namin.mean()),  "   ", amin
+    print "\t - ndof     = ", "{:02.0f}".format(nndof.mean()),  "   ", ndof
     print "\t - pvalue   = ", "{:02.2f}".format(npvalue.mean()),  "   ", pvalue
     print "\t - time [h] = ", "{:02.1f}".format(ntime.mean()),  "    ", time
     print "\t - mass     = ", "{:05.3f}".format(nmass.mean()),  " ", mass
