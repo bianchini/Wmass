@@ -114,11 +114,11 @@ def bin_ndarray(ndarray, new_shape, operation='sum'):
 
 
 params_test = copy.deepcopy(Parameters)
-params_test['params_W']['pt'] = np.linspace(0.0, 32.0, 33)
+params_test['params_W']['pt'] = np.linspace(0.0, 32.0, 65)
 #params_test['params_W']['pt'] = np.array([6.0])
 params_test['params_W']['y'] = np.array([0.0])
-#params_test['params_W']['mass'] = np.array([79.500,80.000,80.500])
-params_test['params_W']['mass'] = np.array([79.500, 80.500])
+params_test['params_W']['mass'] = np.array([79.500,80.000,80.500])
+#params_test['params_W']['mass'] = np.array([79.500])
 params_test['params_W']['A0'] = np.array([ 0.0, 2.0 ]) 
 params_test['params_W']['A1'] = np.array([ 0.0, 1.0 ]) 
 params_test['params_W']['A2'] = np.array([ 0.0, 1.0 ])

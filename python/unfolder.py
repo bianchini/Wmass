@@ -125,25 +125,25 @@ class Unfolder:
         self.data_asymov = np.zeros(self.shape)
 
         normalisation = 0.0
-        #total_weight = 0.0
         for ipt in range(len(self.input_shapes_pt)-1):
             pt_bin=[ self.input_shapes_pt[ipt], self.input_shapes_pt[ipt+1] ]
             for iy in range(len(self.input_shapes_y)-1):
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]
-                #total_weight += pdf_test(pt=pt_bin[0], y=y_bin[0])
                 input_name = 'mixed_dataset_'+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_M'+'{:05.3f}'.format(self.mass)
                 for ic,c in enumerate(self.gen_toy):
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))                    
+                # sample the pdf at various pt points to have a smooth merging of bins
                 for pt in np.linspace(pt_bin[0],pt_bin[1]-1,4):
                     normalisation += getattr(self, input_name+'_norm')*pdf_test(pt, y=y_bin[0])
-        
+
         for ipt in range(len(self.input_shapes_pt)-1):
             pt_bin=[ self.input_shapes_pt[ipt], self.input_shapes_pt[ipt+1] ]
             for iy in range(len(self.input_shapes_y)-1):
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]
                 weight = 0.0
+                # sample the pdf at various pt points to have a smooth merging of bins
                 for pt in np.linspace(pt_bin[0],pt_bin[1]-1,4):
-                    weight += pdf_test(pt, y=y_bin[0]) #/total_weight
+                    weight += pdf_test(pt, y=y_bin[0])
                 name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 input_name = 'mixed_dataset_'+name+'_M'+'{:05.3f}'.format(self.mass)
                 for ic,c in enumerate(self.gen_toy):
@@ -151,7 +151,7 @@ class Unfolder:
 
                 n_true = self.num_events*weight/normalisation
                 data_asymov = getattr(self, input_name)*n_true 
-                data_rnd = np.random.poisson( data_asymov ) #* (max(np.random.normal(1.0, self.prior_xsec), 0.0))
+                data_rnd = np.random.poisson( data_asymov )
 
                 self.truth[name] = n_true
                 self.truth[name+'_gen'] = data_rnd.sum()/getattr(self, input_name+'_norm')

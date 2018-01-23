@@ -8,7 +8,8 @@ sys.path.append('./')
 from unfolder import Unfolder
 from template_parameters import params_test
 
-params_test['params_template']['pt'] = np.array([0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 26.0, 32.0])
+params_test['params_template']['pt'] = np.array([0.0, 2.0, 4.0, 8.0, 12.0, 16.0, 20.0, 26.0, 32.0])
+#params_test['params_template']['pt'] = np.array([0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 26.0, 32.0])
 params_test['params_template']['y']  = np.array([0.0, 0.4, 0.8, 1.2, 1.6, 2.0, 2.4])
 
 #params_test['params_template']['pt'] = np.linspace(0.0, 20.0, 2) #01
@@ -26,7 +27,7 @@ do_taylor_expansion =
 n_taylor = 
 rebin =
 
-unfolder = Unfolder(input_dir=(os.environ['CMSSW_BASE']+'/src/Wmass/data/'), 
+unfolder = Unfolder(input_dir=(os.environ['CMSSW_BASE']+'/src/Wmass/data/TEST/'), 
                     params=params_test, 
                     rebin=rebin,
                     mass=80.000, 
@@ -44,7 +45,8 @@ unfolder = Unfolder(input_dir=(os.environ['CMSSW_BASE']+'/src/Wmass/data/'),
                     do_taylor_expansion=do_taylor_expansion,
                     n_taylor=n_taylor,
                     add_constant_A4=True,
-                    run_minos=False
+                    run_minos=False,
+                    gen_toy=[0.0, 0.0, 0.0, 0.0, 0.0]
                     )
 
 for itoy in range(ntoys):

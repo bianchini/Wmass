@@ -108,7 +108,7 @@ class MixData:
                 for [shift,sample] in shifts:
                     sam = copy.deepcopy(sample[0]) 
                     if self.symmetrise and shift==0:
-                        weight_central = weight
+                        weight_central += weight ########
                         if central.shape!=sam.shape:
                             central = sam*weight
                         else:

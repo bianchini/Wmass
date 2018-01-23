@@ -2,7 +2,7 @@ import os.path
 from sys import argv
 argv.append( '-b-' )
 import ROOT
-ROOT.gROOT.SetBatch(True)
+#ROOT.gROOT.SetBatch(True)
 argv.remove( '-b-' )
 
 import math
@@ -18,12 +18,12 @@ from array import array
 import numpy as np
 ROOT.TGaxis.SetMaxDigits(2)
 
-job =  '1e7_corr_cube_rebin4-1'
-j = 1
+job =  '1e7_corr_cube_rebin4-1_morebins'
+j = 3
 toy = 0
 dir_name = 'TEST'
 params['params_template']['pt'] = np.array([0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 26.0, 32.0])
-params['params_template']['y']  = np.array([0.0, 0.4, 0.8, 1.2, 1.6, 2.0, 2.4])
+#params['params_template']['y']  = np.array([0.0, 0.4, 0.8, 1.2, 1.6, 2.0, 2.4])
 input_shapes_y  = params['params_template']['y']
 input_shapes_pt  = params['params_template']['pt']
 os.system('mkdir plots/'+dir_name)
@@ -79,7 +79,13 @@ for iy in range(len(input_shapes_y)-1):
         if argv[1]=='pt':
             (fit, err, true) = plot_dsigma_dpt(res, pt_bin_name, y_bin_name, toy)
         elif 'A' in argv[1]:
-            (fit, err, true) = plot_A(res, pt_bin_name, 0.5*(pt_bin[0]+pt_bin[1]), y_bin_name, toy, int(argv[1][1]), (1 if 'quad' in job else 2) )
+            deg = 1
+            if 'cube' in job:
+                deg += 1
+            if 'tetra' in job:
+                deg += 2
+                
+            (fit, err, true) = plot_A(res, pt_bin_name, 0.5*(pt_bin[0]+pt_bin[1]), y_bin_name, toy, int(argv[1][1]), deg )
         
         p_fit.SetBinContent(ipt+1, fit )    
         p_fit.SetBinError(ipt+1, err)
@@ -133,7 +139,7 @@ for iy in range(len(input_shapes_y)-1):
     p_fit.Draw("HISTE")
     p_gen.Draw("HISTSAME")
     leg.Draw()
-    #raw_input()
+    raw_input()
         
     c.SaveAs('plots/'+dir_name+'/'+job+'_'+argv[1]+'_'+y_bin_name+'.png')
     c.IsA().Destructor( c )
