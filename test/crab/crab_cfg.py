@@ -16,7 +16,7 @@ config.JobType.outputFiles = ['result_TEST.pkl']
 config.section_("Data")
 config.Data.splitting = 'EventBased'
 config.Data.unitsPerJob = 1
-config.Data.totalUnits = 10
+config.Data.totalUnits = 100
 config.Data.publication = False
 config.Data.outputDatasetTag = 'TEST'
 
@@ -41,16 +41,18 @@ if __name__ == '__main__':
         #['1e7_decorr_quad_rebin4-1_fixmass',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4', 'mass'], 1,1,-1,-1,  1, 1,  1, 4,  1],
         #['1e7_decorr_cube_rebin4-1_fixmass',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4', 'mass'], 1,1,-1,-1,  1, 1,  2, 4,  1],
 
-        #['1e7_newtemp_pt0-2_corr_quad_rebin4-1',    10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  1,   4,1],
-        #['1e7_newtemp_pt0-2_corr_cube_rebin4-1',    10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  2,   4,1],
-        ['1e7_newtemp_pt0-2_corr_tetra_rebin4-1',   10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  3,   4,1],
-        ['1e7_newtemp_pt0-2_corr_quad_rebin4-2',    10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  1,   4,2],
-        ['1e7_newtemp_pt0-2_corr_cube_rebin4-2',    10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  2,   4,2],
-        ['1e7_newtemp_pt0-2_corr_tetra_rebin4-2',   10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  3,   4,2],
-        ['1e7_newtemp_pt0-2_corr_quad_rebin4-4',    10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  1,   4,4],
-        ['1e7_newtemp_pt0-2_corr_cube_rebin4-4',    10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  2,   4,4],
-        ['1e7_newtemp_pt0-2_corr_tetra_rebin4-4',   10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  3,   4,4],
-
+        #['1e7_newtemp_pt0-2_corr_quad_rebin4-1',    10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  1,   4,1,  0],
+        #['1e7_newtemp_pt0-2_corr_cube_rebin4-1',    10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  2,   4,1,  0],
+        #['1e7_newtemp_pt0-2_corr_tetra_rebin4-1',   10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  3,   4,1,  0],
+        #['1e7_newtemp_pt0-2_corr_quad_rebin4-2',    10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  1,   4,2,  0],
+        #['1e7_newtemp_pt0-2_corr_cube_rebin4-2',    10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  2,   4,2,  0],
+        #['1e7_newtemp_pt0-2_corr_tetra_rebin4-2',   10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  3,   4,2,  0],
+        #['1e7_newtemp_pt0-2_corr_p2_rebin4-4',       10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  1,   4,4,  0],
+        #['1e7_newtemp_pt0-2_corr_p2p4_rebin4-4',     10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  2,   4,4,  0],
+        #['1e7_newtemp_pt0-2_corr_p2p4p8_rebin4-4',   10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  3,   4,4,  0],
+        ['1e7_newtemp_pt0-2_corr_p2_rebin4-4_syst',       10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  1,   4,4,  1],
+        ['1e7_newtemp_pt0-2_corr_p2p4_rebin4-4_syst',     10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  2,   4,4,  1],
+        ['1e7_newtemp_pt0-2_corr_p2p4p8_rebin4-4_syst',   10000000,  ['A0', 'A1', 'A2', 'A3', 'A4'], 1,1,-1,-1,  0, 1,  3,   4,4,  1],
         #['1e7_decorr_quad_rebin4-1_fixmass',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4', 'mass'], 1,1,-1,-1,  1, 1,  1, 4,  1],
         #['1e7_decorr_cube_rebin4-1_fixmass',  10000000,  ['A0', 'A1', 'A2', 'A3', 'A4', 'mass'], 1,1,-1,-1,  1, 1,  2, 4,  1],
 
@@ -117,6 +119,9 @@ if __name__ == '__main__':
                     line += (' '+str(job[9]))
                 elif 'rebin =' in line:
                     line += (' ('+str(job[10])+','+str(job[11])+')')
+                elif 'do_syst =' in line:
+                    line += (' '+str(job[12]))
+
                 line += '\n'
                 fout.write(line)
             fout.close()

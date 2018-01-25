@@ -18,7 +18,7 @@ from template_parameters import accept_point, pdf_test, bin_ndarray
 
 class Unfolder:
 
-    def __init__(self, input_dir='../data/', params={},  rebin=(1,1), mass=80.0000, num_events=1000000, fix=[], interp_deg=1, n_points=500000, job_name='TEST', verbose=True, prior_coeff=0.3, prior_xsec=0.3, strategy=0, decorrelate=True, decorrelate_full=True,  do_semianalytic=True, do_taylor_expansion=False, n_taylor=2, add_constant_A4=True, run_minos=False, gen_toy=[0.0, 0.0, 0.0, 0.0, 0.0] ):
+    def __init__(self, input_dir='../data/', params={},  rebin=(1,1), mass=80.0000, num_events=1000000, fix=[], interp_deg=1, n_points=500000, job_name='TEST', verbose=True, prior_coeff=0.3, prior_xsec=0.3, strategy=0, decorrelate=True, decorrelate_full=True,  do_semianalytic=True, do_taylor_expansion=False, n_taylor=2, add_constant_A4=True, run_minos=False, gen_toy=[0.0, 0.0, 0.0, 0.0, 0.0], do_syst=0 ):
 
         self.run_minos=run_minos
         self.do_taylor_expansion = do_taylor_expansion
@@ -27,7 +27,7 @@ class Unfolder:
         self.do_semianalytic = do_semianalytic
         self.decorrelate = decorrelate
         self.decorrelate_full = decorrelate_full
-        self.input_dir = input_dir
+        self.input_dir = input_dir[:-1] if input_dir[-1]=='/' else input_dir 
         self.fix = fix
         self.mass = mass
         self.interp_deg = interp_deg
@@ -39,6 +39,7 @@ class Unfolder:
         self.job_name = job_name
         self.strategy = strategy
         self.gen_toy = gen_toy
+        self.do_syst = do_syst
         self.truth = {}
 
         self.loads = [ [0.0, 0.0, 0.0, 0.0, 0.0],
@@ -86,11 +87,15 @@ class Unfolder:
 
         if self.verbose:
             print "Loading files..."
+            print " [ fit templates will be loaded from....", self.input_dir+('' if not self.do_syst else '_syst_p1')+'/ ]'
+            print " [ toy templates will be loaded from....", self.input_dir+'/ ]'
 
         for ipt in range(len(self.input_shapes_pt)-1):
             pt_bin=[ self.input_shapes_pt[ipt], self.input_shapes_pt[ipt+1] ]
             for iy in range(len(self.input_shapes_y)-1):
                 y_bin=[ self.input_shapes_y[iy], self.input_shapes_y[iy+1] ]
+                if self.verbose:
+                    print '\tLoading bin: '+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 for iA0,A0 in enumerate(self.input_shapes_A0):
                     for iA1,A1 in enumerate(self.input_shapes_A1):
                         for iA2,A2 in enumerate(self.input_shapes_A2):
@@ -102,12 +107,24 @@ class Unfolder:
                                         input_name = 'mixed_dataset_'+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_M'+'{:05.3f}'.format(m)
                                         for ic,c in enumerate([A0,A1,A2,A3,A4]):
                                             input_name += '_A'+str(ic)+('{:03.2f}'.format(c))
-                                        grid_raw = np.load(self.input_dir+'/'+input_name+'.npy')
+
+                                        # if test for systematics, use shifted templates for fitting
+                                        grid_raw = np.load(self.input_dir+('' if not self.do_syst else '_syst_p1')+'/'+input_name+('' if not self.do_syst else '_syst_p1')+'.npy')
+
                                         grid = bin_ndarray( grid_raw, (grid_raw.shape[0]/rebin[0], grid_raw.shape[1]/rebin[1]), 'sum' )
                                         norm = grid.sum() 
                                         setattr(self, input_name, grid)
                                         setattr(self, input_name+'_norm', norm)
                                         self.shape = grid.shape                                         
+                                        if self.do_syst:
+                                            print '\tAdding bin to template collection for toy generation...'
+                                            if m==self.mass and [A0,A1,A2,A3,A4]==self.gen_toy:
+                                                grid_raw_syst = np.load(self.input_dir+'/'+input_name+'.npy')
+                                                grid_syst = bin_ndarray( grid_raw_syst, (grid_raw_syst.shape[0]/rebin[0], grid_raw_syst.shape[1]/rebin[1]), 'sum' )
+                                                norm_syst = grid_syst.sum() 
+                                                setattr(self, input_name+'_syst_p1',         grid_syst)
+                                                setattr(self, input_name+'_syst_p1'+'_norm', norm_syst)
+                                                
 
     # generate a rnd sample
     def load_data(self):
@@ -132,9 +149,10 @@ class Unfolder:
                 input_name = 'mixed_dataset_'+'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])+'_M'+'{:05.3f}'.format(self.mass)
                 for ic,c in enumerate(self.gen_toy):
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))                    
+
                 # sample the pdf at various pt points to have a smooth merging of bins
                 for pt in np.linspace(pt_bin[0],pt_bin[1]-1,4):
-                    normalisation += getattr(self, input_name+'_norm')*pdf_test(pt, y=y_bin[0])
+                    normalisation += getattr(self, input_name+( '' if not self.do_syst else '_syst_p1' )+'_norm')*pdf_test(pt=pt, y=y_bin[0])
 
         for ipt in range(len(self.input_shapes_pt)-1):
             pt_bin=[ self.input_shapes_pt[ipt], self.input_shapes_pt[ipt+1] ]
@@ -143,18 +161,18 @@ class Unfolder:
                 weight = 0.0
                 # sample the pdf at various pt points to have a smooth merging of bins
                 for pt in np.linspace(pt_bin[0],pt_bin[1]-1,4):
-                    weight += pdf_test(pt, y=y_bin[0])
+                    weight += pdf_test(pt=pt, y=y_bin[0])
                 name = 'pt{:02.1f}'.format(pt_bin[0])+'-'+'{:02.1f}'.format(pt_bin[1])+'_'+'y{:03.2f}'.format(y_bin[0])+'-'+'{:03.2f}'.format(y_bin[1])
                 input_name = 'mixed_dataset_'+name+'_M'+'{:05.3f}'.format(self.mass)
                 for ic,c in enumerate(self.gen_toy):
                     input_name += '_A'+str(ic)+('{:03.2f}'.format(c))
 
                 n_true = self.num_events*weight/normalisation
-                data_asymov = getattr(self, input_name)*n_true 
+                data_asymov = getattr(self, input_name+( '' if not self.do_syst else '_syst_p1' ) )*n_true 
                 data_rnd = np.random.poisson( data_asymov )
 
                 self.truth[name] = n_true
-                self.truth[name+'_gen'] = data_rnd.sum()/getattr(self, input_name+'_norm')
+                self.truth[name+'_gen'] = data_rnd.sum()/getattr(self, input_name+( '' if not self.do_syst else '_syst_p1' )+'_norm')
                 for ic,c in enumerate(self.gen_toy):
                     self.truth[name+'_A'+str(ic)] = c
                 self.data += data_rnd
@@ -603,14 +621,16 @@ class Unfolder:
                             # all coefficients
                             for e in range(self.n_taylor):
                                 index_e = (iy*(len(self.loads)-1) + (iload-1))*self.n_taylor + e
-                                power = e+2
+                                #power = e+2
+                                power = 2*(e+1)
                                 K[index, index_e] = math.pow( 0.5*(pt_bin[0]+pt_bin[1]), power)/math.factorial(power)
                         else:
                             # A4
                             if iload==5:
                                 for e in range(self.n_taylor+1):
                                     index_e = iy*( (len(self.loads)-2)*self.n_taylor + 1*(self.n_taylor+1) ) + (len(self.loads)-2)*self.n_taylor + e
-                                    power = e+1 if e>0 else 0
+                                    #power = e+1 if e>0 else 0
+                                    power = 2*e
                                     K[index, index_e] = math.pow( 0.5*(pt_bin[0]+pt_bin[1]), power)/math.factorial(power)                          
                             # all others
                             else:

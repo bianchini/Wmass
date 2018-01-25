@@ -13,10 +13,12 @@ from template_parameters import params_test, pdf_test , coefficients_test, accep
 
 class MixData:
 
-    def __init__(self, input_dir='../data/', output_dir='../data/'):
+    def __init__(self, input_dir='../data/', output_dir='../data/', do_syst=0, postfix=''):
         print "Initialize MixData"
         self.input_dir = input_dir
         self.output_dir = output_dir
+        self.do_syst = do_syst
+        self.postfix = postfix
         return
 
     def add_shapes(self, params, symmetrise=False, make_templates=False):
@@ -100,7 +102,7 @@ class MixData:
                 grid = np.load(self.input_dir+'/grid_lab_'+in_name+'.npy')
 
                 # mix sub-samples according to a prior pdf
-                weight = pdf(pt=pt,y=y)
+                weight = pdf(pt=pt,y=y, do_syst=self.do_syst)
                 total_weight += weight
                 print "\t (pt, y) = (%s, %s) is in range. Norm = %s, weight = %s" % (pt, y, grid[0].sum(), weight)
 
@@ -163,6 +165,7 @@ class MixData:
         #mix /= (mix.sum() if mix.sum()>0.0 else 1.0)
         mix /= (2*total_weight - weight_central)
         print('Template created with norm = %s' % mix.sum())
+        out_name += self.postfix
         np.save(self.output_dir+'/mixed_dataset_'+out_name, mix)
 
         xx, yy = np.meshgrid(pt_edges, y_edges)        

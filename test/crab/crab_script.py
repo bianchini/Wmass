@@ -26,6 +26,7 @@ decorrelate =
 do_taylor_expansion = 
 n_taylor = 
 rebin =
+do_syst =
 
 unfolder = Unfolder(input_dir=(os.environ['CMSSW_BASE']+'/src/Wmass/data/TEST/'), 
                     params=params_test, 
@@ -46,7 +47,8 @@ unfolder = Unfolder(input_dir=(os.environ['CMSSW_BASE']+'/src/Wmass/data/TEST/')
                     n_taylor=n_taylor,
                     add_constant_A4=True,
                     run_minos=False,
-                    gen_toy=[0.0, 0.0, 0.0, 0.0, 0.0]
+                    gen_toy=[0.0, 0.0, 0.0, 0.0, 0.0],
+                    do_syst=do_syst
                     )
 
 for itoy in range(ntoys):

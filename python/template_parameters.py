@@ -39,12 +39,17 @@ Parameters = {
         },    
 }
 
-def pdf_test(pt,y):
+def pdf_test(pt=0.0,y=0.0, do_syst=0):
 
     val = 1.0
 
     # pt
     pt_max = 5.0
+    if do_syst==+1:
+        pt_max = 5.5
+    elif do_syst==-1:
+        pt_max = 4.5
+
     lambdaQCD = 0.200
     val *= math.exp(-(pt+lambdaQCD)/pt_max)*(pt+lambdaQCD)/pt_max/pt_max
 
