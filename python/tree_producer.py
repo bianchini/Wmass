@@ -6,6 +6,7 @@ argv.remove( '-b-' )
 from ROOT import TLorentzVector
 
 import math
+import os
 import numpy as np 
 
 ROOT.gSystem.Load("libFWCoreFWLite.so")
@@ -17,7 +18,7 @@ from DataFormats.FWLite import Handle, Events
 verbose = False
 
 def isMuon(p):
-    if not (p.isPromptFinalState() and abs(p.pdgId())==13 and p.pt()>20. and abs(p.eta())<2.4):
+    if not (p.isPromptFinalState() and abs(p.pdgId())==13 and p.pt()>0. and abs(p.eta())<6.0):
         return False
     mother = p
     while(mother.numberOfMothers()>0):
@@ -37,7 +38,7 @@ def isNeutrino(p):
     return False
 
 def isPhoton(p):
-    return (p.isPromptFinalState() and p.pdgId()==22 and p.pt()>0.0 and abs(p.eta())<2.5)
+    return (p.isPromptFinalState() and p.pdgId()==22 and p.pt()>0.0 and abs(p.eta())<6.0)
 
 def deltaR(a,b):
     return math.sqrt( math.pow(a.eta()-b.eta(),2) + math.pow( math.acos( math.cos(a.phi()-b.phi())),2) )
@@ -45,23 +46,42 @@ def deltaR(a,b):
 def printp(tag, p, other):
     print tag+' ['+str(p.pdgId())+']: ('+'{:04.3f}'.format(p.pt())+',{:04.3f}'.format(p.eta())+',{:04.3f}'.format(p.phi())+') .... '+other
 
-outfile = ROOT.TFile("tree.root", "RECREATE")
+def add_vars(tree):
+    names = ['weight', 'nuLost', 'muLost', 'charge']
+    for t in ['lhe', 'preFSR', 'dressFSR', 'postFSR']:
+        for v in ['qt', 'y', 'mass', 'phi' ]:
+            names.append(t+'_'+v)
+    variables = {}
+    for name in names:        
+        variables[name] = np.zeros(1, dtype=float)
+        tree.Branch(name, variables[name], name+'/D')
+    return variables
+
+def fill_default(variables):
+    for key,var in variables.items():
+        var[0] = 0.0
+    
+
+outfile = ROOT.TFile(os.environ['CMSSW_BASE']+'/src/Wmass/test/'+'tree_'+argv[1]+'.root', "RECREATE")
 outtree = ROOT.TTree('tree', 'tree')
-
-lhe_mW_     = np.zeros(1, dtype=float)
-preFSR_mW_  = np.zeros(1, dtype=float)
-recFSR_mW_  = np.zeros(1, dtype=float)
-postFSR_mW_ = np.zeros(1, dtype=float)
-
-outtree.Branch('lhe_mW', lhe_mW_, 'lhe_mW/D')
-outtree.Branch('preFSR_mW',  preFSR_mW_,  'preFSR_mW/D')
-outtree.Branch('recFSR_mW',  recFSR_mW_,  'recFSR_mW/D')
-outtree.Branch('postFSR_mW', postFSR_mW_, 'postFSR_mW/D')
-
+variables = add_vars(outtree)
 
 print "Opening file..."
-events = Events('root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/0AF0207B-EFBE-E611-B4BE-0CC47A7FC858.root')
-print "File opened..."
+filename = [
+    #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/0AF0207B-EFBE-E611-B4BE-0CC47A7FC858.root',
+    #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/002F2CE1-38BB-E611-AF9F-0242AC130005.root',
+    #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/009CE684-45BB-E611-A261-001E67E6F8FA.root',
+    #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/044FF9CC-42BB-E611-ACB0-0CC47AD98BC2.root',
+    'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/06103109-48BB-E611-86BE-001E673968A6.root',
+    #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/0843C79F-FCBD-E611-B38C-001E67A3F8A8.root',
+    #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/0881BCD8-8FBE-E611-8796-002590FD5A72.root',
+    #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/08E524F3-0ABC-E611-984F-141877639F59.root',
+    #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/08F5FD50-23BC-E611-A4C2-00259073E3DA.root',
+    #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/0A85AA82-45BB-E611-8ACD-001E674FB063.root',
+    #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/0CA050B2-57BB-E611-8A7A-001E674FBA1D.root'
+    ]
+events = Events(filename)
+print "File opened.... Tot. num of events:", events.size()
 
 
 genH, genN = Handle("std::vector<pat::PackedGenParticle>"), "packedGenParticles"
@@ -70,8 +90,8 @@ lheH, lheN = Handle("LHEEventProduct"), "externalLHEProducer"
 
 for i,event in enumerate(events):    
 
-    if i%100==0:
-        print "Event", i
+    if i%1000==0:
+        print "Processing event", i, '/', events.size()
 
     event.getByLabel(genN,genH)
     event.getByLabel(infoN,infoH)
@@ -79,13 +99,17 @@ for i,event in enumerate(events):
 
     generator = infoH.product()
     weights = list(generator.weights())
+    variables['weight'][0] = weights[0]/abs(weights[0])
 
     lhe = lheH.product()
     hepeup = lhe.hepeup()
     Wp4_lhe = [0.,0.,0.,0.,0.]
+    isMuThere = False
     for p in range(hepeup.NUP):
+        if abs(hepeup.IDUP[p])==13:
+            isMuThere = True
         if abs(hepeup.IDUP[p])==24:
-            for x in range(5):
+            for x in range(5):                
                 Wp4_lhe[x] = hepeup.PUP[p][x]
 
     genParticles = list(genH.product())
@@ -93,16 +117,44 @@ for i,event in enumerate(events):
     neutrinos = [p for p in genParticles if isNeutrino(p)] 
     gammas = [p for p in genParticles if isPhoton(p)] 
     
+    variables['muLost'][0] = 0.0
+    variables['nuLost'][0] = 0.0
+
     if len(muons)==0:
-        continue
-    if len(neutrinos)==0:
-        print "No muon neutrinos for event", i
+        if isMuThere:
+            if verbose:
+                print "No muon in W>munu for event", i, ". Try to understand why:"
+                print " > W rapidity:    ", 0.5*math.log((Wp4_lhe[3]+Wp4_lhe[2])/(Wp4_lhe[3]-Wp4_lhe[2]))
+            fill_default(variables)
+            variables['muLost'][0] = 1.0
+            Wp4 = ROOT.TLorentzVector(Wp4_lhe[0], Wp4_lhe[1], Wp4_lhe[2], Wp4_lhe[3])    
+            variables['lhe_y'][0] = Wp4.Rapidity()
+            variables['lhe_qt'][0] =  Wp4.Pt()
+            variables['lhe_mass'][0] =  Wp4.M()
+            variables['lhe_phi'][0] =  Wp4.Phi()
+            outtree.Fill()
         continue
 
-    print '***********'
+    if len(neutrinos)==0:
+        if verbose:
+            print "No muon neutrinos for event", i, ". Try to understand why:"
+            print " > W rapidity:    ", 0.5*math.log((Wp4_lhe[3]+Wp4_lhe[2])/(Wp4_lhe[3]-Wp4_lhe[2]))
+            print " > Muon rapidity: ", muons[0].p4().Rapidity()
+        fill_default(variables)
+        variables['nuLost'][0] = 1.0
+        Wp4 = ROOT.TLorentzVector(Wp4_lhe[0], Wp4_lhe[1], Wp4_lhe[2], Wp4_lhe[3])    
+        variables['lhe_y'][0] = Wp4.Rapidity()
+        variables['lhe_qt'][0] =  Wp4.Pt()
+        variables['lhe_mass'][0] =  Wp4.M()
+        variables['lhe_phi'][0] =  Wp4.Phi()
+        outtree.Fill()
+        continue
+
     muons.sort(reverse=True)
     mu = muons[0]
+    variables['charge'][0] = mu.pdgId()
     if verbose:
+        print '********************************'
         printp('muon', mu, '')
 
     neutrinos.sort(reverse=True)
@@ -128,27 +180,24 @@ for i,event in enumerate(events):
             if verbose:
                 printp('>gam', g, 'dR:{:03.2f}'.format(dR))
 
+    Wp4 = {}
     nup4 = nu.p4() 
     mup4 = mu.p4() 
     mup4_prefsr = mu_prefsr.p4()
     mup4_recfsr = mup4
     for g in fsr:
         mup4_recfsr += g.p4()
-        
-    mass_lhe = Wp4_lhe[4]
-    mass = (mup4+nup4).mass()
-    mass_recfsr = (mup4_recfsr+nup4).mass()
-    mass_prefsr = (mup4_prefsr+nup4).mass()    
-    if verbose:
-        print 'LHE:        '+'{:04.3f}'.format(mass_lhe)
-        print 'pre-FSR mu: '+'{:04.3f}'.format(mass_prefsr)
-        print 'dressed mu: '+'{:04.3f}'.format(mass_recfsr)
-        print 'post-FSR  : '+'{:04.3f}'.format(mass)
-    lhe_mW_[0] = mass_lhe
-    preFSR_mW_[0] = mass_prefsr
-    recFSR_mW_[0] = mass_recfsr
-    postFSR_mW_[0] = mass
 
+    Wp4['lhe'] = ROOT.TLorentzVector(Wp4_lhe[0], Wp4_lhe[1], Wp4_lhe[2], Wp4_lhe[3])    
+    Wp4['postFSR'] = mup4+nup4
+    Wp4['preFSR'] = mup4_prefsr+nup4
+    Wp4['dressFSR'] = mup4_recfsr+nup4
+
+    for t in ['lhe', 'preFSR', 'dressFSR', 'postFSR']:
+        variables[t+'_mass'][0] = Wp4[t].M() 
+        variables[t+'_qt'][0] = Wp4[t].Pt() 
+        variables[t+'_y'][0] = Wp4[t].Rapidity() 
+        variables[t+'_phi'][0] = Wp4[t].Phi() 
     outtree.Fill()
 
 outfile.cd()
