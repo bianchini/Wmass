@@ -146,8 +146,6 @@ for i,event in enumerate(events):
 
     if i%1000==0:
         print "Processing event", i, '/', events.size()
-    if i>100:
-        break
     
     event.getByLabel(genN,genH)
     event.getByLabel(infoN,infoH)
