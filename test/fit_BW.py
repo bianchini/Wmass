@@ -13,22 +13,23 @@ rcParams['figure.figsize'] = 8,7
 
 import math
 
-def fit_BW(tree=ROOT.TTree(), rel=1, var='', cut='', tag=''):
+def fit_BW(tree=ROOT.TTree(), running=1, var='', cut='', tag=''):
 
-    h = ROOT.TH1F('h', 'h', 70, 50., 110.)
+    h = ROOT.TH1F('h', 'h', 140, 50., 110.)
     h.Sumw2()
     h.SetStats(0)
     tree.Draw(var+'_mass>>h', 'weight*('+cut+')')
+    #tree.Draw('TMath::Power('+var+'_mass, 1.)>>h', 'weight*('+cut+')')
 
     fit = None
-    if rel:
-        fit = ROOT.TF1('fit', '[0]*([2]*[2]/(TMath::Power(x*x-[2]*[2],2) + x*x*x*x*([1]*[1])/([2]*[2])) )',  50., 110.)
-        fit.SetParameter(0, h.Integral())
+    if running:
+        fit = ROOT.TF1('fit', '[0]*(x*x*[1]*[1]/(TMath::Power(x*x-[2]*[2],2) + x*x*x*x*([1]*[1])/([2]*[2])) )',  h.GetXaxis().GetXmin(), h.GetXaxis().GetXmax())
+        fit.SetParameter(0, h.Integral()*1.0)
         fit.SetParameter(1,  2.000 )
         fit.SetParameter(2, 80.000 )
     else:
-        fit = ROOT.TF1('fit', '[0]*([1]*[1]/4./(TMath::Power(x-[2],2) + [1]*[1]/4) )',  50., 110.)
-        fit.SetParameter(0, h.Integral())
+        fit = ROOT.TF1('fit', '[0]*( 1.0/(TMath::Power(x*x-[2]*[2],2) + [2]*[2]*[1]*[1]) )',  h.GetXaxis().GetXmin(), h.GetXaxis().GetXmax())
+        fit.SetParameter(0, h.Integral()*1000.)
         fit.SetParameter(1,  2.000 )
         fit.SetParameter(2, 80.000 )
 
@@ -49,11 +50,11 @@ def fit_BW(tree=ROOT.TTree(), rel=1, var='', cut='', tag=''):
     h.SetXTitle('M_{W} [GeV]')
     h.Draw()
     leg.AddEntry(h, var+' M_{W}', 'P')
-    leg.AddEntry(fit, '#splitline{'+('Rel. ' if rel else 'Non-rel. ')+'BW M_{W}='+'{:05.3f}'.format(r.Parameter(2))+' #pm '+'{:05.3f}'.format(r.ParError(2))+', #Gamma_{W}='+'{:04.3f}'.format(r.Parameter(1))+' #pm '+'{:04.3f}'.format(r.ParError(1))+'}{#chi^{2}/ndof='+'{:02.0f}'.format(r.Chi2())+'/'+str(r.Ndf())+'}', 'L')
+    leg.AddEntry(fit, '#splitline{'+('Run.-width ' if running else '')+'BW M_{W}='+'{:05.3f}'.format(r.Parameter(2))+' #pm '+'{:05.3f}'.format(r.ParError(2))+', #Gamma_{W}='+'{:04.3f}'.format(r.Parameter(1))+' #pm '+'{:04.3f}'.format(r.ParError(1))+'}{#chi^{2}/ndof='+'{:02.0f}'.format(r.Chi2())+'/'+str(r.Ndf())+'}', 'L')
     leg.Draw()
     #raw_input()
     if tag!='':
-        c.SaveAs('fit_BW_'+('rel_' if rel else 'non-rel_')+var+'_'+tag+'.png')
+        c.SaveAs('fit_BW_'+('run_' if running else 'non-run_')+var+'_'+tag+'.png')
     c.IsA().Destructor( c )
     leg.IsA().Destructor( leg )
     return (r.Parameter(2), r.ParError(2), r.Parameter(1), r.ParError(1))
@@ -61,7 +62,7 @@ def fit_BW(tree=ROOT.TTree(), rel=1, var='', cut='', tag=''):
 def run_fromPrompt():
     infile = ROOT.TFile('./tree_'+argv[3]+'.root')
     tree = infile.Get('tree')
-    res = fit_BW(tree=tree, rel= int(argv[1]), var=argv[2], cut=argv[4], tag=argv[5])
+    res = fit_BW(tree=tree, running=int(argv[1]), var=argv[2], cut=argv[4], tag=argv[5])
 
 def run_all():
     infile = ROOT.TFile('./tree_'+argv[3]+'.root')
@@ -93,25 +94,26 @@ def run_all():
     ye = np.zeros(len(cuts))
     for ic,c in enumerate(cuts):
         tag = 'y'+str(x[ic%5])+str(2*(ic/5)-1)
-        res = fit_BW(tree=tree, rel=int(argv[1]), var=argv[2], cut=c, tag=tag)
+        res = fit_BW(tree=tree, running=int(argv[1]), var=argv[2], cut=c, tag=tag)
         y[ic] = res[0]
         ye[ic] = res[1]
     plt.figure()
     fig, ax = plt.subplots()
     ax.errorbar(x, y[:(len(cuts)/2)], xerr=width, yerr=ye[:(len(cuts)/2)], fmt='o', color='b', label='$W^-$')
     ax.errorbar(x, y[(len(cuts)/2):], xerr=width, yerr=ye[(len(cuts)/2):], fmt='o', color='g', label='$W^+$')
-    plt.axis([x[0]-width, x[-1]+width, 80.250, 80.500])
+    ax.plot([0,5], [80.419,80.419], 'r--', label='$M_{W}$ in MC')
+    plt.axis([x[0]-width, x[-1]+width, 80.250, 80.550])
     plt.grid(True)
     legend = ax.legend(loc='upper center', shadow=False, fontsize='x-large')
     plt.xlabel('$|y|$', fontsize=20)
     plt.ylabel('$M_{W}$ pole', fontsize=20)
     plt.title(argv[2], fontsize=20)
     plt.show()
-    plt.savefig('pole_'+argv[2]+'_mass_vs_y.png')
+    plt.savefig('pole_'+('run_' if int(argv[1]) else 'non-run_')+argv[2]+'_mass_vs_y.png')
     plt.close()
     infile.Close()
 
 ###################
-run_fromPrompt()
-#run_all()
+#run_fromPrompt()
+run_all()
 ###################
