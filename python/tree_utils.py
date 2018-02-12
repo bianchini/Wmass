@@ -1,0 +1,108 @@
+import copy
+import math
+import numpy as np 
+import ROOT
+from ROOT import TLorentzVector
+
+def isFromW(p):
+    mother = p
+    while(mother.numberOfMothers()>0):
+        if abs(mother.pdgId())==24:
+            return True
+        mother = mother.mother(0)
+    return False
+
+def isMuon(p):
+    if not (p.isPromptFinalState() and abs(p.pdgId())==13 and p.pt()>0. and abs(p.eta())<6.0):
+        return False
+    return True
+    #return isFromW(p)
+    
+def isNeutrino(p):
+    if not (p.isPromptFinalState() and abs(p.pdgId())==14):
+        return False
+    return True
+    #return isFromW(p)
+
+def isPhoton(p):
+    return (p.isPromptFinalState() and p.pdgId()==22 and p.pt()>0.0 and abs(p.eta())<6.0)
+
+def deltaR(a,b):
+    return math.sqrt( math.pow(a.eta()-b.eta(),2) + math.pow( math.acos( math.cos(a.phi()-b.phi())),2) )
+
+def azimuth(phi):
+    if phi<0.0:
+        phi += 2*math.pi
+    return phi
+
+def boost_to_CS_matrix(Lp4=ROOT.TLorentzVector(0,0,0,0), 
+                       Wp4=ROOT.TLorentzVector(0,0,0,0) ):
+
+    Lp4_rot = copy.deepcopy(Lp4)
+
+    # rotate so that W is aligned along x
+    Lp4_rot.RotateZ( -Wp4.Phi() )     
+
+    x_lab = np.array([Lp4_rot.E(), Lp4_rot.Px(), Lp4_rot.Py(), Lp4_rot.Pz()])
+    E  = Wp4.E()
+    qt = Wp4.Pt()
+    pz = Wp4.Pz()
+    M  = Wp4.M()
+    Xt = math.sqrt(M*M + qt*qt)
+    boost = np.array([[ E/M, -qt/M, 0, -pz/M ],
+                      [ -qt*E/M/Xt, Xt/M, 0, qt*pz/M/Xt],
+                      [0., 0., 1., 0.],
+                      [-pz/Xt, 0, 0, E/Xt]
+                      ] )
+    xCS = np.linalg.multi_dot([boost, x_lab])
+    flip_z = -1 if Wp4.Rapidity()<0.0 else +1
+    ps = (xCS[0], xCS[3]/math.sqrt(xCS[1]*xCS[1] + xCS[2]*xCS[2] + xCS[3]*xCS[3])*flip_z, azimuth(math.atan2(xCS[2],xCS[1])*flip_z) )
+    return ps
+
+def boost_to_CS_root(Lp4=ROOT.TLorentzVector(0,0,0,0), 
+                     Wp4=ROOT.TLorentzVector(0,0,0,0) ):
+    
+    Wp4_rot = copy.deepcopy(Wp4)
+    Lp4_rot = copy.deepcopy(Lp4)
+
+    # align W/L along x axis
+    Wp4_rot.RotateZ( -Wp4.Phi() )
+    Lp4_rot.RotateZ( -Wp4.Phi() )
+
+    # first boost
+    boostL = Wp4_rot.BoostVector()
+    boostL.SetX(0.0)
+    boostL.SetY(0.0)
+    Lp4_rot.Boost( -boostL )
+    Wp4_rot.Boost( -boostL )
+
+    # second boost
+    boostT = Wp4_rot.BoostVector()
+    Lp4_rot.Boost( -boostT )
+
+    # the CS frame defines the z-axis according to the W pz in the lab 
+    flip_z = -1 if Wp4.Rapidity()<0.0 else +1
+
+    # compute PS point
+    ps = (Lp4_rot.E(), Lp4_rot.CosTheta()*flip_z, azimuth(Lp4_rot.Phi()*flip_z) )
+    return ps
+
+def printp(tag, p, other):
+    print tag+' ['+str(p.pdgId())+']: ('+'{:04.3f}'.format(p.pt())+',{:04.3f}'.format(p.eta())+',{:04.3f}'.format(p.phi())+') .... '+other
+
+def add_vars(tree):
+    names = ['nuLost', 'muLost', 'charge', 'isW']
+    for w in ['', 'NU', 'ND', 'UN', 'UU', 'DN', 'DD']:
+        names.append('weight'+w)
+    for t in ['lhe', 'preFSR', 'dressFSR', 'postFSR']:
+        for v in ['qt', 'y', 'mass', 'phi', 'ECS','cosCS', 'phiCS', 'mu_pt', 'mu_eta', 'mu_phi' ]:
+            names.append(t+'_'+v)
+    variables = {}
+    for name in names:        
+        variables[name] = np.zeros(1, dtype=float)
+        tree.Branch(name, variables[name], name+'/D')
+    return variables
+
+def fill_default(variables):
+    for key,var in variables.items():
+        var[0] = 0.0
