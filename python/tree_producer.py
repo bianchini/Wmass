@@ -7,8 +7,8 @@ from ROOT import TLorentzVector
 
 import math
 import os
-import numpy as np 
-import copy
+
+from tree_utils import *
 
 ROOT.gSystem.Load("libFWCoreFWLite.so")
 ROOT.gSystem.Load("libDataFormatsFWLite.so")
@@ -18,103 +18,6 @@ from DataFormats.FWLite import Handle, Events
 
 verbose = False
 
-def isMuon(p):
-    if not (p.isPromptFinalState() and abs(p.pdgId())==13 and p.pt()>0. and abs(p.eta())<6.0):
-        return False
-    mother = p
-    while(mother.numberOfMothers()>0):
-        if abs(mother.pdgId())==24:
-            return True
-        mother = mother.mother(0)
-    return False
-
-def isNeutrino(p):
-    if not (p.isPromptFinalState() and abs(p.pdgId())==14):
-        return False
-    mother = p
-    while(mother.numberOfMothers()>0):
-        if abs(mother.pdgId())==24:
-            return True
-        mother = mother.mother(0)
-    return False
-
-def isPhoton(p):
-    return (p.isPromptFinalState() and p.pdgId()==22 and p.pt()>0.0 and abs(p.eta())<6.0)
-
-def deltaR(a,b):
-    return math.sqrt( math.pow(a.eta()-b.eta(),2) + math.pow( math.acos( math.cos(a.phi()-b.phi())),2) )
-
-def azimuth(phi):
-    if phi<0.0:
-        phi += 2*math.pi
-    return phi
-
-def boost_to_CS_matrix(Lp4=ROOT.TLorentzVector(0,0,0,0), 
-                       Wp4=ROOT.TLorentzVector(0,0,0,0) ):
-
-    Lp4_rot = copy.deepcopy(Lp4)
-
-    # rotate so that W is aligned along x
-    Lp4_rot.RotateZ( -Wp4.Phi() )     
-
-    x_lab = np.array([Lp4_rot.E(), Lp4_rot.Px(), Lp4_rot.Py(), Lp4_rot.Pz()])
-    E  = Wp4.E()
-    qt = Wp4.Pt()
-    pz = Wp4.Pz()
-    M  = Wp4.M()
-    Xt = math.sqrt(M*M + qt*qt)
-    boost = np.array([[ E/M, -qt/M, 0, -pz/M ],
-                      [ -qt*E/M/Xt, Xt/M, 0, qt*pz/M/Xt],
-                      [0., 0., 1., 0.],
-                      [-pz/Xt, 0, 0, E/Xt]
-                      ] )
-    xCS = np.linalg.multi_dot([boost, x_lab])
-    ps = (xCS[0], xCS[3]/math.sqrt(xCS[1]*xCS[1] + xCS[2]*xCS[2] + xCS[3]*xCS[3]), azimuth(math.atan2(xCS[2],xCS[1])) )
-    return ps
-
-def boost_to_CS_root(Lp4=ROOT.TLorentzVector(0,0,0,0), 
-                     Wp4=ROOT.TLorentzVector(0,0,0,0) ):
-    
-    Wp4_rot = copy.deepcopy(Wp4)
-    Lp4_rot = copy.deepcopy(Lp4)
-
-    # align W/L along x axis
-    Wp4_rot.RotateZ( -Wp4.Phi() )
-    Lp4_rot.RotateZ( -Wp4.Phi() )
-
-    # first boost
-    boostL = Wp4_rot.BoostVector()
-    boostL.SetX(0.0)
-    boostL.SetY(0.0)
-    Lp4_rot.Boost( -boostL )
-    Wp4_rot.Boost( -boostL )
-
-    # second boost
-    boostT = Wp4_rot.BoostVector()
-    Lp4_rot.Boost( -boostT )
-
-    # compute PS point
-    ps = (Lp4_rot.E(), Lp4_rot.CosTheta(), azimuth(Lp4_rot.Phi()) )
-    return ps
-
-def printp(tag, p, other):
-    print tag+' ['+str(p.pdgId())+']: ('+'{:04.3f}'.format(p.pt())+',{:04.3f}'.format(p.eta())+',{:04.3f}'.format(p.phi())+') .... '+other
-
-def add_vars(tree):
-    names = ['weight', 'nuLost', 'muLost', 'charge']
-    for t in ['lhe', 'preFSR', 'dressFSR', 'postFSR']:
-        for v in ['qt', 'y', 'mass', 'phi', 'ECS','cosCS', 'phiCS', 'mu_pt', 'mu_eta', 'mu_phi' ]:
-            names.append(t+'_'+v)
-    variables = {}
-    for name in names:        
-        variables[name] = np.zeros(1, dtype=float)
-        tree.Branch(name, variables[name], name+'/D')
-    return variables
-
-def fill_default(variables):
-    for key,var in variables.items():
-        var[0] = 0.0
-
 #outfile = ROOT.TFile(os.environ['CMSSW_BASE']+'/src/Wmass/test/'+'tree_'+argv[1]+'.root', "RECREATE")
 outfile = ROOT.TFile(os.environ['CMSSW_BASE']+'/src/Wmass/test/'+'tree.root', "RECREATE")
 outtree = ROOT.TTree('tree', 'tree')
@@ -122,8 +25,8 @@ variables = add_vars(outtree)
 
 print "Opening file..."
 filename = [
-    #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/0AF0207B-EFBE-E611-B4BE-0CC47A7FC858.root',
-    'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/002F2CE1-38BB-E611-AF9F-0242AC130005.root',
+    'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/0AF0207B-EFBE-E611-B4BE-0CC47A7FC858.root',
+    #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/002F2CE1-38BB-E611-AF9F-0242AC130005.root',
     #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/009CE684-45BB-E611-A261-001E67E6F8FA.root',
     #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/044FF9CC-42BB-E611-ACB0-0CC47AD98BC2.root',
     #'root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/06103109-48BB-E611-86BE-001E673968A6.root',
@@ -148,14 +51,29 @@ for i,event in enumerate(events):
         print "Processing event", i, '/', events.size()
     
     event.getByLabel(genN,genH)
-    event.getByLabel(infoN,infoH)
     event.getByLabel(lheN,lheH)
 
-    generator = infoH.product()
-    weights = list(generator.weights())
-    variables['weight'][0] = weights[0]/abs(weights[0])
+    #event.getByLabel(infoN,infoH)
+    #generator = infoH.product()
+    #weights = list(generator.weights())
+    #variables['weight'][0] = weights[0]/abs(weights[0])
 
     lhe = lheH.product()
+    norm = abs(lhe.weights()[0].wgt)
+    variables['weight'][0]   = lhe.weights()[0].wgt/norm
+    variables['weightNU'][0] = lhe.weights()[1].wgt/norm
+    variables['weightND'][0] = lhe.weights()[2].wgt/norm
+    variables['weightUN'][0] = lhe.weights()[3].wgt/norm
+    variables['weightUU'][0] = lhe.weights()[4].wgt/norm
+    variables['weightDN'][0] = lhe.weights()[6].wgt/norm
+    variables['weightDD'][0] = lhe.weights()[8].wgt/norm
+   
+    if verbose:
+        print "Weights:"
+        for w in ['', 'NU', 'ND', 'UN', 'UU', 'DN', 'DD']:
+            print w, variables['weight'+w][0]
+
+
     hepeup = lhe.hepeup()
     Wp4_lhe = [0.,0.,0.,0.,0.]
     isMuThere = False
@@ -204,8 +122,12 @@ for i,event in enumerate(events):
         outtree.Fill()
         continue
 
+    variables['isW'][0] = 0.0
+
     muons.sort(reverse=True)
     mu = muons[0]
+    variables['isW'][0] += int(isFromW(mu))
+
     variables['charge'][0] = mu.pdgId()
     if verbose:
         print '********************************'
@@ -213,6 +135,7 @@ for i,event in enumerate(events):
 
     neutrinos.sort(reverse=True)
     nu = neutrinos[0]
+    variables['isW'][0] += int(isFromW(nu))
     if verbose:
         printp('neut', nu, '')
 
