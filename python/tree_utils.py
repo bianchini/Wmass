@@ -12,6 +12,14 @@ def isFromW(p):
         mother = mother.mother(0)
     return False
 
+def isFromZ(p):
+    mother = p
+    while(mother.numberOfMothers()>0):
+        if abs(mother.pdgId())==23:
+            return True
+        mother = mother.mother(0)
+    return False
+
 def isMuon(p):
     if not (p.isPromptFinalState() and abs(p.pdgId())==13 and p.pt()>0. and abs(p.eta())<6.0):
         return False
@@ -90,18 +98,32 @@ def boost_to_CS_root(Lp4=ROOT.TLorentzVector(0,0,0,0),
 def printp(tag, p, other):
     print tag+' ['+str(p.pdgId())+']: ('+'{:04.3f}'.format(p.pt())+',{:04.3f}'.format(p.eta())+',{:04.3f}'.format(p.phi())+') .... '+other
 
-def add_vars(tree):
-    names = ['nuLost', 'muLost', 'charge', 'isW']
+def add_vars(tree=None, debug=False):
+    names = ['nuLost', 'muLost', 'mu_charge', 'nu_charge', 'isFromW']
     for w in ['', 'NU', 'ND', 'UN', 'UU', 'DN', 'DD']:
         names.append('weight'+w)
-    for t in ['lhe', 'preFSR', 'dressFSR', 'postFSR']:
-        for v in ['qt', 'y', 'mass', 'phi', 'ECS','cosCS', 'phiCS', 'mu_pt', 'mu_eta', 'mu_phi' ]:
+    for v in ['qt', 'y', 'mass', 'phi']:
+        names.append('lhe_'+v)
+    for t in ['preFSR', 'dress', 'bare']:
+        for v in ['qt', 'y', 'mass', 'phi', 'ECS','cosCS', 'phiCS', 'mu_pt', 'mu_eta', 'mu_phi', 'nu_pt', 'nu_eta', 'nu_phi' ]:
             names.append(t+'_'+v)
+    
+    if debug:
+        nevents = 3
+        scan = 'nuLost:muLost:isFromW:mu_charge:nu_charge'
+        tree.Scan(scan, "", "", nevents)
+        scan = 'lhe_mass:lhe_qt:lhe_y:lhe_phi:dress_mass:dress_qt:dress_y:dress_phi'
+        tree.Scan(scan, "", "", nevents)
+        scan = 'dress_mu_pt:dress_mu_eta:dress_nu_pt:dress_nu_eta:dress_ECS:dress_cosCS:dress_phiCS'
+        tree.Scan(scan, "", "", nevents)
+        return
+
     variables = {}
     for name in names:        
         variables[name] = np.zeros(1, dtype=float)
         tree.Branch(name, variables[name], name+'/D')
     return variables
+    
 
 def fill_default(variables):
     for key,var in variables.items():
