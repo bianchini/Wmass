@@ -29,10 +29,10 @@ class TreeProducer:
 
         # open output file
         self.outfile = None
-        if debug:
+        if self.debug:
             self.outfile = ROOT.TFile(os.environ['CMSSW_BASE']+'/src/Wmass/test/'+'tree_'+postfix+'.root', "RECREATE")
         else:
-            outfile = ROOT.TFile('tree.root', "RECREATE")
+            self.outfile = ROOT.TFile('tree.root', "RECREATE")
         self.outtree = ROOT.TTree('tree', 'tree')
 
         # add branches to tree
