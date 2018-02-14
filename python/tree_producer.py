@@ -17,8 +17,7 @@ ROOT.FWLiteEnabler.enable()
 
 from DataFormats.FWLite import Handle, Events
 
-
-DY      = 'NC'
+DY      = 'CC'
 verbose = False
 debug   = True
 
@@ -33,7 +32,6 @@ outtree = ROOT.TTree('tree', 'tree')
 # add branches to tree
 variables = add_vars(outtree)
 
-print "Opening file..."
 filename = []
 if DY == 'NC':
     filename.append('root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/DYJetsToLL_M-50_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6_ext1-v2/120000/02A210D6-F5C3-E611-B570-008CFA197BD4.root')
@@ -43,11 +41,13 @@ else:
     #filename.append('root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/0A85AA82-45BB-E611-8ACD-001E674FB063.root')
     #filename.append('root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/0CA050B2-57BB-E611-8A7A-001E674FBA1D.root')
 
+print "Opening file..."
 events = Events(filename)
 print "File opened.... Tot. num of events:", events.size()
 
 # handles
-genH, genN = Handle("std::vector<pat::PackedGenParticle>"), "packedGenParticles"
+#genH, genN = Handle("std::vector<pat::PackedGenParticle>"), "packedGenParticles"
+genH, genN = Handle("std::vector<reco::GenParticle>"), "prunedGenParticles"
 infoH, infoN = Handle("GenEventInfoProduct"), "generator"
 lheH, lheN = Handle("LHEEventProduct"), "externalLHEProducer"
 
@@ -61,7 +61,7 @@ for i,event in enumerate(events):
     if debug:
         if i%100==0:
             print "Processing event", i, '/', events.size()
-        if i>2000:
+        if i>10000:
             break
 
     # fill with default values
@@ -72,11 +72,24 @@ for i,event in enumerate(events):
     lhe = lheH.product()
     hepeup = lhe.hepeup()
 
+    variables['scale'][0]    = hepeup.SCALUP
+    variables['alphaQCD'][0] = hepeup.AQCDUP
+    variables['alphaQED'][0] = hepeup.AQEDUP
+
     isW = False
     isWToMuNu = False
 
     Wp4_lhe = [0.,0.,0.,0.,0.]
     for p in range(hepeup.NUP):
+        if verbose:
+            print 'HEPEUP...', p, 'pdg:', hepeup.IDUP[p], '(', hepeup.PUP[p][0], hepeup.PUP[p][1],hepeup.PUP[p][2],hepeup.PUP[p][3],')'
+        # first parton
+        if p==0:
+            variables['id1'][0] = hepeup.IDUP[p] 
+            variables['x1'][0] = hepeup.PUP[p][3]/6500. 
+        elif p==1:
+            variables['id2'][0] = hepeup.IDUP[p] 
+            variables['x2'][0] = hepeup.PUP[p][3]/6500. 
         if abs(hepeup.IDUP[p])==13:
             isWToMuNu = True
         if abs(hepeup.IDUP[p])== (24 if DY=='CC' else 23):
@@ -94,19 +107,16 @@ for i,event in enumerate(events):
         continue
 
     # LHE weights
-    norm = abs(lhe.weights()[0].wgt)
-    variables['weight'][0]   = lhe.weights()[0].wgt/norm # nominal (+/- 1)
-    variables['weightNU'][0] = lhe.weights()[1].wgt/norm # muR *= 1 ,  muF *= 2 
-    variables['weightND'][0] = lhe.weights()[2].wgt/norm # muR *= 1 ,  muF *= 0.5
-    variables['weightUN'][0] = lhe.weights()[3].wgt/norm # muR *= 2 ,  muF *= 1
-    variables['weightUU'][0] = lhe.weights()[4].wgt/norm # muR *= 2 ,  muF *= 2
-    variables['weightDN'][0] = lhe.weights()[6].wgt/norm # muR *= 0.5, muF *= 1
-    variables['weightDD'][0] = lhe.weights()[8].wgt/norm # muR *= 0.5, muF *= 0.5
-   
-    if verbose:
-        print "Weights:"
-        for w in ['', 'NU', 'ND', 'UN', 'UU', 'DN', 'DD']:
-            print w, variables['weight'+w][0]
+    norm = abs(lhe.originalXWGTUP())
+    wid=0
+    for w in lhe.weights():
+        if wid>=109:
+            continue
+        #if verbose:
+        #    print w.id, w.wgt
+        variables['weights'][wid] = w.wgt/norm
+        wid += 1
+
 
     # read gen particles
     event.getByLabel(genN,genH)
@@ -213,14 +223,19 @@ for i,event in enumerate(events):
         dR = (dR_mu if DY=='CC' else min(dR_mu,dR_nu))
         if dR<0.1:
             if DY=='CC':
-                mu_fsr.append(g)
+                mu_fsr.append(g.p4())
+                if verbose:
+                    printp('>gam', g, 'dR:{:03.2f}'.format(dR)+' to muon')
             elif DY=='NC':
                 if dR_mu<dR_nu:
-                    mu_fsr.append(g)
+                    mu_fsr.append(g.p4())
+                    if verbose:
+                        printp('>gam', g, 'dR:{:03.2f}'.format(dR)+' to muon-')
                 else:
-                    nu_fsr.append(g)
-            if verbose:
-                printp('>gam', g, 'dR:{:03.2f}'.format(dR))
+                    nu_fsr.append(g.p4())
+                    if verbose:
+                        printp('>gam', g, 'dR:{:03.2f}'.format(dR)+' to mu+')
+
 
     # bare
     mup4 = ROOT.TLorentzVector(mu.p4().Px(), mu.p4().Py(), mu.p4().Pz(), mu.p4().E() )
@@ -228,34 +243,34 @@ for i,event in enumerate(events):
 
     # pre-FSR
     mup4_prefsr = ROOT.TLorentzVector(mu_prefsr.p4().Px(), mu_prefsr.p4().Py(), mu_prefsr.p4().Pz(), mu_prefsr.p4().E() )
-    nup4_prefsr = nup4 if DY=='CC' else ROOT.TLorentzVector(nu_prefsr.p4().Px(), nu_prefsr.p4().Py(), nu_prefsr.p4().Pz(), nu_prefsr.p4().E() )
+    nup4_prefsr = copy.deepcopy(nup4) if DY=='CC' else ROOT.TLorentzVector(nu_prefsr.p4().Px(), nu_prefsr.p4().Py(), nu_prefsr.p4().Pz(), nu_prefsr.p4().E() )
 
     # dressed
-    mup4_recfsr = mup4
+    mup4_recfsr = copy.deepcopy(mup4)
     for g in mu_fsr:
-        mup4_recfsr += ROOT.TLorentzVector(g.p4().Px(), g.p4().Py(), g.p4().Pz(), g.p4().E() )
-    nup4_recfsr = nup4
+        mup4_recfsr += ROOT.TLorentzVector(g.Px(), g.Py(), g.Pz(), g.E() )
+    nup4_recfsr = copy.deepcopy(nup4)
     if DY=='NC':
         for g in nu_fsr:
-            nup4_recfsr += ROOT.TLorentzVector(g.p4().Px(), g.p4().Py(), g.p4().Pz(), g.p4().E() )
+            nup4_recfsr += ROOT.TLorentzVector(g.Px(), g.Py(), g.Pz(), g.E() )
 
     # list of p4 for W
     Wp4 = {}
-    Wp4['bare']  = mup4 + nup4                # the mu+nu p4 after FSR
-    Wp4['preFSR']= mup4_prefsr + nup4_prefsr  # the mu+nu p4 pre-FSR
-    Wp4['dress'] = mup4_recfsr + nup4_recfsr  # the mu+nu p4 w/ dressed mu
+    Wp4['Wbare']  = mup4 + nup4                # the mu+nu p4 after FSR
+    Wp4['WpreFSR']= mup4_prefsr + nup4_prefsr  # the mu+nu p4 pre-FSR
+    Wp4['Wdress'] = mup4_recfsr + nup4_recfsr  # the mu+nu p4 w/ dressed mu
 
-    for t in ['bare', 'dress', 'preFSR']:
+    for t in ['Wbare', 'Wdress', 'WpreFSR']:
         variables[t+'_mass'][0] = Wp4[t].M() 
         variables[t+'_qt'][0]   = Wp4[t].Pt() 
         variables[t+'_y'][0]    = Wp4[t].Rapidity() 
         variables[t+'_phi'][0]  = Wp4[t].Phi() 
         mup4LV = mup4
         nup4LV = nup4
-        if t=='dress':
+        if t=='Wdress':
             mup4LV = mup4_recfsr
             nup4LV = nup4_recfsr
-        elif t=='preFSR':
+        elif t=='WpreFSR':
             mup4LV = mup4_prefsr
             nup4LV = nup4_prefsr
         variables[t+'_mu_pt'][0]  = mup4LV.Pt()

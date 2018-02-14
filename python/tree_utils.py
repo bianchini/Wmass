@@ -21,7 +21,7 @@ def isFromZ(p):
     return False
 
 def isMuon(p):
-    if not (p.isPromptFinalState() and abs(p.pdgId())==13 and p.pt()>0. and abs(p.eta())<6.0):
+    if not (p.isPromptFinalState() and abs(p.pdgId())==13 and p.pt()>=0.0):
         return False
     return True
     #return isFromW(p)
@@ -33,7 +33,7 @@ def isNeutrino(p):
     #return isFromW(p)
 
 def isPhoton(p):
-    return (p.isPromptFinalState() and p.pdgId()==22 and p.pt()>0.0 and abs(p.eta())<6.0)
+    return (p.isPromptFinalState() and p.pdgId()==22 and p.pt()>=0.0 and abs(p.eta()))
 
 def deltaR(a,b):
     return math.sqrt( math.pow(a.eta()-b.eta(),2) + math.pow( math.acos( math.cos(a.phi()-b.phi())),2) )
@@ -99,22 +99,21 @@ def printp(tag, p, other):
     print tag+' ['+str(p.pdgId())+']: ('+'{:04.3f}'.format(p.pt())+',{:04.3f}'.format(p.eta())+',{:04.3f}'.format(p.phi())+') .... '+other
 
 def add_vars(tree=None, debug=False):
-    names = ['nuLost', 'muLost', 'mu_charge', 'nu_charge', 'isFromW']
-    for w in ['', 'NU', 'ND', 'UN', 'UU', 'DN', 'DD']:
-        names.append('weight'+w)
+    names = ['nuLost', 'muLost', 'mu_charge', 'nu_charge', 'isFromW', 'alphaQED', 'alphaQCD', 'scale', 'id1', 'id2', 'x1', 'x2']
     for v in ['qt', 'y', 'mass', 'phi']:
         names.append('lhe_'+v)
-    for t in ['preFSR', 'dress', 'bare']:
+    for t in ['WpreFSR', 'Wdress', 'Wbare']:
         for v in ['qt', 'y', 'mass', 'phi', 'ECS','cosCS', 'phiCS', 'mu_pt', 'mu_eta', 'mu_phi', 'nu_pt', 'nu_eta', 'nu_phi' ]:
-            names.append(t+'_'+v)
-    
+            names.append(t+'_'+v)    
     if debug:
         nevents = 3
+        scan = 'id1:x1:id2:x2:alphaQCD:alphaQED:scale'
+        tree.Scan(scan, "", "", nevents)
         scan = 'nuLost:muLost:isFromW:mu_charge:nu_charge'
         tree.Scan(scan, "", "", nevents)
         scan = 'lhe_mass:lhe_qt:lhe_y:lhe_phi:dress_mass:dress_qt:dress_y:dress_phi'
         tree.Scan(scan, "", "", nevents)
-        scan = 'dress_mu_pt:dress_mu_eta:dress_nu_pt:dress_nu_eta:dress_ECS:dress_cosCS:dress_phiCS'
+        scan = 'Wdress_mu_pt:Wdress_mu_eta:Wdress_nu_pt:Wdress_nu_eta:Wdress_ECS:Wdress_cosCS:Wdress_phiCS'
         tree.Scan(scan, "", "", nevents)
         return
 
@@ -122,6 +121,10 @@ def add_vars(tree=None, debug=False):
     for name in names:        
         variables[name] = np.zeros(1, dtype=float)
         tree.Branch(name, variables[name], name+'/D')
+
+    variables['weights'] = np.zeros(109, dtype=float)
+    tree.Branch('weights', variables['weights'], name+'[109]/D')
+
     return variables
     
 
