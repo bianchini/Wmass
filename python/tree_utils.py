@@ -33,7 +33,7 @@ def isNeutrino(p):
     #return isFromW(p)
 
 def isPhoton(p):
-    return (p.isPromptFinalState() and p.pdgId()==22 and p.pt()>=0.0 and abs(p.eta()))
+    return (p.isPromptFinalState() and p.pdgId()==22 and p.pt()>=0.0)
 
 def deltaR(a,b):
     return math.sqrt( math.pow(a.eta()-b.eta(),2) + math.pow( math.acos( math.cos(a.phi()-b.phi())),2) )
@@ -111,7 +111,7 @@ def add_vars(tree=None, debug=False):
         tree.Scan(scan, "", "", nevents)
         scan = 'nuLost:muLost:isFromW:mu_charge:nu_charge'
         tree.Scan(scan, "", "", nevents)
-        scan = 'lhe_mass:lhe_qt:lhe_y:lhe_phi:dress_mass:dress_qt:dress_y:dress_phi'
+        scan = 'lhe_mass:lhe_qt:lhe_y:lhe_phi:Wdress_mass:Wdress_qt:Wdress_y:Wdress_phi'
         tree.Scan(scan, "", "", nevents)
         scan = 'Wdress_mu_pt:Wdress_mu_eta:Wdress_nu_pt:Wdress_nu_eta:Wdress_ECS:Wdress_cosCS:Wdress_phiCS'
         tree.Scan(scan, "", "", nevents)
