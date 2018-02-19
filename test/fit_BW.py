@@ -13,13 +13,12 @@ rcParams['figure.figsize'] = 8,7
 
 import math
 
-def fit_BW(tree=ROOT.TTree(), running=1, var='', cut='', tag=''):
+def fit_BW(tree=ROOT.TTree(), running=0, var='', cut='', tag=''):
 
     h = ROOT.TH1F('h', 'h', 140, 50., 110.)
     h.Sumw2()
     h.SetStats(0)
-    tree.Draw(var+'_mass>>h', 'weight*('+cut+')')
-    #tree.Draw('TMath::Power('+var+'_mass, 1.)>>h', 'weight*('+cut+')')
+    tree.Draw(var+'_mass>>h', 'weights[0]*('+cut+')')
 
     fit = None
     if running:
@@ -54,47 +53,63 @@ def fit_BW(tree=ROOT.TTree(), running=1, var='', cut='', tag=''):
     leg.Draw()
     #raw_input()
     if tag!='':
-        c.SaveAs('fit_BW_'+('run_' if running else 'non-run_')+var+'_'+tag+'.png')
+        c.SaveAs('fit_BW_'+('run-width_' if running else 'nonrun-width_')+var+'_'+tag+'.png')
     c.IsA().Destructor( c )
     leg.IsA().Destructor( leg )
     return (r.Parameter(2), r.ParError(2), r.Parameter(1), r.ParError(1))
 
-def run_fromPrompt():
-    infile = ROOT.TFile('./tree_'+argv[3]+'.root')
-    tree = infile.Get('tree')
-    res = fit_BW(tree=tree, running=int(argv[1]), var=argv[2], cut=argv[4], tag=argv[5])
+def run_fromPrompt( var='Wdress', running=0, cut='(mu_charge==+13 & isFromW==2)', tag='' ):
+    infile = ROOT.TChain('tree')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_1.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_2.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_3.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_4.root')
+    res = fit_BW(tree=infile, running=running, var=var, cut=cut, tag=tag)
 
-def run_all():
-    infile = ROOT.TFile('./tree_'+argv[3]+'.root')
-    tree = infile.Get('tree')
+def run_all(var='Wdress', running=0, tag='' ):
+
+    infile = ROOT.TChain('tree')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_1.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_2.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_3.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_4.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_5.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_6.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_7.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_8.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_9.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_10.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_11.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_12.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_13.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_14.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_15.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_16.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_17.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_18.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_19.root')
+    infile.Add('/gpfs/ddn/srm/cms/store/user/bianchi/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/TEST/180214_160748/0000/tree_20.root')
 
     cuts = [
-        'abs(lhe_y)>=0.0 & abs(lhe_y)<1.0 & charge<0',
-        'abs(lhe_y)>=1.0 & abs(lhe_y)<2.0 & charge<0',
-        'abs(lhe_y)>=2.0 & abs(lhe_y)<3.0 & charge<0',
-        'abs(lhe_y)>=3.0 & abs(lhe_y)<4.0 & charge<0',
-        'abs(lhe_y)>=4.0 & abs(lhe_y)<5.0 & charge<0',
-        'abs(lhe_y)>=0.0 & abs(lhe_y)<1.0 & charge>0',
-        'abs(lhe_y)>=1.0 & abs(lhe_y)<2.0 & charge>0',
-        'abs(lhe_y)>=2.0 & abs(lhe_y)<3.0 & charge>0',
-        'abs(lhe_y)>=3.0 & abs(lhe_y)<4.0 & charge>0',
-        'abs(lhe_y)>=4.0 & abs(lhe_y)<5.0 & charge>0',
-        #'dressFSR_qt>=0.0 & dressFSR_qt<10 & charge>0', 
-        #'dressFSR_qt>=10.0 & dressFSR_qt<20 & charge>0', 
-        #'dressFSR_qt>=20.0 & dressFSR_qt<200 & charge>0', 
-        #'dressFSR_qt>=0.0 & dressFSR_qt<10 & charge<0', 
-        #'dressFSR_qt>=10.0 & dressFSR_qt<20 & charge<0', 
-        #'dressFSR_qt>=20.0 & dressFSR_qt<200 & charge<0', 
+        'abs('+var+'_y)>=0.0 & abs('+var+'_y)<1.0 & mu_charge==+13',
+        'abs('+var+'_y)>=1.0 & abs('+var+'_y)<2.0 & mu_charge==+13',
+        'abs('+var+'_y)>=2.0 & abs('+var+'_y)<3.0 & mu_charge==+13',
+        'abs('+var+'_y)>=3.0 & abs('+var+'_y)<4.0 & mu_charge==+13',
+        'abs('+var+'_y)>=4.0 & abs('+var+'_y)<5.0 & mu_charge==+13',
+        'abs('+var+'_y)>=0.0 & abs('+var+'_y)<1.0 & mu_charge==-13',
+        'abs('+var+'_y)>=1.0 & abs('+var+'_y)<2.0 & mu_charge==-13',
+        'abs('+var+'_y)>=2.0 & abs('+var+'_y)<3.0 & mu_charge==-13',
+        'abs('+var+'_y)>=3.0 & abs('+var+'_y)<4.0 & mu_charge==-13',
+        'abs('+var+'_y)>=4.0 & abs('+var+'_y)<5.0 & mu_charge==-13',
         ]
 
-    width = 0.5
+    width = 0.50
     x = np.array([0.5, 1.5, 2.5, 3.5, 4.5])
-    #x = np.array([0.5,1.5,2.5])
     y = np.zeros(len(cuts))
     ye = np.zeros(len(cuts))
     for ic,c in enumerate(cuts):
-        tag = 'y'+str(x[ic%5])+str(2*(ic/5)-1)
-        res = fit_BW(tree=tree, running=int(argv[1]), var=argv[2], cut=c, tag=tag)
+        posttag = 'y'+str(x[ic%(len(cuts)/2)])+str(2*(ic/(len(cuts)/2))-1)
+        res = fit_BW(tree=infile, running=running, var=var, cut=c, tag=(tag+'_'+posttag))
         y[ic] = res[0]
         ye[ic] = res[1]
     plt.figure()
@@ -102,18 +117,20 @@ def run_all():
     ax.errorbar(x, y[:(len(cuts)/2)], xerr=width, yerr=ye[:(len(cuts)/2)], fmt='o', color='b', label='$W^-$')
     ax.errorbar(x, y[(len(cuts)/2):], xerr=width, yerr=ye[(len(cuts)/2):], fmt='o', color='g', label='$W^+$')
     ax.plot([0,5], [80.419,80.419], 'r--', label='$M_{W}$ in MC')
-    plt.axis([x[0]-width, x[-1]+width, 80.250, 80.550])
+    plt.axis([x[0]-width, x[-1]+width, 80.300, 80.480])
     plt.grid(True)
     legend = ax.legend(loc='upper center', shadow=False, fontsize='x-large')
     plt.xlabel('$|y|$', fontsize=20)
     plt.ylabel('$M_{W}$ pole', fontsize=20)
-    plt.title(argv[2], fontsize=20)
+    plt.title(var+' mass', fontsize=20)
     plt.show()
-    plt.savefig('pole_'+('run_' if int(argv[1]) else 'non-run_')+argv[2]+'_mass_vs_y.png')
+    plt.savefig('pole_'+('run-width_' if running else 'nonrun-width_')+var+'_mass_vs_y.png')
     plt.close()
-    infile.Close()
+    #infile.Close()
 
 ###################
 #run_fromPrompt()
-run_all()
+#run_all(var='lhe',    running=0, tag='')
+#run_all(var='Wdress', running=0, tag='')
+run_all(var='WpreFSR', running=0, tag='')
 ###################
