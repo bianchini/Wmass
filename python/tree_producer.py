@@ -19,13 +19,14 @@ from DataFormats.FWLite import Handle, Events
 
 class TreeProducer:
 
-    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test'):
+    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test', save_tree=True):
     
         print "****** TreeProducer *****"
         print 'Running for '+DY+' Drell-Yan'
         self.DY = DY
         self.verbose = verbose
         self.debug = debug
+        self.save_tree = save_tree
 
         # open output file
         self.outfile = None
@@ -33,7 +34,18 @@ class TreeProducer:
             self.outfile = ROOT.TFile(os.environ['CMSSW_BASE']+'/src/Wmass/test/'+'tree_'+postfix+'.root', "RECREATE")
         else:
             self.outfile = ROOT.TFile('tree.root', "RECREATE")
-        self.outtree = ROOT.TTree('tree', 'tree')
+
+        # out tree
+        self.outtree = None
+        if self.save_tree:
+            self.outtree = ROOT.TTree('tree', 'tree')
+
+        # add histos
+        #self.weights_for_histos = [0,1,2,3,4,6,8]
+        self.weights_for_histos = [0]
+        self.histos = add_histo2D(charges=['Wminus','Wplus'], var=['Wdress'], 
+                                  coeff=['A0','A1','A2','A3','A4','A5', 'A6', 'A7'], 
+                                  weights=self.weights_for_histos)
 
         # add branches to tree
         self.variables = add_vars(self.outtree)
@@ -69,7 +81,7 @@ class TreeProducer:
             if self.debug:
                 if i%100==0:
                     print "Processing event", i, '/', self.events.size()
-                if i>10000:
+                if i>1000:
                     break
 
             # fill with default values
@@ -175,11 +187,13 @@ class TreeProducer:
             # if no muons or no neutrinos, save the event and continue
             if self.DY=='CC':
                 if (len(muons)==0 or len(neutrinos)==0):
-                    self.outtree.Fill()
+                    if self.save_tree:
+                        self.outtree.Fill()
                     continue
             elif self.DY=='NC':
                 if len(muons)<2:
-                    self.outtree.Fill()
+                    if self.save_tree:
+                        self.outtree.Fill()
                     continue
         
             # the muon is the first ranked by pt if CC else the mu-
@@ -292,16 +306,47 @@ class TreeProducer:
                 self.variables[t+'_cosCS'][0] = ps[1] 
                 self.variables[t+'_phiCS'][0] = ps[2] 
 
+                if t=='Wdress':
+                    for w in self.weights_for_histos:
+                        fill_coefficients(histos=self.histos, 
+                                          charge=self.variables['mu_charge'][0], 
+                                          var='Wdress', 
+                                          weight_name=w, 
+                                          ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt()), 
+                                          ps_CS=(ps[1],ps[2]), 
+                                          weight=self.variables['weights'][w] )
+
+
             # fill the tree
-            self.outtree.Fill()
+            if self.save_tree:
+                self.outtree.Fill()
         ###############################################
         
         stop = time.time()
 
         # save and close
         self.outfile.cd()
-        self.outtree.Write("tree", ROOT.TObject.kOverwrite)
-        if self.debug:
+        if self.save_tree:
+            self.outtree.Write("tree", ROOT.TObject.kOverwrite)
+
+        for kq,q in self.histos.items():
+            print 'Charge: '+kq
+            self.outfile.mkdir(kq)
+            for kv,v in q.items():
+                print '\tVar: '+kv
+                self.outfile.mkdir(kq+'/'+kv)
+                for kc,c in v.items():
+                    print '\t\tVar: '+kc
+                    self.outfile.mkdir(kq+'/'+kv+'/'+kc)
+                    for kw,w in c.items():
+                        print '\t\t\tWeight: '+kw+'.....', w[0].GetEntries(), 'entries'
+                        self.outfile.cd(kq+'/'+kv+'/'+kc)
+                        w[0].Write('', ROOT.TObject.kOverwrite)
+                        w[1].Write('', ROOT.TObject.kOverwrite)
+            self.outfile.cd()
+
+        if self.debug and self.save_tree:
             add_vars(tree=self.outtree, debug=True)
+
         self.outfile.Close()
         print "Output file closed. Processed ", i , "events in "+"{:03.0f}".format(stop-start)+" sec.("+"{:03.0f}".format(i/(stop-start))+" Hz)" 
