@@ -19,14 +19,19 @@ from DataFormats.FWLite import Handle, Events
 
 class TreeProducer:
 
-    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test', save_tree=True):
+    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test', save_tree=True, save_histo=False):
     
         print "****** TreeProducer *****"
         print 'Running for '+DY+' Drell-Yan'
         self.DY = DY
         self.verbose = verbose
         self.debug = debug
+
+        # save the TTree in the output file
         self.save_tree = save_tree
+
+        # save the histograms in the output file
+        self.save_histo = save_histo
 
         # open output file
         self.outfile = None
@@ -41,13 +46,15 @@ class TreeProducer:
             self.outtree = ROOT.TTree('tree', 'tree')
 
         # add histos
-        #self.weights_for_histos = [0,1,2,3,4,6,8]
-        self.weights_for_histos = [0]
-        self.histos = add_histo2D(charges=['Wminus','Wplus'], var=['Wdress'], 
-                                  coeff=['A0','A1','A2','A3','A4','A5', 'A6', 'A7'], 
-                                  weights=self.weights_for_histos)
+        #self.weights_for_histos = [0]
+        self.weights_for_histos = range(109)
+        self.coefficients_for_histos = ['A0','A1','A2','A3','A4','A5','A6','A7']
+        if self.save_histo:
+            self.histos = add_histo2D(charges=['Wminus','Wplus'], var=['Wdress'], 
+                                      coeff=self.coefficients_for_histos, 
+                                      weights=self.weights_for_histos)
 
-        # add branches to tree
+        # add branches to tree (needed even if self.save_tree=False)
         self.variables = add_vars(self.outtree)
 
         self.filenames = filenames
@@ -105,11 +112,11 @@ class TreeProducer:
                     print 'HEPEUP...', p, 'pdg:', hepeup.IDUP[p], '(', hepeup.PUP[p][0], hepeup.PUP[p][1],hepeup.PUP[p][2],hepeup.PUP[p][3],')'
                 # first parton
                 if p==0:
-                    self.variables['id1'][0] = hepeup.IDUP[p] 
-                    self.variables['x1'][0] = hepeup.PUP[p][3]/6500. 
+                    self.variables['id1'][0] = hepeup.IDUP[p]
+                    self.variables['x1'][0] = hepeup.PUP[p][3]/6500.
                 elif p==1:
                     self.variables['id2'][0] = hepeup.IDUP[p] 
-                    self.variables['x2'][0] = hepeup.PUP[p][3]/6500. 
+                    self.variables['x2'][0] = hepeup.PUP[p][3]/6500.
                 if abs(hepeup.IDUP[p])==13:
                     isWToMuNu = True
                 if abs(hepeup.IDUP[p])== (24 if self.DY=='CC' else 23):
@@ -306,10 +313,13 @@ class TreeProducer:
                 self.variables[t+'_cosCS'][0] = ps[1] 
                 self.variables[t+'_phiCS'][0] = ps[2] 
 
-                if t=='Wdress':
+                if self.save_histo:
+                    if t not in ['Wdress']:
+                        continue
                     for w in self.weights_for_histos:
                         fill_coefficients(histos=self.histos, 
                                           charge=self.variables['mu_charge'][0], 
+                                          coefficients_for_histos=self.coefficients_for_histos,
                                           var='Wdress', 
                                           weight_name=w, 
                                           ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt()), 
@@ -329,21 +339,22 @@ class TreeProducer:
         if self.save_tree:
             self.outtree.Write("tree", ROOT.TObject.kOverwrite)
 
-        for kq,q in self.histos.items():
-            print 'Charge: '+kq
-            self.outfile.mkdir(kq)
-            for kv,v in q.items():
-                print '\tVar: '+kv
-                self.outfile.mkdir(kq+'/'+kv)
-                for kc,c in v.items():
-                    print '\t\tVar: '+kc
-                    self.outfile.mkdir(kq+'/'+kv+'/'+kc)
-                    for kw,w in c.items():
-                        print '\t\t\tWeight: '+kw+'.....', w[0].GetEntries(), 'entries'
-                        self.outfile.cd(kq+'/'+kv+'/'+kc)
-                        w[0].Write('', ROOT.TObject.kOverwrite)
-                        w[1].Write('', ROOT.TObject.kOverwrite)
-            self.outfile.cd()
+        if self.save_histo:
+            for kq,q in self.histos.items():
+                print 'Charge: '+kq
+                self.outfile.mkdir(kq)
+                for kv,v in q.items():
+                    print '\tVar: '+kv
+                    self.outfile.mkdir(kq+'/'+kv)
+                    for kc,c in v.items():
+                        print '\t\tVar: '+kc
+                        self.outfile.mkdir(kq+'/'+kv+'/'+kc)
+                        for kw,w in c.items():
+                            print '\t\t\tWeight: '+kw+'.....', w[0].GetEntries(), 'entries'
+                            self.outfile.cd(kq+'/'+kv+'/'+kc)
+                            w[0].Write('', ROOT.TObject.kOverwrite)
+                            w[1].Write('', ROOT.TObject.kOverwrite)
+                self.outfile.cd()
 
         if self.debug and self.save_tree:
             add_vars(tree=self.outtree, debug=True)

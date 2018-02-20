@@ -2,9 +2,20 @@ import copy
 import math
 from array import array
 import numpy as np 
-from scipy import stats
 import ROOT
 from ROOT import TLorentzVector
+
+# binning for templates
+np_bins_qt_p0 = np.linspace( 0.0, 10.0, 6)
+np_bins_qt_p1 = np.linspace(12.0, 20.0, 5)
+np_bins_qt_p2 = np.linspace(24.0, 40.0, 5)
+np_bins_qt_p3 = np.array([60, 80, 100, 150, 200]) 
+np_bins_qt = np.append( np.append(np_bins_qt_p0, np_bins_qt_p1), np.append( np_bins_qt_p2, np_bins_qt_p3))
+
+np_bins_y_p0 = np.linspace(-5.0, -2.5,  6)
+np_bins_y_p1 = np.linspace(-2.0, +2.0, 21)
+np_bins_y_p2 = np.linspace(+2.5, +5.0,  6)
+np_bins_y  = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
 
 def isFromW(p):
     mother = p
@@ -121,12 +132,12 @@ def add_vars(tree=None, debug=False):
 
     variables = {}
     for name in names:        
-        variables[name] = np.zeros(1, dtype=float)
+        variables[name] = array( 'f', [ 0.0 ] ) 
         if tree!=None:
-            tree.Branch(name, variables[name], name+'/D')
-    variables['weights'] = np.zeros(109, dtype=float)
+            tree.Branch(name, variables[name], name+'/F')
+    variables['weights'] = array( 'f', 109*[ 0.0 ] )
     if tree!=None:
-        tree.Branch('weights', variables['weights'], 'weights[109]/D')
+        tree.Branch('weights', variables['weights'], 'weights[109]/F')
 
     return variables
     
@@ -138,8 +149,6 @@ def fill_default(variables):
 def add_histo2D(charges=['Wminus','Wplus'], var=['Wdress'], coeff=['A0','A1','A2','A3','A4','A5', 'A6', 'A7'], weights=[0]):
 
     # binning
-    np_bins_qt = np.append(np.append(np.linspace(0.0, 10.0, 6), np.linspace(12.0, 20.0, 5)), np.append(np.linspace(24.0, 40.0, 5), np.array([60,80,100,150, 200]) ) )
-    np_bins_y  = np.append(np.append(np.linspace(-5.0, -2.5, 6), np.linspace(-2.0, +2.0, 21)), np.linspace(2.5, 5.0, 6))
     bins_qt = array( 'f',  np_bins_qt )
     bins_y  = array( 'f',  np_bins_y )
     
@@ -184,147 +193,9 @@ def test_A(coeff='A0', ps=(0.0, 0.0)):
     return val
 
 
-def fill_coefficients(histos={}, charge=0, var='Wdress', weight_name=0, ps_W=(), ps_CS=(), weight=1.0):
+def fill_coefficients(histos={}, charge=0, coefficients_for_histos=['A0'], var='Wdress', weight_name=0, ps_W=(), ps_CS=(), weight=1.0):
     q = 'Wplus' if charge==-13 else 'Wminus'
-    for coeff in ['A0','A1','A2','A3','A4','A5', 'A6', 'A7']:
+    for coeff in coefficients_for_histos:
         (h,h_norm) = histos[q][var][coeff][str(weight_name)]
         h.Fill(ps_W[0],ps_W[1], weight*test_A(coeff=coeff,ps=ps_CS) )
         h_norm.Fill(ps_W[0],ps_W[1], weight )
-
-def find_polynomial(h=None, coeff='A0'):
-    
-    chi2 = 99999.
-    order = 1
-    r = None
-    fit = None
-    pval = 0.0
-    while( pval<0.05 ):
-        formula = ''
-        for p in range(order+1):
-            formula += ('['+str(p)+']*TMath::Power(x,'+str(p)+')'+('+' if p<order else ''))
-        print formula
-        this_fit = ROOT.TF1('fit_order'+str(order), formula,  0, 50) 
-        for p in range(order+1):
-            this_fit.SetParameter(p, math.pow(10,-p))
-        if coeff!='A4':
-            this_fit.FixParameter(0, 0.0 )
-        this_fit.SetNpx(10000)
-        this_r = h.Fit('fit_order'+str(order), 'SRQ')
-        delta_chi2 = chi2 - this_r.Chi2()
-        pval = 1-stats.chi2.cdf(delta_chi2, 1) 
-        print '\tOrder', order, 'pval=', pval, 'chi2=', this_r.Chi2(), '/', this_r.Ndf()
-        if pval<0.05:            
-            r = this_r
-            fit = this_fit
-            chi2 = this_r.Chi2()        
-            order += 1
-
-    print 'P-value threshold at order', order-1, 'with chi2=', r.Chi2(), '/', r.Ndf()
-    return (r,order-1,fit)
-        
-
-def draw_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0):
-
-    ranges = {}
-    ranges['A0'] = (-0.2, 1.5)
-    ranges['A1'] = (-0.8, 0.8)
-    ranges['A2'] = (-0.2, 1.5)
-    ranges['A3'] = (-2.0, 2.0)
-    ranges['A4'] = (-2.5, 2.5)
-    ranges['A5'] = (-0.5, 0.5)
-    ranges['A6'] = (-0.5, 0.5)
-    ranges['A7'] = (-0.5, 0.5)
-
-
-    f = ROOT.TFile.Open(fname,'READ')
-
-    histos = {}
-    nbins_y = 0
-    nbins_qt = 0
-    for q in ['Wplus', 'Wminus']:
-        histos[q] = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(weight_name))
-        histos[q+'_norm'] = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(weight_name)+'_norm')
-        nbins_y = histos[q].GetNbinsX()
-        nbins_qt = histos[q].GetNbinsY()
-
-    for y in range(nbins_y/2+1, nbins_y+1):
-        c = ROOT.TCanvas('canvas_'+'y_'+str(y), "canvas", 800, 600) 
-        leg = ROOT.TLegend(0.10,0.70,0.55,0.88, "","brNDC");
-        leg.SetFillStyle(0);
-        leg.SetBorderSize(0);
-        leg.SetTextSize(0.02);
-        leg.SetFillColor(10);
-        hslices = {} 
-        for q in ['Wplus', 'Wminus']:
-            h = histos[q] 
-            h_norm = histos[q+'_norm']
-            y_bin = 'y_{:03.1f}'.format(h.GetXaxis().GetBinLowEdge(y))+'-'+'{:03.1f}'.format(h.GetXaxis().GetBinLowEdge(y)+h.GetXaxis().GetBinWidth(y))
-            print 'Bin Y: ', y_bin
-            hslice_minus = h.ProjectionY(str(y)+'_'+q+'_minus_py', nbins_y+1-y, nbins_y+1-y)
-            hslice_plus  = h.ProjectionY(str(y)+'_'+q+'_plus_py', y, y)
-            hnorm_minus  = h_norm.ProjectionY(str(y)+'_'+q+'_minus_norm_py', nbins_y+1-y, nbins_y+1-y)
-            hnorm_plus   = h_norm.ProjectionY(str(y)+'_'+q+'_plus_norm_py', y, y)
-            print  '(', nbins_y+1-y, ' + ', y, ') /', nbins_y
-            hslice_minus.Add(hslice_plus)
-            hnorm_minus.Add(hnorm_plus)
-            hslice_minus.Divide(hnorm_minus)
-            hslice_minus.SetTitle(coeff[0]+'_{'+coeff[1]+'} for y_{W} #in ['+y_bin[2:]+']')
-            hslice_minus.SetMinimum(ranges[coeff][0])
-            hslice_minus.SetMaximum(ranges[coeff][1])
-            hslice_minus.SetStats(0)
-            hslice_minus.SetXTitle('q_{T} (GeV)')
-
-            (r,order,fit) = find_polynomial(h=hslice_minus, coeff=coeff)
-            hslice_minus.GetFunction('fit_order'+str(order+1)).SetBit(ROOT.TF1.kNotDraw)
-
-            #fit = ROOT.TF1('fit_'+q, '[0] + [1]*x + [2]*x*x + [3]*x*x*x + [4]*x*x*x*x',  0, 50)
-            #fit.SetParameter(0, 0.0)
-            #fit.SetParameter(1, 0.1)
-            #fit.SetParameter(2, 0.01 )
-            #fit.SetParameter(3, 0.001 )
-            #fit.SetParameter(3, 0.0001 )
-            #if coeff!='A4':
-            #    fit.FixParameter(0, 0.0 )
-            #fit.SetNpx(10000)
-            #r = hslice_minus.Fit('fit_'+q, 'SR')
-            
-            res = ''
-            for p in range(order+1):
-                exp = '{:.1E}'.format(r.Parameter(p))[-3]+'{:.1E}'.format(r.Parameter(p))[-1] 
-                val = '{:.1E}'.format(r.Parameter(p))[:-4]
-                err = '{:.1E}'.format(r.ParError(p))[:-4]
-                res += 'c_{'+str(p)+'}=('+val+' #pm '+err+')#times10^{'+exp+'}, '
-            if q=='Wplus':                
-                hslice_minus.SetLineWidth(2)
-                hslice_minus.SetLineColor(ROOT.kRed)
-                hslice_minus.SetFillColor(ROOT.kRed)
-                hslice_minus.SetFillStyle(3002)
-                fit.SetLineWidth(2)
-                fit.SetLineStyle(ROOT.kDashed)
-                fit.SetLineColor(ROOT.kRed)
-                leg.AddEntry(hslice_minus, '#splitline{W^{+}, #chi^{2}/ndof = '+'{:02.1f}'.format(r.Chi2()/r.Ndf())+'}{'+res+'}', "LP")
-                hslices[q+'_fit'] = fit
-            else:
-                hslice_minus.SetLineWidth(2)
-                hslice_minus.SetFillColor(ROOT.kBlue)
-                hslice_minus.SetFillStyle(3003)
-                hslice_minus.SetLineColor(ROOT.kBlue)
-                fit.SetLineWidth(2)
-                fit.SetLineStyle(ROOT.kDashed)
-                fit.SetLineColor(ROOT.kBlue)
-                leg.AddEntry(hslice_minus, '#splitline{W^{-}, #chi^{2}/ndof = '+'{:02.1f}'.format(r.Chi2()/r.Ndf())+'}{'+res+'}', "LP")            
-                hslices[q+'_fit'] = fit
-
-            hslices[q] = hslice_minus
-
-        hslices['Wplus'].Draw('E3')
-        hslices['Wminus'].Draw('E3SAME')
-        hslices['Wplus_fit'].Draw('SAME')
-        hslices['Wminus_fit'].Draw('SAME')
-
-        leg.Draw()
-        c.SaveAs('plots/coefficient_'+var+'_'+coeff+'_'+str(weight_name)+'_'+y_bin+'.png')
-        #raw_input()
-        c.IsA().Destructor( c )        
-        leg.IsA().Destructor( leg )        
-    f.Close()
