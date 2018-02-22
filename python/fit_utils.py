@@ -1,31 +1,53 @@
 import math
 import numpy as np 
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from pylab import rcParams
+rcParams['figure.figsize'] = 8,7
+
 from scipy import stats
 from array import array
 import ROOT
 
-# perform Fisher-test based on chi2 of fit. Stop when p-value of chi2>0.05
-def Fisher_test(h=None, coeff='A0', fix_to_zero=['A4'], fit_range=[0.0,50.0], force_order=-1):
+
+def polynomial(x, coeff, order):
+    val = np.zeros(x.size)
+    for p in range(order+1):
+        val +=  coeff[p]*np.power(x,p)
+    return val
     
+# Perform Fisher-test based on chi2 of fit to pol_order: [0] + [1]*x + [2]*x*x + ... 
+# Stop when p-value of chi2>0.05
+# If force_order>=0, force order; fix_to_zero requires [0] := 0.0
+def Fisher_test(h=None, coeff='A0', fix_to_zero=['A4'], fit_range=[0.0,50.0], force_order=-1):
+
+    # a large initial value
     chi2 = 99999.
+
+    # start from pol1
     order = 1
     if force_order>=0:
         order = force_order
+
     r = None
     fit = None
     pval = 0.0
     while( pval<0.05 ):
+
+        # standard polynomial
         formula = ''
         for p in range(order+1):
             formula += ('['+str(p)+']*TMath::Power(x,'+str(p)+')'+('+' if p<order else ''))
+
         #print formula
         this_fit = ROOT.TF1('fit_order'+str(order), formula,  fit_range[0], fit_range[1]) 
+        this_fit.SetNpx(10000)
         for p in range(order+1):
             this_fit.SetParameter(p, math.pow(10,-p))
         if coeff in fix_to_zero:
             this_fit.FixParameter(0, 0.0 )
 
-        this_fit.SetNpx(10000)
         this_r = h.Fit('fit_order'+str(order), 'SRQ')
         delta_chi2 = chi2 - this_r.Chi2()
         pval = 1-stats.chi2.cdf(delta_chi2, 1) 
@@ -50,6 +72,7 @@ def Fisher_test(h=None, coeff='A0', fix_to_zero=['A4'], fit_range=[0.0,50.0], fo
     else:
         print 'Fit performed at order ', order-1, 'with chi2=', r.Chi2(), '/', r.Ndf() 
 
+    # nice formatting of results
     res = ''
     for p in range(order):
         exp = '{:.1E}'.format(r.Parameter(p))[-3]+'{:.1E}'.format(r.Parameter(p))[-1] 
@@ -57,10 +80,11 @@ def Fisher_test(h=None, coeff='A0', fix_to_zero=['A4'], fit_range=[0.0,50.0], fo
         err = '{:.1E}'.format(r.ParError(p))[:-4]
         res += 'c_{'+str(p)+'}=('+val+' #pm '+err+')#times10^{'+exp+'}, '
 
+    # remove 1 from order to go to the previous one
     return (r,order-1,fit,res)
 
-
-def plot_cov_matrix(n_vars=0, cov=None, label='', plot='cov'):
+# plot covariance matrix provided by cov as a .png, .npy, and .C
+def plot_cov_matrix(n_vars=0, cov=None, label='', plot='cov', save_all=False):
     c = ROOT.TCanvas("canvas", "canvas", 800, 800) 
     h2 = ROOT.TH2D('cov', '', n_vars, 0, n_vars, n_vars, 0, n_vars)
     h2.SetStats(0) 
@@ -73,9 +97,10 @@ def plot_cov_matrix(n_vars=0, cov=None, label='', plot='cov'):
                 rho_ij = cov[i][j]
             h2.SetBinContent(i+1, j+1, rho_ij )
     h2.Draw("COLZ")
-    c.SaveAs(label+'_'+plot+'.png')
-    c.SaveAs(label+'_'+plot+'.C')
-    np.save(label+'_'+plot, cov)
+    c.SaveAs('plots/'+label+'_'+plot+'.png')
+    if save_all:
+        c.SaveAs('plots/'+label+'_'+plot+'.C')
+        np.save('plots/'+label+'_'+plot, cov)
     c.IsA().Destructor( c )
 
 
@@ -91,6 +116,19 @@ def ranges_for_coeff():
     ranges['A6'] = (-0.5, 0.5)
     ranges['A7'] = (-0.5, 0.5)
     return ranges
+
+def ranges_for_coeff_zoom(q='Wplus'):
+    ranges = {}
+    ranges['A0'] = [-0.1, 0.7]
+    ranges['A1'] = [-0.1, 0.6]
+    ranges['A2'] = [-0.1, 0.8]
+    ranges['A3'] = [-1.5, 0.1] if q=='Wplus' else [-0.1, +1.5]
+    ranges['A4'] = [-2.5, 0.1] if q=='Wplus' else [-0.1, +2.5]
+    ranges['A5'] = [-0.5, 0.5]
+    ranges['A6'] = [-0.5, 0.5]
+    ranges['A7'] = [-0.5, 0.5]
+    return ranges
+
 
 # project the (y,qt) plot along the qt axis for all bins of y
 def draw_y_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, do_fit=True):
@@ -250,20 +288,29 @@ def draw_qt_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, 
     f.Close()
 
 
-def get_covariance(fname='./tree.root', var='Wdress', q='Wplus', coefficients=['A0'], weights=[0], add_stat_uncert=False, postfix=''):
+def get_covariance(fname='./tree.root', var='Wdress', q='Wplus', coefficients=['A0'], weights={}, add_stat_uncert=False, postfix='',
+                   fix_to_zero=['A0','A1','A2','A3','A5','A6','A7'], fit_range=[0.0, 50.0]):
 
-    from tree_utils import np_bins_qt, np_bins_y
+    # bins used for the (y,qt) plots
+    from tree_utils import np_bins_qt, np_bins_y, np_bins_qt_width, np_bins_y_width, np_bins_qt_mid, np_bins_y_mid
+    #np_bins_y = np_bins_y[15:18]
+    np_bins_qt_mid_from_zero = np.append(np.array([0.0]), np_bins_qt_mid)
     nbins_y = np_bins_y.size - 1 
     nbins_qt = np_bins_qt.size - 1 
 
-    out = ROOT.TFile.Open('covariance_'+q+postfix+'.root', 'RECREATE')
+    out = ROOT.TFile.Open('plots/'+'covariance_'+q+postfix+'.root', 'RECREATE')
     tree = ROOT.TTree('cov','cov')
     variables = {}
+
+    import pickle
+    results = {}
     covariances = {}
     orders = {}
 
+    # input file
     f = ROOT.TFile.Open(fname,'READ')
 
+    # first loop: determine order of polynomials and book tree branches
     n_vars = 0
     for coeff in coefficients:
         for y in range(nbins_y/2+1, nbins_y+1):
@@ -280,79 +327,142 @@ def get_covariance(fname='./tree.root', var='Wdress', q='Wplus', coefficients=['
             hslice.Add(hslice_plus)
             hnorm.Add(hnorm_plus)
             hslice.Divide(hnorm)
-            (r,order,fit,res) = Fisher_test(h=hslice, coeff=coeff, fix_to_zero=['A0','A1','A2','A3','A5','A6','A7'], fit_range=[0.0, 50.0])
+            (r,order,fit,res) = Fisher_test(h=hslice, coeff=coeff, fix_to_zero=fix_to_zero, fit_range=fit_range)
             orders[coeff+'_'+y_bin] = order
             covariances[coeff+'_'+y_bin] = r.GetCovarianceMatrix()
+
+            results[coeff+'_'+y_bin+'_val'] = [hslice.GetBinContent(i+1) for i in range(hslice.GetNbinsX())] 
+            results[coeff+'_'+y_bin+'_val_err'] = [hslice.GetBinError(i+1) for i in range(hslice.GetNbinsX())] 
+            results[coeff+'_'+y_bin+'_fit'] = [] 
+
+            # create tree branches
             for o in range(order+1):
                 nuis_name = coeff+'_'+y_bin+'_p'+str(o) 
+                results[coeff+'_'+y_bin+'_fit'].append( r.Parameter(o) ) 
                 variables[nuis_name] = array( 'f', [ 0.0 ] )
+                variables[nuis_name+'_id'] = array( 'i', [ 0 ] )
                 tree.Branch(nuis_name, variables[nuis_name], nuis_name+'/F')
+                tree.Branch(nuis_name+'_id', variables[nuis_name+'_id'], nuis_name+'_id'+'/I')
                 n_vars += 1
 
-    data = np.zeros((n_vars, len(weights)))
-    for iw,w in enumerate(weights):
-        vars_count = 0         
-        for coeff in coefficients:
-            for y in range(nbins_y/2+1, nbins_y+1):
-                y_bin = 'y_{:03.1f}'.format(np_bins_y[y-1])+'_'+'{:03.1f}'.format(np_bins_y[y])
-                name = q+'_'+str(w)
-                h = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w))
-                h_norm = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w)+'_norm')
-                hslice = h.ProjectionY(str(y)+'_'+name+'_py', nbins_y+1-y, nbins_y+1-y)
-                hslice_plus  = h.ProjectionY(str(y)+'_'+name+'_plus_py', y, y)
-                hnorm  = h_norm.ProjectionY(str(y)+'_'+name+'_norm_py', nbins_y+1-y, nbins_y+1-y)
-                hnorm_plus   = h_norm.ProjectionY(str(y)+'_'+name+'_plus_norm_py', y, y)
-                hslice.Add(hslice_plus)
-                hnorm.Add(hnorm_plus)
-                hslice.Divide(hnorm)
-                (r,order,fit,res) = Fisher_test(h=hslice, coeff=coeff, fix_to_zero=['A0','A1','A2','A3','A5','A6','A7'], fit_range=[0.0, 50.0], force_order=orders[coeff+'_'+y_bin])
-                for o in range(order+1):
-                    nuis_name = coeff+'_'+y_bin+'_p'+str(o) 
-                    variables[nuis_name][0] = r.Parameter(o)
-                    data[vars_count][iw] = r.Parameter(o)
-                    vars_count += 1
-        tree.Fill()
+    # arrays that contain the coefficients for all pdf and scale variations
+    data = {}
+    for syst in ['pdf', 'scale']:
+        ws =  weights[syst]
+        data[syst] = np.zeros( (n_vars, len(ws)) )
+        for iw,w in enumerate(ws):
+            vars_count = 0         
+            for coeff in coefficients:
+                for y in range(nbins_y/2+1, nbins_y+1):
+                    y_bin = 'y_{:03.1f}'.format(np_bins_y[y-1])+'_'+'{:03.1f}'.format(np_bins_y[y])
+                    name = q+'_'+str(w)
+                    h = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w))
+                    h_norm = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w)+'_norm')
+                    hslice = h.ProjectionY(str(y)+'_'+name+'_py', nbins_y+1-y, nbins_y+1-y)
+                    hslice_plus  = h.ProjectionY(str(y)+'_'+name+'_plus_py', y, y)
+                    hnorm  = h_norm.ProjectionY(str(y)+'_'+name+'_norm_py', nbins_y+1-y, nbins_y+1-y)
+                    hnorm_plus   = h_norm.ProjectionY(str(y)+'_'+name+'_plus_norm_py', y, y)
+                    hslice.Add(hslice_plus)
+                    hnorm.Add(hnorm_plus)
+                    hslice.Divide(hnorm)
+                    (r,order,fit,res) = Fisher_test(h=hslice, coeff=coeff, fix_to_zero=fix_to_zero, fit_range=fit_range, force_order=orders[coeff+'_'+y_bin])
+                    for o in range(order+1):
+                        nuis_name = coeff+'_'+y_bin+'_p'+str(o) 
+                        variables[nuis_name][0] = r.Parameter(o)
+                        variables[nuis_name+'_id'][0] = int(w)
+                        data[syst][vars_count][iw] = r.Parameter(o)
+                        vars_count += 1
+            tree.Fill()    
 
-    #print data
-    cov_syst = np.zeros((n_vars,n_vars))
-    cov_stat = np.zeros((n_vars,n_vars))
+    # covariance matrix
+    cov_map = {}
+    for syst in ['pdf', 'scale', 'stat']:
+        # statistical one is formed from the cov matrix of the fits
+        if syst=='stat':
+            cov_map['stat']  = np.zeros((n_vars,n_vars))
+            vars_count1 = 0 
+            for coeff1 in coefficients:
+                for y1 in range(nbins_y/2+1, nbins_y+1):
+                    y_bin1 = 'y_{:03.1f}'.format(np_bins_y[y1-1])+'_'+'{:03.1f}'.format(np_bins_y[y1])
+                    for o1 in range(orders[coeff1+'_'+y_bin1]+1):
+                        nuis_name1 = coeff1+'_'+y_bin1
+                        vars_count2 = 0 
+                        for coeff2 in coefficients:
+                            for y2 in range(nbins_y/2+1, nbins_y+1):
+                                y_bin2 = 'y_{:03.1f}'.format(np_bins_y[y2-1])+'_'+'{:03.1f}'.format(np_bins_y[y2])
+                                for o2 in range(orders[coeff2+'_'+y_bin2]+1):
+                                    nuis_name2 = coeff2+'_'+y_bin2
+                                    if  nuis_name1==nuis_name2:
+                                        cov_map['stat'][vars_count1,vars_count2] += covariances[coeff1+'_'+y_bin1][o1][o2]
+                                    vars_count2 += 1
+                        vars_count1 += 1
+        # systematics formed from the pdf and scal variations
+        else:                
+            cov_map[syst] = np.cov(data[syst])
+        # plot the matrix
+        syst_label = (q+'_'+syst)+postfix
+        plot_cov_matrix(n_vars=n_vars, cov=cov_map[syst], label=syst_label, plot='corr')
 
-    cov_syst += np.cov(data)
-    cov_label = (q+'_syst_only')+postfix
-    plot_cov_matrix(n_vars=n_vars, cov=cov_syst, label=cov_label, plot='cov')
-    plot_cov_matrix(n_vars=n_vars, cov=cov_syst, label=cov_label, plot='corr')
+    # total covariance matrix
+    cov_map['sum'] = np.zeros((n_vars,n_vars))
+    cov_map['syst'] = np.zeros((n_vars,n_vars))
+    for syst in ['pdf', 'scale', 'stat']:
+        cov_map['sum'] += cov_map[syst]
+        if syst in ['pdf', 'scale']:
+            cov_map['syst'] += cov_map[syst]
+    cov_label = (q+'_stat_plus_syst')+postfix
+    plot_cov_matrix(n_vars=n_vars, cov=cov_map['sum'], label=cov_label, plot='corr')
 
-    if add_stat_uncert:
-        vars_count1 = 0 
-        for coeff1 in coefficients:
-            for y1 in range(nbins_y/2+1, nbins_y+1):
-                y_bin1 = 'y_{:03.1f}'.format(np_bins_y[y1-1])+'_'+'{:03.1f}'.format(np_bins_y[y1])
-                for o1 in range(orders[coeff1+'_'+y_bin1]+1):
-                    nuis_name1 = coeff1+'_'+y_bin1
-                    vars_count2 = 0 
-                    for coeff2 in coefficients:
-                        for y2 in range(nbins_y/2+1, nbins_y+1):
-                            y_bin2 = 'y_{:03.1f}'.format(np_bins_y[y2-1])+'_'+'{:03.1f}'.format(np_bins_y[y2])
-                            for o2 in range(orders[coeff2+'_'+y_bin2]+1):
-                                nuis_name2 = coeff2+'_'+y_bin2
-                                if  nuis_name1==nuis_name2:
-                                    stat = covariances[coeff1+'_'+y_bin1][o1][o2]
-                                    print nuis_name1, o1, o2, ' ==> adding stat. uncert. ', stat, 'to syst. uncert. ', cov_syst[vars_count1,vars_count2]  
-                                    cov_stat[vars_count1,vars_count2] += stat
-                                vars_count2 += 1
-                    vars_count1 += 1
+    # save firt results as a pkl file
+    pickle.dump(results, open('plots/'+q+'_results'+postfix+'.pkl','wb') )
 
-        cov_label = (q+'_stat_only')+postfix
-        plot_cov_matrix(n_vars=n_vars, cov=cov_stat, label=cov_label, plot='cov')
-        plot_cov_matrix(n_vars=n_vars, cov=cov_stat, label=cov_label, plot='corr')
+    bin_count = 0 
+    last_bin = 16
+    for coeff in coefficients:
+        for y in range(nbins_y/2+1, nbins_y+1):
+            y_bin = 'y_{:03.1f}'.format(np_bins_y[y-1])+'_'+'{:03.1f}'.format(np_bins_y[y])
+            bin_name = coeff+'_'+y_bin
+            order = orders[bin_name]
+            #print 'Taking sub-matrix: [', bin_count, ',' , bin_count+(order) , ']' 
 
-        cov = np.zeros((n_vars,n_vars))
-        cov += cov_stat
-        cov += cov_syst
-        cov_label = (q+'_stat_plus_syst')+postfix
-        plot_cov_matrix(n_vars=n_vars, cov=cov, label=cov_label, plot='cov')
-        plot_cov_matrix(n_vars=n_vars, cov=cov, label=cov_label, plot='corr')
+            y = results[bin_name+'_val']
+            y_err = results[bin_name+'_val_err']
+            p = results[bin_name+'_fit']
+            print 'Save fit:', bin_name, ':', order
+            #print '\t Val         :', y
+            #print '\t Err         :', y_err
+            #print '\t Coefficients:', p
 
+            plt.figure()
+            fig, ax = plt.subplots()
+            ntoys = 100
+            x = np_bins_qt_mid_from_zero[0:last_bin+1]
+            for itoy in range(ntoys):
+                p_rnd_sum = np.random.multivariate_normal(p, cov_map['sum'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] )
+                ax.plot(x, polynomial(x=x, coeff=p_rnd_sum, order=order), 'y-', label=('PDF $\otimes$ scale $\otimes$ stats.'  if itoy==0 else None) )
+            for itoy in range(ntoys):
+                p_rnd_scale = np.random.multivariate_normal(p, cov_map['scale'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] )
+                ax.plot(x, polynomial(x=x, coeff=p_rnd_scale, order=order), 'b-', label=('Scale ($\mu_R$, $\mu_F$)' if itoy==0 else None) )
+            for itoy in range(ntoys):
+                p_rnd_pdf = np.random.multivariate_normal(p, cov_map['pdf'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] )
+                ax.plot(x, polynomial(x=x, coeff=p_rnd_pdf, order=order), 'g-', label=('PDF (replicas)' if itoy==0 else None) )
+
+            ax.plot(x, polynomial(x=x, coeff=p, order=order), 'r--', label='Fit', linewidth=3.0)
+            ax.errorbar(np_bins_qt_mid[0:last_bin], y[0:last_bin], xerr=np_bins_qt_width[0:last_bin]/2, yerr=y_err[0:last_bin], fmt='o', color='black', label='$'+coeff[0]+'_{'+coeff[1]+'}$')
+            
+            plt.axis( [0.0, np_bins_qt[last_bin]] + ranges_for_coeff_zoom(q=q)[coeff] )
+            plt.grid(True)
+
+            legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
+            plt.xlabel('$q_{T}$ (GeV)', fontsize=20)
+            plt.ylabel('$'+coeff[0]+'_{'+coeff[1]+'}$', fontsize=20)
+            plt.title(q+', $|y| \in ['+y_bin[2:6]+','+y_bin[6:11]+']$', fontsize=20)
+            plt.show()
+            plt.savefig('plots/coefficient_'+q+'_'+var+'_'+coeff+'_'+y_bin+'_fit.png')
+            plt.close()            
+            bin_count += (order+1)
+
+    # save output tree
     out.cd()
     tree.Write("cov", ROOT.TObject.kOverwrite)
     out.Close()

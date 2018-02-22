@@ -11,11 +11,15 @@ np_bins_qt_p1 = np.linspace(12.0, 20.0, 5)
 np_bins_qt_p2 = np.linspace(24.0, 40.0, 5)
 np_bins_qt_p3 = np.array([60, 80, 100, 150, 200]) 
 np_bins_qt = np.append( np.append(np_bins_qt_p0, np_bins_qt_p1), np.append( np_bins_qt_p2, np_bins_qt_p3))
+np_bins_qt_width = np.array( [np_bins_qt[i+1]-np_bins_qt[i] for i in range(np_bins_qt.size-1)] )
+np_bins_qt_mid = np.array( [(np_bins_qt[i+1]+np_bins_qt[i])*0.5 for i in range(np_bins_qt.size-1)] )
 
 np_bins_y_p0 = np.linspace(-5.0, -2.5,  6)
 np_bins_y_p1 = np.linspace(-2.0, +2.0, 21)
 np_bins_y_p2 = np.linspace(+2.5, +5.0,  6)
 np_bins_y  = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
+np_bins_y_width = np.array( [np_bins_y[i+1]-np_bins_y[i] for i in range(np_bins_y.size-1)] )
+np_bins_y_mid = np.array( [(np_bins_y[i+1]+np_bins_y[i])*0.5 for i in range(np_bins_y.size-1)] )
 
 def isFromW(p):
     mother = p
