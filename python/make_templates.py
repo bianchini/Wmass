@@ -20,8 +20,10 @@ class TemplateMaker:
     def __init__(self, out_dir='../test/'):
         print "Initialize TemplateMaker"
         self.out_dir = out_dir
-        self.save_plots = False
         self.width = 2.0
+        self.save_plots = True
+        if self.save_plots:
+            self.plot_BW()
         return
 
     # specify the mesh size
@@ -38,16 +40,36 @@ class TemplateMaker:
     def angular_pdf(self, x, y, coeff=[]):
         UL = (1.0 + x*x)
         L = 0.5*(1-3*x*x)
-        T = 2*x*np.sqrt(1-x*x)*np.cos(y) 
+        T = 2.0*x*np.sqrt(1-x*x)*np.cos(y)
         I = 0.5*(1-x*x)*np.cos(2*y)
         A = np.sqrt(1-x*x)*np.cos(y)
         P = x
-        return 3./16./math.pi * ( UL + coeff[0]*L + coeff[1]*T + coeff[2]*I + coeff[3]*A + coeff[4]*P)
+        #p7 = (1-x*x)*np.sin(2*y)
+        #p8 = 2.0*x*np.sqrt(1-x*x)*np.sin(y)
+        #p9 = np.sqrt(1-x*x)*np.sin(y)
+        return 3./16./math.pi * ( UL + coeff[0]*L + coeff[1]*T + coeff[2]*I + coeff[3]*A + coeff[4]*P )
+        #return 3./16./math.pi * ( UL + coeff[0]*L + coeff[1]*T + coeff[2]*p7 + coeff[3]*p8 + coeff[4]*p9 )
 
     # NR Breit-Wigner
     def BW(self, x, mass):
         bw = 1.0/math.pi/self.width/(1+math.pow((x-mass)/self.width,2.0))
         return bw
+
+    # plot the sampling distribution of mass
+    def plot_BW(self):        
+        x = np.random.standard_cauchy(40000)
+        x = x[(x<3.0) & (x>-3.0)]
+        x *= self.width
+        x += 80.000
+        plt.hist(x, 40, normed=1, facecolor='g', alpha=0.75)    
+        plt.title('Truncated Breit-Wigner')
+        plt.xlabel('mass [Gev]')
+        plt.ylabel('Toys')
+        plt.axis([72., 88., 0, 0.25])
+        plt.grid(True)
+        plt.show()
+        plt.savefig(self.out_dir+'/grid_BW.png')
+        plt.close()
 
     # sample mass from BW
     def sample_BW(self, mass, truncate=True):

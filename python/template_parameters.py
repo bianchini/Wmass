@@ -40,24 +40,69 @@ Parameters = {
 }
 
 def pdf_test(pt=0.0,y=0.0, do_syst=0):
-
     val = 1.0
-
     # pt
     pt_max = 5.0
     if do_syst==+1:
         pt_max = 5.5
     elif do_syst==-1:
         pt_max = 4.5
-
     lambdaQCD = 0.200
     val *= math.exp(-(pt+lambdaQCD)/pt_max)*(pt+lambdaQCD)/pt_max/pt_max
-
     # y        
     y_width = 2.5
     val *= 1./math.sqrt(2*math.pi)/(y_width)*math.exp(-0.5*y*y/y_width/y_width)
-    
     return val
+
+def np_pdf_test(pt,y, do_syst):    
+    val = 1.0
+    # pt
+    pt_max = 5.0
+    if do_syst==+1:
+        pt_max = 5.5
+    elif do_syst==-1:
+        pt_max = 4.5
+    lambdaQCD = 0.200
+    val *= np.exp(-(pt+lambdaQCD)/pt_max)*(pt+lambdaQCD)/pt_max/pt_max
+    # y        
+    y_width = 2.5
+    val *= 1./math.sqrt(2*math.pi)/(y_width)*np.exp(-0.5*y*y/y_width/y_width)
+    return val
+
+def plot_pdf(var='pt'):
+
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    pt = np.linspace(0.0, 40.0, 40)
+    pt_eval = np.ones((40))
+    y = np.linspace(-4.5, 4.5, 40)
+    y_eval = np.zeros((40))
+
+    if var=='pt':
+        #plt.plot(pt, np_pdf_test(pt=pt,y=y_eval,do_syst=0), 'b', pt, np_pdf_test(pt=pt, y=y_eval, do_syst=+1), 'r--',  pt, np_pdf_test(pt=pt, y=y_eval, do_syst=-1), 'g--', linewidth=3)
+        plt.plot(pt, np_pdf_test(pt=pt,y=y_eval,do_syst=0), 'b', linewidth=3)
+        plt.title('$q_{T}$ spectrum')
+        plt.xlabel('$q_{T}$')
+        plt.ylabel('$d\sigma/dq_{T}$')
+        plt.axis([0, 40., 0, 0.015])
+    elif var=='y':
+        plt.plot(y, np_pdf_test(pt=pt_eval,y=y,do_syst=0), 'b', linewidth=3)
+        plt.title('$y$ spectrum')
+        plt.xlabel('$y$')
+        plt.ylabel('$d\sigma/dy$')
+        plt.axis([-4.5, 4.5, 0, 0.01])
+
+    plt.grid(True)
+    plt.show()
+    if var=='pt':
+        plt.savefig('./qT_spectrum.png')
+    elif var=='y':
+        plt.savefig('./y_spectrum.png')
+    plt.close()
+
+#plot_pdf(var='pt')
 
 
 def coefficients_test(pt=0.0,y=0.0):
@@ -120,15 +165,16 @@ def bin_ndarray(ndarray, new_shape, operation='sum'):
 
 params_test = copy.deepcopy(Parameters)
 params_test['params_W']['pt'] = np.linspace(0.0, 32.0, 65)
-#params_test['params_W']['pt'] = np.array([6.0])
+#params_test['params_W']['pt'] = np.array([20.0])
 params_test['params_W']['y'] = np.array([0.0])
 params_test['params_W']['mass'] = np.array([79.500,80.000,80.500])
-#params_test['params_W']['mass'] = np.array([79.500])
+#params_test['params_W']['mass'] = np.array([80.000])
 params_test['params_W']['A0'] = np.array([ 0.0, 2.0 ]) 
 params_test['params_W']['A1'] = np.array([ 0.0, 1.0 ]) 
 params_test['params_W']['A2'] = np.array([ 0.0, 1.0 ])
 params_test['params_W']['A3'] = np.array([ 0.0, 1.0 ]) 
 params_test['params_W']['A4'] = np.array([ 0.0, 2.0 ])
+
 
 params_test['params_template']['pt'] = np.append(np.linspace(0.0, 20.0, 6), np.array([26.0, 32.0]))
 #params_test['params_template']['pt'] = np.linspace(0.0, 20.0, 2)
@@ -140,3 +186,4 @@ params_test['params_template']['A1'] = params_test['params_W']['A1']
 params_test['params_template']['A2'] = params_test['params_W']['A2']
 params_test['params_template']['A3'] = params_test['params_W']['A3']
 params_test['params_template']['A4'] = params_test['params_W']['A4']
+

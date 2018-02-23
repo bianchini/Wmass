@@ -43,7 +43,7 @@ for iif,f in enumerate(files):
     if f[0]=='mass':
         A = (f[1]-float(mass))
     if do_deriv:
-        deriv += (-ul[0] + p[0])*(1./A)
+        deriv += ((-ul[0] + p[0])*(1./A) if abs(A)>0.0 else 0.0)
     else:
         deriv += p[0]
 
@@ -52,6 +52,7 @@ for iif,f in enumerate(files):
     plt.xlabel('eta')
     plt.ylabel('pt')
     if do_deriv:
+        #plt.title('df/d('+f[0][:-1]+str(iif+(2 if iif>2 else 0))+'), pt='+pt)
         plt.title('df/d('+f[0]+'), pt='+pt)
     else:
         plt.title(f[0]+', pt='+pt)

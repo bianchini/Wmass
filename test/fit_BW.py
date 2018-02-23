@@ -130,7 +130,7 @@ def run_all(var='Wdress', running=0, tag='' ):
 
 ###################
 #run_fromPrompt()
-#run_all(var='lhe',    running=0, tag='')
-#run_all(var='Wdress', running=0, tag='')
-run_all(var='WpreFSR', running=0, tag='')
+run_all(var='lhe',    running=0, tag='')
+run_all(var='Wdress', running=0, tag='')
+#run_all(var='WpreFSR', running=0, tag='')
 ###################

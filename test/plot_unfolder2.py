@@ -18,12 +18,12 @@ from array import array
 import numpy as np
 ROOT.TGaxis.SetMaxDigits(2)
 
-job =  '1e7_corr_cube_rebin4-1_morebins'
-j = 3
+job =  '1e7_newtemp_pt0-2_corr_p2_rebin4-4'
+j = 1
 toy = 0
 dir_name = 'TEST'
-params['params_template']['pt'] = np.array([0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 26.0, 32.0])
-#params['params_template']['y']  = np.array([0.0, 0.4, 0.8, 1.2, 1.6, 2.0, 2.4])
+params['params_template']['pt'] = np.array([0.0, 2.0, 4.0, 8.0, 12.0, 16.0, 20.0, 26.0, 32.0])
+params['params_template']['y']  = np.array([0.0, 0.4, 0.8, 1.2, 1.6, 2.0, 2.4])
 input_shapes_y  = params['params_template']['y']
 input_shapes_pt  = params['params_template']['pt']
 os.system('mkdir plots/'+dir_name)
@@ -35,11 +35,11 @@ res = pickle.load(f)
 
 bins = array( 'f',  input_shapes_pt )
 
-def plot_dsigma_dpt(res, pt_bin_name, y_bin_name, toy):
+def plot_dsigma_dpt(res, pt_bin_name, y_bin_name, toy, bin_width):
     fit = res[pt_bin_name+'_'+y_bin_name]['fit'][toy] 
     err = res[pt_bin_name+'_'+y_bin_name]['err'][toy] 
     true = res[pt_bin_name+'_'+y_bin_name]['true'][toy]    
-    return (fit, err, true)
+    return (fit/bin_width, err/bin_width, true/bin_width)
 
 def plot_A(res, pt_bin_name, pt, y_bin_name, toy,  coeff, deg):
     val = 0.0
@@ -77,7 +77,7 @@ for iy in range(len(input_shapes_y)-1):
 
         fit, err, true = 0.0, 0.0, 0.0
         if argv[1]=='pt':
-            (fit, err, true) = plot_dsigma_dpt(res, pt_bin_name, y_bin_name, toy)
+            (fit, err, true) = plot_dsigma_dpt(res, pt_bin_name, y_bin_name, toy, bin_width=(pt_bin[1]-pt_bin[0]))
         elif 'A' in argv[1]:
             deg = 1
             if 'cube' in job:
@@ -120,7 +120,7 @@ for iy in range(len(input_shapes_y)-1):
     p_fit.GetXaxis().SetLabelFont(43) 
     p_fit.GetXaxis().SetLabelSize(20)
     if argv[1]=='pt':
-        p_fit.GetYaxis().SetTitle('events')
+        p_fit.GetYaxis().SetTitle('events/GeV')
     else:
         p_fit.GetYaxis().SetTitle(argv[1])
     p_fit.GetYaxis().SetTitleSize(25)
