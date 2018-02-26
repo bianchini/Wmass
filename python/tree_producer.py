@@ -332,7 +332,7 @@ class TreeProducer:
                                               var='Wdress', 
                                               weight_name=w, 
                                               ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt()), 
-                                              ps_CS=(ps[1],ps[2]), 
+                                              ps_CS=(-ps[1], ps[2] + math.pi - (2*math.pi if (ps[2] + math.pi) > 2*math.pi else 0.0 ) ), 
                                               weight=self.variables['weights'][w] )
 
 
