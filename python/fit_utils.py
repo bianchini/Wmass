@@ -288,7 +288,7 @@ def draw_qt_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, 
     f.Close()
 
 
-def get_covariance(fname='./tree.root', var='Wdress', q='Wplus', coefficients=['A0'], weights={}, add_stat_uncert=False, postfix='',
+def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coefficients=['A0'], weights={}, add_stat_uncert=False, postfix='',
                    fix_to_zero=['A0','A1','A2','A3','A5','A6','A7'], fit_range=[0.0, 50.0]):
 
     # bins used for the (y,qt) plots
@@ -456,7 +456,7 @@ def get_covariance(fname='./tree.root', var='Wdress', q='Wplus', coefficients=['
             legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
             plt.xlabel('$q_{T}$ (GeV)', fontsize=20)
             plt.ylabel('$'+coeff[0]+'_{'+coeff[1]+'}$', fontsize=20)
-            plt.title(q+', $|y| \in ['+y_bin[2:6]+','+y_bin[6:11]+']$', fontsize=20)
+            plt.title(DY+', charge='+q[1:]+', $|y| \in ['+y_bin[2:6]+','+y_bin[6:11]+']$', fontsize=20)
             plt.show()
             plt.savefig('plots/coefficient_'+q+'_'+var+'_'+coeff+'_'+y_bin+'_fit.png')
             plt.close()            

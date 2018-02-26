@@ -203,7 +203,7 @@ class TreeProducer:
                         self.outtree.Fill()
                     continue
         
-            # the muon is the first ranked by pt if CC else the mu-
+            # the muon is the first ranked by pt if CC else the mu+
             mu = muons[0]
             if self.DY=='NC':
                 mu = (muons[0] if muons[0].pdgId()==-13 else muons[1])
@@ -212,7 +212,7 @@ class TreeProducer:
             if self.verbose:
                 printp('muon', mu, '')
 
-            # the neutrino is the first ranked by pt if CC else the mu+
+            # the neutrino is the first ranked by pt if CC else the mu-
             nu = None
             if self.DY=='CC':
                 nu = neutrinos[0]
@@ -325,6 +325,15 @@ class TreeProducer:
                                           ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt()), 
                                           ps_CS=(ps[1],ps[2]), 
                                           weight=self.variables['weights'][w] )
+                        if self.DY=='NC':
+                            fill_coefficients(histos=self.histos, 
+                                              charge=self.variables['nu_charge'][0], 
+                                              coefficients_for_histos=self.coefficients_for_histos,
+                                              var='Wdress', 
+                                              weight_name=w, 
+                                              ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt()), 
+                                              ps_CS=(ps[1],ps[2]), 
+                                              weight=self.variables['weights'][w] )
 
 
             # fill the tree
