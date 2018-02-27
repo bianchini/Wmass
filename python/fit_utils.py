@@ -298,12 +298,13 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
     nbins_y = np_bins_y.size - 1 
     nbins_qt = np_bins_qt.size - 1 
 
-    out = ROOT.TFile.Open('plots/'+'covariance_'+q+postfix+'.root', 'RECREATE')
+    out = ROOT.TFile.Open('plots/'+'covariance_'+q+'_'+postfix+'.root', 'RECREATE')
     tree = ROOT.TTree('cov','cov')
     variables = {}
 
-    import pickle
     results = {}
+    results['fit_range'] = fit_range
+
     covariances = {}
     orders = {}
 
@@ -400,7 +401,7 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
         else:                
             cov_map[syst] = np.cov(data[syst])
         # plot the matrix
-        syst_label = (q+'_'+syst)+postfix
+        syst_label = (q+'_'+syst)+'_'+postfix
         plot_cov_matrix(n_vars=n_vars, cov=cov_map[syst], label=syst_label, plot='corr')
 
     # total covariance matrix
@@ -410,11 +411,12 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
         cov_map['sum'] += cov_map[syst]
         if syst in ['pdf', 'scale']:
             cov_map['syst'] += cov_map[syst]
-    cov_label = (q+'_stat_plus_syst')+postfix
+    cov_label = (q+'_stat_plus_syst')+'_'+postfix
     plot_cov_matrix(n_vars=n_vars, cov=cov_map['sum'], label=cov_label, plot='corr')
 
     # save firt results as a pkl file
-    pickle.dump(results, open('plots/'+q+'_results'+postfix+'.pkl','wb') )
+    import pickle
+    pickle.dump(results, open('plots/fit_results_'+DY+'_'+q+'_'+postfix+'.pkl','wb') )
 
     bin_count = 0 
     last_bin = 16
@@ -470,3 +472,47 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
     
 
 
+def fit_BreitWigner(tree=ROOT.TTree(), running=0, var='', cut='', tag=''):
+
+    h = ROOT.TH1F('h', 'h', 140, 50., 110.)
+    h.Sumw2()
+    h.SetStats(0)
+    tree.Draw(var+'_mass>>h', 'weights[0]*('+cut+')')
+
+    fit = None
+    if running:
+        fit = ROOT.TF1('fit', '[0]*(x*x*[1]*[1]/(TMath::Power(x*x-[2]*[2],2) + x*x*x*x*([1]*[1])/([2]*[2])) )',  h.GetXaxis().GetXmin(), h.GetXaxis().GetXmax())
+        fit.SetParameter(0, h.Integral()*1.0)
+        fit.SetParameter(1,  2.000 )
+        fit.SetParameter(2, 80.000 )
+    else:
+        fit = ROOT.TF1('fit', '[0]*( 1.0/(TMath::Power(x*x-[2]*[2],2) + [2]*[2]*[1]*[1]) )',  h.GetXaxis().GetXmin(), h.GetXaxis().GetXmax())
+        fit.SetParameter(0, h.Integral()*1000.)
+        fit.SetParameter(1,  2.000 )
+        fit.SetParameter(2, 80.000 )
+
+    fit.SetNpx(10000)
+    r = h.Fit('fit', 'S')
+    print 'Chi2 = ', r.Chi2()
+    r.Print('V')
+
+    c = ROOT.TCanvas("c", "canvas", 600, 600) 
+    ROOT.gPad.SetLogy()
+    leg = ROOT.TLegend(0.10,0.75,0.55,0.88, "","brNDC")
+    leg.SetFillStyle(0)
+    leg.SetBorderSize(0)
+    leg.SetTextSize(0.03)
+    leg.SetFillColor(10)
+    h.SetMaximum(h.GetMaximum()*10)
+    h.SetTitle(cut)
+    h.SetXTitle('M_{W} [GeV]')
+    h.Draw()
+    leg.AddEntry(h, var+' M_{W}', 'P')
+    leg.AddEntry(fit, '#splitline{'+('Run.-width ' if running else '')+'BW M_{W}='+'{:05.3f}'.format(r.Parameter(2))+' #pm '+'{:05.3f}'.format(r.ParError(2))+', #Gamma_{W}='+'{:04.3f}'.format(r.Parameter(1))+' #pm '+'{:04.3f}'.format(r.ParError(1))+'}{#chi^{2}/ndof='+'{:02.0f}'.format(r.Chi2())+'/'+str(r.Ndf())+'}', 'L')
+    leg.Draw()
+    #raw_input()
+    if tag!='':
+        c.SaveAs('plots/fit_BW_'+('run-width_' if running else 'nonrun-width_')+var+'_'+tag+'.png')
+    c.IsA().Destructor( c )
+    leg.IsA().Destructor( leg )
+    return (r.Parameter(2), r.ParError(2), r.Parameter(1), r.ParError(1))
