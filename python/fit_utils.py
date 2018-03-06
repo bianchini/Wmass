@@ -336,6 +336,14 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
             results[coeff+'_'+y_bin+'_val_err'] = [hslice.GetBinError(i+1) for i in range(hslice.GetNbinsX())] 
             results[coeff+'_'+y_bin+'_fit'] = [] 
 
+            # add branches for bin-by-bin results
+            variables[coeff+'_'+y_bin+'_nbins'] = array('i', [hslice.GetNbinsX()] )            
+            tree.Branch(coeff+'_'+y_bin+'_nbins',  variables[coeff+'_'+y_bin+'_nbins'], coeff+'_'+y_bin+'_nbins'+'/I')
+            variables[coeff+'_'+y_bin+'_val'] = array('f', results[coeff+'_'+y_bin+'_val'] )            
+            tree.Branch(coeff+'_'+y_bin+'_val', variables[coeff+'_'+y_bin+'_val'], coeff+'_'+y_bin+'_val['+coeff+'_'+y_bin+'_nbins'+']'+'/F')
+            variables[coeff+'_'+y_bin+'_val_err'] = array('f', results[coeff+'_'+y_bin+'_val_err'] )            
+            tree.Branch(coeff+'_'+y_bin+'_val_err', variables[coeff+'_'+y_bin+'_val_err'], coeff+'_'+y_bin+'_val_err['+coeff+'_'+y_bin+'_nbins'+']'+'/F')
+
             # create tree branches
             for o in range(order+1):
                 nuis_name = coeff+'_'+y_bin+'_p'+str(o) 
@@ -348,7 +356,7 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
 
     # arrays that contain the coefficients for all pdf and scale variations
     data = {}
-    for syst in ['pdf', 'scale']:
+    for syst in ['scale', 'pdf']:
         ws =  weights[syst]
         data[syst] = np.zeros( (n_vars, len(ws)) )
         for iw,w in enumerate(ws):
@@ -373,7 +381,8 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
                         variables[nuis_name+'_id'][0] = int(w)
                         data[syst][vars_count][iw] = r.Parameter(o)
                         vars_count += 1
-            tree.Fill()    
+            if w==0:
+                tree.Fill()    
 
     # covariance matrix
     cov_map = {}

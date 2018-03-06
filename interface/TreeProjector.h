@@ -22,7 +22,7 @@ class TreeProjector {
 
  public:
   TreeProjector(const std::string&, const std::string&, const std::string&, const int&);
-  vector<TDF::TResultProxy<TH1D>> add_histo_with_cut(const vector<int>&, const string&, const vector<float>&, const string&, const vector<float>&, const string&, const vector<float>&);
+  vector<TDF::TResultProxy<TH1D>> plot_pt_with_qt_cut(const vector<int>&, const string&, const vector<float>&, const string&, const vector<float>&, const string&, const vector<float>&);
   float get_std(const vector<float>&);
   float get_max(const vector<float>&);
   int run_pt_bias_vs_qt();
@@ -32,6 +32,7 @@ class TreeProjector {
  private:
   bool verbose;
   int status;
+  int count_filters;
   ROOT::Experimental::TDataFrame* tdf;
   TFile* fout;
   TTree* tout;
