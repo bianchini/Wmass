@@ -6,10 +6,12 @@
 #include <TFile.h>
 #include <ROOT/TDataFrame.hxx>
 #include <TLorentzVector.h>
+#include <TTreeReader.h>
+#include <TTreeReaderValue.h>
 #include <TMath.h>
 #include <iostream>
 #include <string>
-#include<chrono>
+#include <chrono>
 
 using Farray_t = ROOT::Experimental::TDF::TArrayBranch<float>;
 using Iarray_t = ROOT::Experimental::TDF::TArrayBranch<int>;
@@ -36,6 +38,7 @@ class TreeProjector {
   ROOT::Experimental::TDataFrame* tdf;
   TFile* fout;
   TTree* tout;
+  TFile* fin;
 };
 
 #endif
