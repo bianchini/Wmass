@@ -8,6 +8,7 @@ TreeProjector::TreeProjector(const string& file_name="", const string& tree_name
   cout << "TreeProjector::TreeProjector()" << endl;
 
   // output file
+  fin = nullptr;
   fout = TFile::Open(out_name.c_str(), "RECREATE");
   tout = new TTree("tree", "tree");
   
@@ -84,7 +85,6 @@ int TreeProjector::run_test(){
   return 0;
 }
 
-
 vector<TDF::TResultProxy<TH1D>> TreeProjector::plot_pt_with_qt_cut(const vector<int>& weights, 
 								   const string& cut_var_qt, const vector<float>& qt_max, 
 								   const string& cut_var_y, const vector<float>& y_max, 
@@ -97,8 +97,12 @@ vector<TDF::TResultProxy<TH1D>> TreeProjector::plot_pt_with_qt_cut(const vector<
   char buffer[10];
   
   for(auto w : weights){
+
+    // define weight[w]
     auto get_weight = [w](Farray_t weights){return weights[w];};
     string weight_name = "weight_"+to_string(w);
+    auto tdf_tmp = tdf->Define(weight_name, get_weight, {"weights"} );
+
     for(auto qt : qt_max){
       sprintf(buffer, "qt%.0f", qt);
       auto cut_qt = [qt](float x){ return x>qt; };
@@ -106,7 +110,7 @@ vector<TDF::TResultProxy<TH1D>> TreeProjector::plot_pt_with_qt_cut(const vector<
       for(unsigned int iy=0; iy< y_max.size()-1 ; ++iy){
 	float y_down = y_max[iy];
 	float y_up = y_max[iy+1];
-	auto cut_y = [y_down, y_up](float x){ return (TMath::Abs(x)>=y_down && TMath::Abs(x)<y_up); };
+	auto cut = [qt, y_down, y_up](float x, float y){ return (x >= qt && TMath::Abs(y)>=y_down && TMath::Abs(y)<y_up); };
 	sprintf(buffer, "y%.1f_%.1f", y_down, y_up);
 	string y_name(buffer);
 	for(auto pt : pt_max){
@@ -114,12 +118,11 @@ vector<TDF::TResultProxy<TH1D>> TreeProjector::plot_pt_with_qt_cut(const vector<
 	  auto cut_pt = [pt](float x){ return x<pt; };
 	  string pt_name(buffer);
 	  string histo_name = qt_name+"_"+y_name+"_"+pt_name+"_"+weight_name;
-	  histos.push_back( (*tdf)
-			    .Filter( cut_qt, {cut_var_qt} )
-			    .Filter( cut_y,  {cut_var_y}  )
-			    .Filter( cut_pt, {plot_var}   )
-			    .Define(histo_name, get_weight, {"weights"} )
-			    .Histo1D( TH1D(("h_"+histo_name).c_str(),"", 200, 25.0, pt), plot_var, histo_name));
+	  histos.push_back( //(*tdf)
+			   tdf_tmp
+			   .Filter( cut_pt, {plot_var} )
+			   .Filter( cut, {cut_var_qt, cut_var_y}, qt_name+"_"+y_name )
+			   .Histo1D( TH1D(("h_"+histo_name).c_str(),"", 200, 25.0, pt), plot_var, weight_name));
 	  count_filters++;
 	}
       }
@@ -137,13 +140,13 @@ int TreeProjector::run_pt_bias_vs_qt(){
   // start the clock....
   auto t1 = high_resolution_clock::now();
 
-  vector<float> qt_max = {0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0};
-  vector<float> y_max  = {0.0, 5.0};
-  vector<float> pt_max = {55.0, 60.0, 65.0, 70.0};
-
-  //vector<float> qt_max = {0.0, 10.0, 20.0};
+  //vector<float> qt_max = {0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0};
   //vector<float> y_max  = {0.0, 5.0};
-  //vector<float> pt_max = {55.0};
+  //vector<float> pt_max = {55.0, 60.0, 65.0, 70.0};
+
+  vector<float> qt_max = {0.0, 30.0};
+  vector<float> y_max  = {0.0, 5.0};
+  vector<float> pt_max = {55.0};
 
   map<string, float> variables;
   vector<string> res = {"frac", "stat_err", "scale", "pdf", "tot"};
@@ -162,29 +165,29 @@ int TreeProjector::run_pt_bias_vs_qt(){
     }
   }
 
-  cout << "Filling nominal" << endl;
+
+  cout << " > Filling nominal" << endl;
   vector<int> weights_nominal= {0};
-  vector<TDF::TResultProxy<TH1D>> histos_nominal = plot_pt_with_qt_cut( weights_nominal, 
-									"Wdress_qt", qt_max, "Wdress_y", y_max, "Wbare_mu_pt", pt_max);
+  vector<TDF::TResultProxy<TH1D>> histos_nominal = plot_pt_with_qt_cut( weights_nominal, "Wdress_qt", qt_max, "Wdress_y", y_max, "Wbare_mu_pt", pt_max);
 
-  cout << "Filling PDF" << endl;
-  vector<int> weights_pdf = {}; for(int w = 9 ; w < 109; ++w) weights_pdf.push_back(w);
-  //vector<int> weights_pdf = {9};
-  std::vector<TDF::TResultProxy<TH1D>> histos_pdf = plot_pt_with_qt_cut( weights_pdf, 
-									 "Wdress_qt", qt_max, "Wdress_y", y_max, "Wbare_mu_pt", pt_max);
+  cout << " > Filling PDF" << endl;
+  //vector<int> weights_pdf = {}; for(int w = 9 ; w < 109; ++w) weights_pdf.push_back(w);
+  vector<int> weights_pdf = {9};
+  std::vector<TDF::TResultProxy<TH1D>> histos_pdf = plot_pt_with_qt_cut( weights_pdf, "Wdress_qt", qt_max, "Wdress_y", y_max, "Wbare_mu_pt", pt_max);
 
-  cout << "Filling Scale" << endl;
-  vector<int> weights_scale = {1,2,3,4,6,8};
-  //vector<int> weights_scale = {1};
-  std::vector<TDF::TResultProxy<TH1D>> histos_scale  = plot_pt_with_qt_cut( weights_scale, 
-									    "Wdress_qt", qt_max, "Wdress_y", y_max, "Wbare_mu_pt", pt_max);
+  cout << " > Filling Scale" << endl;
+  //vector<int> weights_scale = {1,2,3,4,6,8};
+  vector<int> weights_scale = {1};
+  std::vector<TDF::TResultProxy<TH1D>> histos_scale =plot_pt_with_qt_cut( weights_scale, "Wdress_qt", qt_max, "Wdress_y", y_max, "Wbare_mu_pt", pt_max);
 
+  cout << " > Total number of filters = " << count_filters << endl;
   fout->mkdir("pt_bias_vs_qt")->cd();
 
-  cout << "Writing..." << endl;
+  cout << " > Writing to disk..." << endl;
   for(auto h : histos_nominal) h->Write();
   for(auto h : histos_pdf)     h->Write();
   for(auto h : histos_scale)   h->Write();
+  cout << " > Done. Fill output tree" << endl;
 
   /////////////////////////////////////
 
@@ -229,8 +232,8 @@ int TreeProjector::run_pt_bias_vs_qt(){
 	variables[string(buffer)+"_tot"] = rms/mean_nominal; 
 	
 	if(verbose){
-	  cout << "pt<=" << pt << ", qt>=" << qt << ", " << y_down << "< y <" << y_up << ": "
-	       << "[frac=" << (integ/norm) << "], bias = " << rms/mean_nominal*(integ/norm) <<  " (stat = " << mean_err_nominal/mean_nominal << ")" << endl;      
+	  cout << "Selection: [pt<=" << pt << ", qt>=" << qt << ", " << y_down << "<y<" << y_up << "] : "
+	       << "[frac=" << (integ/norm) << "], dpT/pT = " << rms/mean_nominal*(integ/norm) <<  " (stat = " << mean_err_nominal/mean_nominal << ")" << endl;      
 	}
       }
     }    
@@ -244,8 +247,7 @@ int TreeProjector::run_pt_bias_vs_qt(){
 
   // stop the clock!
   auto t2 = high_resolution_clock::now();
-  cout << "Total number of filters = " << count_filters << endl;
-  cout << "Done in " << static_cast<int>(duration_cast<minutes>(t2-t1).count()) << " min." << endl;
+  cout << "Done in " << static_cast<int>(duration_cast<seconds>(t2-t1).count()) << " sec." << endl;
    
   return 0;
 }
