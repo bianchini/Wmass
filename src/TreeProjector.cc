@@ -95,13 +95,23 @@ vector<TDF::TResultProxy<TH1D>> TreeProjector::plot_pt_with_qt_cut(const vector<
 
   // for string formatting
   char buffer[10];
-  
+
+  // These lines are a performance optimisation to avoid to read multiple times
+  // the weights out of the dataset waiting that ROOT does this automatically.
+  static std::string cwname = "";
+  if ("" == cwname) {
+     cwname = "cached_weights";
+  } else {
+     cwname += "_";
+  }
+  auto tdf_with_weights = tdf->Define(cwname, [](const Farray_t& weights){ return weights;}, {"weights"} )
+
   for(auto w : weights){
 
     // define weight[w]
     auto get_weight = [w](Farray_t weights){return weights[w];};
     string weight_name = "weight_"+to_string(w);
-    auto tdf_tmp = tdf->Define(weight_name, get_weight, {"weights"} );
+    auto tdf_tmp = tdf_with_weights->Define(weight_name, get_weight, {cwname} );
 
     for(auto qt : qt_max){
       sprintf(buffer, "qt%.0f", qt);
