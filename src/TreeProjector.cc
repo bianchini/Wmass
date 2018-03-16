@@ -104,18 +104,18 @@ vector<TDF::TResultProxy<TH1D>> TreeProjector::plot_pt_with_qt_cut(const vector<
   } else {
      cwname += "_";
   }
-  auto tdf_with_weights = tdf->Define(cwname, [](const Farray_t& weights){ return weights;}, {"weights"} )
+  auto tdf_with_weights = tdf->Define(cwname, [](const Farray_t& weights){ return weights;}, {"weights"} );
 
   for(auto w : weights){
 
     // define weight[w]
     auto get_weight = [w](Farray_t weights){return weights[w];};
     string weight_name = "weight_"+to_string(w);
-    auto tdf_tmp = tdf_with_weights->Define(weight_name, get_weight, {cwname} );
+    auto tdf_tmp = tdf_with_weights.Define(weight_name, get_weight, {cwname} );
+    //auto tdf_tmp = tdf->Define(weight_name, get_weight, {"weights"} );
 
     for(auto qt : qt_max){
       sprintf(buffer, "qt%.0f", qt);
-      auto cut_qt = [qt](float x){ return x>qt; };
       string qt_name(buffer);
       for(unsigned int iy=0; iy< y_max.size()-1 ; ++iy){
 	float y_down = y_max[iy];
