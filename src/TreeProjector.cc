@@ -95,24 +95,19 @@ vector<TDF::TResultProxy<TH1D>> TreeProjector::plot_pt_with_qt_cut(const vector<
 
   // for string formatting
   char buffer[10];
-
-  // These lines are a performance optimisation to avoid to read multiple times
-  // the weights out of the dataset waiting that ROOT does this automatically.
-  static std::string cwname = "";
-  if ("" == cwname) {
-     cwname = "cached_weights";
-  } else {
-     cwname += "_";
-  }
-  auto tdf_with_weights = tdf->Define(cwname, [](const Farray_t& weights){ return weights;}, {"weights"} );
+  
+  // We define here a temporary variable holding the weights collections to workaround
+  // a performance degradation being fixed in ROOT proper.
+  auto toVector = [](Farray_t weights){std::vector<float> v(weights.begin(), weights.end()); return v;};
+  static auto tdf_cachedWeights = tdf->Define("weights_cached", toVector, {"weights"} );
 
   for(auto w : weights){
 
     // define weight[w]
-    auto get_weight = [w](Farray_t weights){return weights[w];};
+    auto get_weight = [w](std::vector<float> &weights){return weights[w];};
     string weight_name = "weight_"+to_string(w);
-    auto tdf_tmp = tdf_with_weights.Define(weight_name, get_weight, {cwname} );
-    //auto tdf_tmp = tdf->Define(weight_name, get_weight, {"weights"} );
+
+    auto tdf_tmp = tdf_cachedWeights.Define(weight_name, get_weight, {"weights_cached"} );
 
     for(auto qt : qt_max){
       sprintf(buffer, "qt%.0f", qt);
