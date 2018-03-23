@@ -99,7 +99,7 @@ vector<TDF::TResultProxy<TH1D>> TreeProjector::plot_pt_with_qt_cut(const vector<
   for(auto w : weights){
 
     // define weight[w]
-    auto get_weight = [w](Farray_t weights){return weights[w];};
+    auto get_weight = [w](Farray_t &weights){return weights[w];};
     string weight_name = "weight_"+to_string(w);
     auto tdf_tmp = tdf->Define(weight_name, get_weight, {"weights"} );
 

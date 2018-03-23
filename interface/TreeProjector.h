@@ -13,8 +13,8 @@
 #include <string>
 #include <chrono>
 
-using Farray_t = ROOT::Experimental::TDF::TArrayBranch<float>;
-using Iarray_t = ROOT::Experimental::TDF::TArrayBranch<int>;
+using Farray_t = ROOT::Experimental::VecOps::TVec<float>;
+using Iarray_t = ROOT::Experimental::VecOps::TVec<int>;
 
 using namespace std;
 using namespace ROOT::Experimental;
