@@ -98,13 +98,13 @@ vector<TDF::TResultProxy<TH1D>> TreeProjector::plot_pt_with_qt_cut(const vector<
   
   // We define here a temporary variable holding the weights collections to workaround
   // a performance degradation being fixed in ROOT proper.
-  auto toVector = [](Farray_t weights){std::vector<float> v(weights.begin(), weights.end()); return v;};
+  auto toTVector = [](Farray_t &weights){std::vector<float> v(weights.begin(), weights.end()); return v;};
   static auto tdf_cachedWeights = tdf->Define("weights_cached", toVector, {"weights"} );
 
   for(auto w : weights){
 
     // define weight[w]
-    auto get_weight = [w](Farray_t &weights){return weights[w];};
+    auto get_weight = [w](std::vector<float> &weights){return weights[w];};
 
     string weight_name = "weight_"+to_string(w);
 
