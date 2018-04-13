@@ -8,6 +8,7 @@ from ROOT import TLorentzVector
 import time
 import math
 import os
+import pickle
 
 from tree_utils import *
 
@@ -19,7 +20,7 @@ from DataFormats.FWLite import Handle, Events
 
 class TreeProducer:
 
-    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test', save_tree=True, save_histo=False):
+    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test', save_tree=True, save_histo1=False, save_histo2=False):
     
         print "****** TreeProducer *****"
         print 'Running for '+DY+' Drell-Yan'
@@ -29,9 +30,6 @@ class TreeProducer:
 
         # save the TTree in the output file
         self.save_tree = save_tree
-
-        # save the histograms in the output file
-        self.save_histo = save_histo
 
         # open output file
         self.outfile = None
@@ -49,10 +47,22 @@ class TreeProducer:
         #self.weights_for_histos = [0]
         self.weights_for_histos = range(109)
         self.coefficients_for_histos = ['A0','A1','A2','A3','A4','A5','A6','A7']
-        if self.save_histo:
+
+        # save the histograms in the output file
+        self.save_histo1 = save_histo1 
+        if self.save_histo1:
             self.histos = add_histo2D(charges=['Wminus','Wplus'], var=['Wdress'], 
                                       coeff=self.coefficients_for_histos, 
                                       weights=self.weights_for_histos)
+
+        # read result on fit parameters
+        self.save_histo2 = save_histo2
+        self.fit_result_Wplus = None
+        self.fit_result_Wminus = None
+        if save_histo2:
+            self.fit_result_Wplus = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_Wplus_all.pkl') )
+            self.fit_result_Wminus = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_Wminus_all.pkl') )
+            self.histos = add_histo2D_CS( charges=['Wminus','Wplus'], var=['Wdress'], coeff_eval=['fit','val'])
 
         # add branches to tree (needed even if self.save_tree=False)
         self.variables = add_vars(self.outtree)
@@ -63,7 +73,6 @@ class TreeProducer:
                 self.filenames.append('root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/DYJetsToLL_M-50_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6_ext1-v2/120000/02A210D6-F5C3-E611-B570-008CFA197BD4.root')
             else:
                 self.filenames.append('root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/0AF0207B-EFBE-E611-B4BE-0CC47A7FC858.root')
-
 
         print "Opening file..."
         self.events = Events(self.filenames)
@@ -88,7 +97,7 @@ class TreeProducer:
             if self.debug:
                 if i%100==0:
                     print "Processing event", i, '/', self.events.size()
-                if i>1000:
+                if i>10000:
                     break
 
             # fill with default values
@@ -313,27 +322,44 @@ class TreeProducer:
                 self.variables[t+'_cosCS'][0] = ps[1] 
                 self.variables[t+'_phiCS'][0] = ps[2] 
 
-                if self.save_histo:
+                if self.save_histo1:
                     if t not in ['Wdress']:
                         continue
                     for w in self.weights_for_histos:
+                        q1 = 'Wplus' if self.variables['mu_charge'][0]==-13 else 'Wminus'
                         fill_coefficients(histos=self.histos, 
-                                          charge=self.variables['mu_charge'][0], 
+                                          q=q1, 
                                           coefficients_for_histos=self.coefficients_for_histos,
-                                          var='Wdress', 
+                                          var=t,
                                           weight_name=w, 
                                           ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt()), 
                                           ps_CS=(ps[1],ps[2]), 
                                           weight=self.variables['weights'][w] )
                         if self.DY=='NC':
+                            q2 = 'Wplus' if self.variables['nu_charge'][0]==-13 else 'Wminus'
                             fill_coefficients(histos=self.histos, 
-                                              charge=self.variables['nu_charge'][0], 
+                                              q=q2,
                                               coefficients_for_histos=self.coefficients_for_histos,
-                                              var='Wdress', 
+                                              var=t,
                                               weight_name=w, 
                                               ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt()), 
                                               ps_CS=(-ps[1], ps[2] + math.pi - (2*math.pi if (ps[2] + math.pi) > 2*math.pi else 0.0 ) ), 
                                               weight=self.variables['weights'][w] )
+
+                if self.save_histo2:
+                    if t not in ['Wdress']:
+                        continue
+                    q1 = 'Wplus' if self.variables['mu_charge'][0]==-13 else 'Wminus'
+                    fill_weighted_CS(res=getattr(self, "fit_result_"+q1),
+                                     histos=self.histos, 
+                                     q=q1,
+                                     var=t,
+                                     coeff_eval=['fit','val'],
+                                     ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt()), 
+                                     ps_CS=(ps[1],ps[2]),
+                                     weight=self.variables['weights'][0],
+                                     coeff=['A0', 'A1', 'A2', 'A3', 'A4']
+                                     )
 
 
             # fill the tree
@@ -348,7 +374,7 @@ class TreeProducer:
         if self.save_tree:
             self.outtree.Write("tree", ROOT.TObject.kOverwrite)
 
-        if self.save_histo:
+        if self.save_histo1 or self.save_histo2:
             for kq,q in self.histos.items():
                 print 'Charge: '+kq
                 self.outfile.mkdir(kq)
@@ -359,7 +385,7 @@ class TreeProducer:
                         print '\t\tVar: '+kc
                         self.outfile.mkdir(kq+'/'+kv+'/'+kc)
                         for kw,w in c.items():
-                            print '\t\t\tWeight: '+kw+'.....', w[0].GetEntries(), 'entries'
+                            print '\t\t\tHisto: '+kw+'.....', w[0].GetEntries(), 'entries'
                             self.outfile.cd(kq+'/'+kv+'/'+kc)
                             w[0].Write('', ROOT.TObject.kOverwrite)
                             w[1].Write('', ROOT.TObject.kOverwrite)

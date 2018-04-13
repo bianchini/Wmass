@@ -5,6 +5,6 @@ from sys import argv
 
 from tree_producer import TreeProducer
 
-treeProducer = TreeProducer(DY='CC', verbose=False, debug=True, filenames=[], save_tree=False, save_histo=True)
+treeProducer = TreeProducer(DY='CC', verbose=False, debug=True, filenames=[], save_tree=False, save_histo1=False,  save_histo2=True)
 treeProducer.run()
 
