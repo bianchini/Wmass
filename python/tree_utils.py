@@ -10,16 +10,16 @@ np_bins_qt_p0 = np.linspace( 0.0, 10.0, 6)
 np_bins_qt_p1 = np.linspace(12.0, 20.0, 5)
 np_bins_qt_p2 = np.linspace(24.0, 40.0, 5)
 np_bins_qt_p3 = np.array([60, 80, 100, 150, 200]) 
-np_bins_qt = np.append( np.append(np_bins_qt_p0, np_bins_qt_p1), np.append( np_bins_qt_p2, np_bins_qt_p3))
+np_bins_qt    = np.append( np.append(np_bins_qt_p0, np_bins_qt_p1), np.append( np_bins_qt_p2, np_bins_qt_p3))
 np_bins_qt_width = np.array( [np_bins_qt[i+1]-np_bins_qt[i] for i in range(np_bins_qt.size-1)] )
-np_bins_qt_mid = np.array( [(np_bins_qt[i+1]+np_bins_qt[i])*0.5 for i in range(np_bins_qt.size-1)] )
+np_bins_qt_mid   = np.array( [(np_bins_qt[i+1]+np_bins_qt[i])*0.5 for i in range(np_bins_qt.size-1)] )
 
 np_bins_y_p0 = np.linspace(-5.0, -2.5,  6)
 np_bins_y_p1 = np.linspace(-2.0, +2.0, 21)
 np_bins_y_p2 = np.linspace(+2.5, +5.0,  6)
-np_bins_y  = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
+np_bins_y    = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
 np_bins_y_width = np.array( [np_bins_y[i+1]-np_bins_y[i] for i in range(np_bins_y.size-1)] )
-np_bins_y_mid = np.array( [(np_bins_y[i+1]+np_bins_y[i])*0.5 for i in range(np_bins_y.size-1)] )
+np_bins_y_mid   = np.array( [(np_bins_y[i+1]+np_bins_y[i])*0.5 for i in range(np_bins_y.size-1)] )
 
 def isFromW(p):
     mother = p
@@ -60,6 +60,8 @@ def azimuth(phi):
         phi += 2*math.pi
     return phi
 
+# Boost lab --> CS using a parametric representation of the boost matrix
+# flip_z = the direction of the z-axis in the CS frame is determined by the sign of pz in the lab
 def boost_to_CS_matrix(Lp4=ROOT.TLorentzVector(0,0,0,0), 
                        Wp4=ROOT.TLorentzVector(0,0,0,0) ):
 
@@ -84,6 +86,8 @@ def boost_to_CS_matrix(Lp4=ROOT.TLorentzVector(0,0,0,0),
     ps = (xCS[0], xCS[3]/math.sqrt(xCS[1]*xCS[1] + xCS[2]*xCS[2] + xCS[3]*xCS[3])*flip_z, azimuth(math.atan2(xCS[2],xCS[1])*flip_z) )
     return ps
 
+# Boost lab --> CS using the TLorentzVector class
+# flip_z = the direction of the z-axis in the CS frame is determined by the sign of pz in the lab
 def boost_to_CS_root(Lp4=ROOT.TLorentzVector(0,0,0,0), 
                      Wp4=ROOT.TLorentzVector(0,0,0,0) ):
     
@@ -149,6 +153,8 @@ def fill_default(variables):
     for key,var in variables.items():
         var[0] = 0.0
 
+# Create 2D maps for (qT,y) filled with the mean of the test functions
+# The binning is taken from global variables 
 def add_histo2D(charges=['Wminus','Wplus'], var=['Wdress'], coeff=['A0','A1','A2','A3','A4','A5', 'A6', 'A7'], weights=[0]):
     # binning
     bins_qt = array( 'f',  np_bins_qt )
@@ -170,6 +176,8 @@ def add_histo2D(charges=['Wminus','Wplus'], var=['Wdress'], coeff=['A0','A1','A2
                     histos[q][v][c][str(w)][1].Sumw2()        
     return histos
 
+# Create 2D maps for the (cos*,phi*) distribution in bins of (qT,y)
+# The binning is decided inside
 def add_histo2D_CS(charges=['Wminus','Wplus'], var=['Wdress'], coeff_eval=['fit','val']):
     # binning
     bins_cos = array( 'f',  np.linspace(-1.0, 1.0, 21) )
@@ -194,9 +202,8 @@ def add_histo2D_CS(charges=['Wminus','Wplus'], var=['Wdress'], coeff_eval=['fit'
         
     return histos
 
-
+# The test function for projecting-out one harmonic at the time
 def test_A(coeff='A0', ps=(0.0, 0.0)):
-
     val = 0.0
     if coeff=='A0':
         val = 20./3.*(0.5*(1-3*ps[0]*ps[0])) + 2./3.
@@ -216,36 +223,15 @@ def test_A(coeff='A0', ps=(0.0, 0.0)):
         val = 4.*math.sqrt(1-ps[0]*ps[0])*math.sin(ps[1])
     return val
 
+# Fill a 2D map with the value of the test function needed to project-out one harmonic at the time.
 def fill_coefficients(histos={}, q='', coefficients_for_histos=['A0'], var='Wdress', weight_name=0, ps_W=(), ps_CS=(), weight=1.0):
     for coeff in coefficients_for_histos:
         (h,h_norm) = histos[q][var][coeff][str(weight_name)]
         h.Fill(ps_W[0],ps_W[1], weight*test_A(coeff=coeff,ps=ps_CS) )
         h_norm.Fill(ps_W[0],ps_W[1], weight )
 
-def fill_weighted_CS(res={}, histos={}, q='', var='Wdress', coeff_eval=['fit'], ps_W=(), ps_CS=(), weight=1.0, coeff=['A0', 'A1', 'A2', 'A3', 'A4']):
-    y = abs(ps_W[0])
-    iy_low = np.where(np_bins_y<=y)[0][-1] if np.where(np_bins_y<=y)[0].size>0 else -1
-    iy_high = np.where(np_bins_y>y)[0][0] if np.where(np_bins_y>y)[0].size>0 else -1
-    if iy_low==-1 or iy_high==-1:
-        #print 'y=', y, 'yields (', iy_low, iy_high, ') => return'
-        return
-    bin_y = 'y{:03.2f}'.format(np_bins_y[iy_low])+'_'+'y{:03.2f}'.format(np_bins_y[iy_high])
-    qt = ps_W[1]
-    iqt_low = np.where(np_bins_qt<=qt)[0][-1] if np.where(np_bins_qt<=qt)[0].size>0 else -1
-    iqt_high = np.where(np_bins_qt>qt)[0][0] if np.where(np_bins_qt>qt)[0].size>0 else -1
-    if iqt_low==-1 or iqt_high==-1:
-        #print 'qt=', qt, 'yields (', iqt_low, iqt_high, ') => return'
-        return
-    #print 'qt=', qt, 'yields bins (', iqt_low, iqt_high, ') => Ok'
-    #print 'y=', y, 'yields bins (', iy_low, iy_high, ') => Ok'
-    bin_qt = 'qt{:03.1f}'.format(np_bins_qt[iqt_low])+'_'+'qt{:03.1f}'.format(np_bins_qt[iqt_high])
-    for ceval in coeff_eval:
-        name = q+'_'+var+'_'+ceval+'_'+bin_y+'_'+bin_qt
-        (h,h_norm) = histos[q][var][ceval][name]
-        h.Fill(ps_CS[0], ps_CS[1], weight/weight_coeff(res=res, coeff_eval=ceval, bin_y=bin_y, qt=ps_W[1], ps=ps_CS, coeff=coeff) )
-        h_norm.Fill(ps_CS[0], ps_CS[1], weight)
-
-def angular_pdf(ps=(), coeff_vals=[]):
+# Evaluate the angular pdf given a PS point (cos*,phi*) and the value of the 8 parameters
+def angular_pdf(ps=(), coeff_vals=[], verbose=False):
     (x,y) = ps
     UL = (1.0 + x*x)
     L = 0.5*(1-3*x*x)
@@ -256,9 +242,16 @@ def angular_pdf(ps=(), coeff_vals=[]):
     p7 = (1-x*x)*math.sin(2*y)
     p8 = 2.0*x*math.sqrt(1-x*x)*math.sin(y)
     p9 = math.sqrt(1-x*x)*math.sin(y)
+    if verbose:
+        print ('\t pdf = 3./16./math.pi * ( UL + %s*L + %s*T + %s*I + %s*A + %s*P + %s*p7 + %s*p8 + %s*p9)' % (coeff_vals[0], coeff_vals[1], coeff_vals[2], coeff_vals[3], coeff_vals[4], coeff_vals[5], coeff_vals[6], coeff_vals[7]) )
     return 3./16./math.pi * ( UL + coeff_vals[0]*L + coeff_vals[1]*T + coeff_vals[2]*I + coeff_vals[3]*A + coeff_vals[4]*P + coeff_vals[5]*p7 + coeff_vals[6]*p8 + coeff_vals[7]*p9)
 
-def weight_coeff(res={}, coeff_eval='fit', bin_y='', qt=0.0, ps=(), coeff=['A0']):
+# determine the angular_pdf in a y-bin as a function of qt (read results 'res' from external file)
+# Two modes:
+#  - 'fit' : read the coefficients of a polynomial fit to A(qT). Rebuild the polynomnial from it.
+#  - 'val' : read the bin-by-bin value of A
+# Negative values for the pdf are possible, but expected only for qT outside the fit range in 'fit' mode 
+def weight_coeff(res={}, coeff_eval='fit', bin_y='', qt=0.0, ps=(), coeff=['A0'], verbose=False):
     coeff_vals = np.zeros(8)
     for ic,c in enumerate(coeff):
         coeff_val = 0.0
@@ -268,11 +261,44 @@ def weight_coeff(res={}, coeff_eval='fit', bin_y='', qt=0.0, ps=(), coeff=['A0']
                 coeff_val += math.pow(qt,o)*res[c+'_'+bin_y+'_fit'][o]
         elif coeff_eval == 'val':
             iqt = np.where(np_bins_qt<=qt)[0][-1]
-            val = res[c+'_'+bin_y+'_val'][iqt]
+            coeff_val = res[c+'_'+bin_y+'_val'][iqt]
         coeff_vals[ic] = coeff_val
     val = angular_pdf(ps=ps, coeff_vals=coeff_vals)
-    if abs(val) > 0.0:
+    if abs(val) > 0.0:        
+        if verbose:
+            print 'Fit type', coeff_eval, ': bin', bin_y, 'at qt =', qt, 'for ps=', ps, 'yields val = ', val
         return val
     else:
-        #print 'Fit type', coeff_eval, ': bin', bin_y, 'at qt =', qt, 'for ps=', ps, 'yields pdf = ', val, '<=0.0. Return 1.0'
+        if verbose:
+            print ('Fit type', coeff_eval, ': bin', bin_y, 'at qt =', qt, 'for ps=', ps, 'yields pdf = ', val, '<=0.0. Return 1.0')
         return 1.0
+
+# Given a ps_W point, find the bin in np_bins_y/qt. Return if the point is not within the bins
+# Fill a 2D map with ps_CS with weight 1/weight_coeff
+def fill_weighted_CS(res={}, histos={}, q='', var='Wdress', coeff_eval=['fit'], ps_W=(), ps_CS=(), weight=1.0, coeff=['A0', 'A1', 'A2', 'A3', 'A4'], verbose=False):
+    y = abs(ps_W[0])
+    iy_low  = np.where(np_bins_y<=y)[0][-1] if np.where(np_bins_y<=y)[0].size>0 else -1
+    iy_high = np.where(np_bins_y>y)[0][0]   if np.where(np_bins_y>y)[0].size>0  else -1
+    if iy_low==-1 or iy_high==-1:
+        if verbose:
+            print 'y=', y, 'yields (', iy_low, iy_high, ') => return'
+        return
+    bin_y = 'y{:03.2f}'.format(np_bins_y[iy_low])+'_'+'y{:03.2f}'.format(np_bins_y[iy_high])
+    qt = ps_W[1]
+    iqt_low = np.where(np_bins_qt<=qt)[0][-1] if np.where(np_bins_qt<=qt)[0].size>0 else -1
+    iqt_high = np.where(np_bins_qt>qt)[0][0] if np.where(np_bins_qt>qt)[0].size>0 else -1
+    if iqt_low==-1 or iqt_high==-1:
+        if verbose:
+            print 'qt=', qt, 'yields (', iqt_low, iqt_high, ') => return'
+        return
+    if verbose:
+        print 'qt=', qt, 'yields bins (', iqt_low, iqt_high, ') => Ok'
+        print 'y=', y, 'yields bins (', iy_low, iy_high, ') => Ok'
+    bin_qt = 'qt{:03.1f}'.format(np_bins_qt[iqt_low])+'_'+'qt{:03.1f}'.format(np_bins_qt[iqt_high])
+    for ceval in coeff_eval:
+        name = q+'_'+var+'_'+ceval+'_'+bin_y+'_'+bin_qt
+        (h,h_norm) = histos[q][var][ceval][name]
+        h.Fill(ps_CS[0], ps_CS[1], weight/weight_coeff(res=res, coeff_eval=ceval, bin_y=bin_y, qt=ps_W[1], ps=ps_CS, coeff=coeff) )
+        h_norm.Fill(ps_CS[0], ps_CS[1], weight)
+
+###########################
