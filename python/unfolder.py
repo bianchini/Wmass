@@ -7,6 +7,12 @@ from pprint import pprint
 import numpy as np
 import numpy.random as ran
 
+from sys import argv
+argv.append( '-b-' )
+import ROOT
+ROOT.gROOT.SetBatch(True)
+argv.remove( '-b-' )
+
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -636,7 +642,8 @@ class Unfolder:
                             else:
                                 for e in range(self.n_taylor):
                                     index_e = iy*( (len(self.loads)-2)*self.n_taylor + 1*(self.n_taylor+1) ) + (iload-1)*self.n_taylor + e
-                                    power = e+2
+                                    #power = e+2
+                                    power = 2*(e+1)
                                     K[index, index_e] = math.pow( 0.5*(pt_bin[0]+pt_bin[1]), power)/math.factorial(power)
 
 
@@ -930,6 +937,7 @@ class Unfolder:
         massL, massH =  ROOT.Double(0.), ROOT.Double(0.) 
         status = -1
         if self.strategy == 0:
+            self.arglist[0] = self.n_points
             self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
             self.arglist[0] = 1
             self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
@@ -975,6 +983,7 @@ class Unfolder:
 
         self.cov = ROOT.TMatrixDSym(self.n_param)
         self.gMinuit.mnemat(self.cov.GetMatrixArray(), self.n_param)
+        self.plot_cov_matrix()
 
         self.update_result('edm', float(edm))
         self.update_result('amin', float(amin))
@@ -1055,6 +1064,26 @@ class Unfolder:
         if self.do_semianalytic:
             print 'Bins: ', self.data.size, ', number of d.o.f.: ', self.ndof, ' chi2: '+'{:4.1f}'.format(float(amin)), ' (p-value: '+'{:4.3f}'.format(pvalue)+')'
         print('Fit done in '+'{:4.1f}'.format(self.result['time'][-1])+' seconds')
+
+    
+    def plot_cov_matrix(self):
+        c = ROOT.TCanvas("canvas", "canvas", 600, 600) 
+        n_free = self.gMinuit.GetNumFreePars()
+        h2 = ROOT.TH2D('cov', '', n_free, 0, n_free, n_free, 0, n_free)
+        h2.SetStats(0) 
+        for i in range(n_free):
+            #key_i = [key for key, value in self.map_params.iteritems() if value == i][0]
+            for j in range(n_free):
+                #key_j = [key for key, value in self.map_params.iteritems() if value == j][0]
+                rho_ij = self.cov(i,j)/math.sqrt(self.cov(i,i)*self.cov(j,j)) if self.cov(i,i)>0.0 and self.cov(j,j)>0.0 else 0.0
+                h2.SetBinContent(i+1, j+1, rho_ij )
+                #h2.GetXaxis().SetBinLabel(i+1, key_i )
+                #h2.GetYaxis().SetBinLabel(j+1, key_j )
+        h2.Draw("COLZ")
+        c.SaveAs('covariance_'+self.job_name+'.png')
+        c.SaveAs('covariance_'+self.job_name+'.C')
+        c.IsA().Destructor( c )
+
 
     def update_result(self, var, val):
         if not self.result.has_key(var):
