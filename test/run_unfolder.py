@@ -13,8 +13,8 @@ params_test['params_template']['pt'] = np.array([0.0, 2.0, 4.0, 8.0, 12.0, 16.0,
 #params_test['params_template']['pt'] = np.linspace(0.0, 20.0, 2)
 #params_test['params_template']['pt'] = np.linspace(0.0, 20.0, 6)
 #params_test['params_template']['y']  = np.linspace(0.0, 0.8, 3)
-#params_test['params_template']['y']  = np.array([0.0, 0.4, 0.8, 1.2, 1.6, 2.0, 2.4])
-params_test['params_template']['y']  = np.array([0.0, 0.4])
+params_test['params_template']['y']  = np.array([0.0, 0.4, 0.8, 1.2, 1.6, 2.0, 2.4])
+#params_test['params_template']['y']  = np.array([0.0, 0.4])
 #params_test['params_template']['y']  = np.array([0.0, 0.40])
 #params_test['params_template']['y']  = np.linspace(0.0, 0.4, 2)
 #params_test['params_template']['y']  = np.linspace(0.0, 3.6, 10)
@@ -39,7 +39,7 @@ if len(argv)==4:
 
 unfolder = Unfolder(input_dir=(os.environ['CMSSW_BASE']+'/src/Wmass/data/TEST/'), 
                     params=params_test, 
-                    rebin=(50,4),
+                    rebin=(4,4),
                     mass=80.000, 
                     num_events=num_events, 
                     fix=fix, 
@@ -53,8 +53,8 @@ unfolder = Unfolder(input_dir=(os.environ['CMSSW_BASE']+'/src/Wmass/data/TEST/')
                     decorrelate_full=False,
                     do_semianalytic=True,
                     do_taylor_expansion=True,
-                    n_taylor=2,
-                    add_constant_A4=False,
+                    n_taylor=3,
+                    add_constant_A4=True,
                     run_minos=False,
                     gen_toy=[0.0, 0.0, 0.0, 0.0, 0.0],
                     do_syst=0
