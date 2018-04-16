@@ -158,7 +158,7 @@ def draw_y_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, d
         for q in ['Wplus', 'Wminus']:
             h = histos[q] 
             h_norm = histos[q+'_norm']
-            y_bin = 'y_{:03.1f}'.format(h.GetXaxis().GetBinLowEdge(y))+'-'+'{:03.1f}'.format(h.GetXaxis().GetBinLowEdge(y)+h.GetXaxis().GetBinWidth(y))
+            y_bin = 'y{:03.2f}'.format(h.GetXaxis().GetBinLowEdge(y))+'_'+'y{:03.2f}'.format(h.GetXaxis().GetBinLowEdge(y)+h.GetXaxis().GetBinWidth(y))
             print 'Bin Y: ', y_bin
             hslice_minus = h.ProjectionY(str(y)+'_'+q+'_minus_py', nbins_y+1-y, nbins_y+1-y)
             hslice_plus  = h.ProjectionY(str(y)+'_'+q+'_plus_py', y, y)
@@ -168,7 +168,7 @@ def draw_y_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, d
             hslice_minus.Add(hslice_plus)
             hnorm_minus.Add(hnorm_plus)
             hslice_minus.Divide(hnorm_minus)
-            hslice_minus.SetTitle(coeff[0]+'_{'+coeff[1]+'} for |y| #in ['+y_bin[2:]+']')
+            hslice_minus.SetTitle(coeff[0]+'_{'+coeff[1]+'} for |y| #in ['+y_bin[1:]+']')
             hslice_minus.SetMinimum(ranges[coeff][0])
             hslice_minus.SetMaximum(ranges[coeff][1])
             hslice_minus.SetStats(0)
@@ -315,7 +315,7 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
     n_vars = 0
     for coeff in coefficients:
         for y in range(nbins_y/2+1, nbins_y+1):
-            y_bin = 'y_{:03.1f}'.format(np_bins_y[y-1])+'_'+'{:03.1f}'.format(np_bins_y[y])
+            y_bin = 'y{:03.2f}'.format(np_bins_y[y-1])+'_'+'y{:03.2f}'.format(np_bins_y[y])
             print 'Bin Y: ', y_bin
             name = q+'_'+str(0)
             h = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(0))
@@ -337,12 +337,12 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
             results[coeff+'_'+y_bin+'_fit'] = [] 
 
             # add branches for bin-by-bin results
-            variables[coeff+'_'+y_bin+'_nbins'] = array('i', [hslice.GetNbinsX()] )            
-            tree.Branch(coeff+'_'+y_bin+'_nbins',  variables[coeff+'_'+y_bin+'_nbins'], coeff+'_'+y_bin+'_nbins'+'/I')
-            variables[coeff+'_'+y_bin+'_val'] = array('f', results[coeff+'_'+y_bin+'_val'] )            
-            tree.Branch(coeff+'_'+y_bin+'_val', variables[coeff+'_'+y_bin+'_val'], coeff+'_'+y_bin+'_val['+coeff+'_'+y_bin+'_nbins'+']'+'/F')
-            variables[coeff+'_'+y_bin+'_val_err'] = array('f', results[coeff+'_'+y_bin+'_val_err'] )            
-            tree.Branch(coeff+'_'+y_bin+'_val_err', variables[coeff+'_'+y_bin+'_val_err'], coeff+'_'+y_bin+'_val_err['+coeff+'_'+y_bin+'_nbins'+']'+'/F')
+            #variables[coeff+'_'+y_bin+'_nbins'] = array('i', [hslice.GetNbinsX()] )            
+            #tree.Branch(coeff+'_'+y_bin+'_nbins',  variables[coeff+'_'+y_bin+'_nbins'], coeff+'_'+y_bin+'_nbins'+'/I')
+            #variables[coeff+'_'+y_bin+'_val'] = array('f', results[coeff+'_'+y_bin+'_val'] )            
+            #tree.Branch(coeff+'_'+y_bin+'_val', variables[coeff+'_'+y_bin+'_val'], coeff+'_'+y_bin+'_val['+coeff+'_'+y_bin+'_nbins'+']'+'/F')
+            #variables[coeff+'_'+y_bin+'_val_err'] = array('f', results[coeff+'_'+y_bin+'_val_err'] )            
+            #tree.Branch(coeff+'_'+y_bin+'_val_err', variables[coeff+'_'+y_bin+'_val_err'], coeff+'_'+y_bin+'_val_err['+coeff+'_'+y_bin+'_nbins'+']'+'/F')
 
             # create tree branches
             for o in range(order+1):
@@ -363,7 +363,7 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
             vars_count = 0         
             for coeff in coefficients:
                 for y in range(nbins_y/2+1, nbins_y+1):
-                    y_bin = 'y_{:03.1f}'.format(np_bins_y[y-1])+'_'+'{:03.1f}'.format(np_bins_y[y])
+                    y_bin = 'y{:03.2f}'.format(np_bins_y[y-1])+'_'+'y{:03.2f}'.format(np_bins_y[y])
                     name = q+'_'+str(w)
                     h = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w))
                     h_norm = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w)+'_norm')
@@ -381,8 +381,8 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
                         variables[nuis_name+'_id'][0] = int(w)
                         data[syst][vars_count][iw] = r.Parameter(o)
                         vars_count += 1
-            if w==0:
-                tree.Fill()    
+            #if w==0:
+            tree.Fill()    
 
     # covariance matrix
     cov_map = {}
@@ -393,13 +393,13 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
             vars_count1 = 0 
             for coeff1 in coefficients:
                 for y1 in range(nbins_y/2+1, nbins_y+1):
-                    y_bin1 = 'y_{:03.1f}'.format(np_bins_y[y1-1])+'_'+'{:03.1f}'.format(np_bins_y[y1])
+                    y_bin1 = 'y{:03.2f}'.format(np_bins_y[y1-1])+'_'+'y{:03.2f}'.format(np_bins_y[y1])
                     for o1 in range(orders[coeff1+'_'+y_bin1]+1):
                         nuis_name1 = coeff1+'_'+y_bin1
                         vars_count2 = 0 
                         for coeff2 in coefficients:
                             for y2 in range(nbins_y/2+1, nbins_y+1):
-                                y_bin2 = 'y_{:03.1f}'.format(np_bins_y[y2-1])+'_'+'{:03.1f}'.format(np_bins_y[y2])
+                                y_bin2 = 'y{:03.2f}'.format(np_bins_y[y2-1])+'_'+'y{:03.2f}'.format(np_bins_y[y2])
                                 for o2 in range(orders[coeff2+'_'+y_bin2]+1):
                                     nuis_name2 = coeff2+'_'+y_bin2
                                     if  nuis_name1==nuis_name2:
@@ -431,7 +431,7 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
     last_bin = 16
     for coeff in coefficients:
         for y in range(nbins_y/2+1, nbins_y+1):
-            y_bin = 'y_{:03.1f}'.format(np_bins_y[y-1])+'_'+'{:03.1f}'.format(np_bins_y[y])
+            y_bin = 'y{:03.2f}'.format(np_bins_y[y-1])+'_'+'y{:03.2f}'.format(np_bins_y[y])
             bin_name = coeff+'_'+y_bin
             order = orders[bin_name]
             #print 'Taking sub-matrix: [', bin_count, ',' , bin_count+(order) , ']' 
@@ -467,7 +467,7 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
             legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
             plt.xlabel('$q_{T}$ (GeV)', fontsize=20)
             plt.ylabel('$'+coeff[0]+'_{'+coeff[1]+'}$', fontsize=20)
-            plt.title(DY+', charge='+q[1:]+', $|y| \in ['+y_bin[2:6]+','+y_bin[6:11]+']$', fontsize=20)
+            plt.title(DY+', charge='+q[1:]+', $|y| \in ['+y_bin[1:5]+','+y_bin[7:11]+']$', fontsize=20)
             plt.show()
             plt.savefig('plots/coefficient_'+q+'_'+var+'_'+coeff+'_'+y_bin+'_fit.png')
             plt.close()            

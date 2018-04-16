@@ -99,7 +99,7 @@ vector<TDF::TResultProxy<TH1D>> TreeProjector::plot_pt_with_qt_cut(const vector<
   // We define here a temporary variable holding the weights collections to workaround
   // a performance degradation being fixed in ROOT proper.
   auto toTVector = [](Farray_t &weights){std::vector<float> v(weights.begin(), weights.end()); return v;};
-  static auto tdf_cachedWeights = tdf->Define("weights_cached", toVector, {"weights"} );
+  static auto tdf_cachedWeights = tdf->Define("weights_cached", toTVector, {"weights"} );
 
   for(auto w : weights){
 
@@ -177,13 +177,13 @@ int TreeProjector::run_pt_bias_vs_qt(){
   vector<TDF::TResultProxy<TH1D>> histos_nominal = plot_pt_with_qt_cut( weights_nominal, "Wdress_qt", qt_max, "Wdress_y", y_max, "Wbare_mu_pt", pt_max);
 
   cout << " > Filling PDF" << endl;
-  //vector<int> weights_pdf = {}; for(int w = 9 ; w < 109; ++w) weights_pdf.push_back(w);
-  vector<int> weights_pdf = {9};
+  vector<int> weights_pdf = {}; for(int w = 9 ; w < 109; ++w) weights_pdf.push_back(w);
+  //vector<int> weights_pdf = {9};
   std::vector<TDF::TResultProxy<TH1D>> histos_pdf = plot_pt_with_qt_cut( weights_pdf, "Wdress_qt", qt_max, "Wdress_y", y_max, "Wbare_mu_pt", pt_max);
 
   cout << " > Filling Scale" << endl;
-  //vector<int> weights_scale = {1,2,3,4,6,8};
-  vector<int> weights_scale = {1};
+  vector<int> weights_scale = {1,2,3,4,6,8};
+  //vector<int> weights_scale = {1};
   std::vector<TDF::TResultProxy<TH1D>> histos_scale =plot_pt_with_qt_cut( weights_scale, "Wdress_qt", qt_max, "Wdress_y", y_max, "Wbare_mu_pt", pt_max);
 
   cout << " > Total number of filters = " << count_filters << endl;
