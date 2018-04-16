@@ -1,5 +1,13 @@
 *pyc
 *png
 *~
+data/TEST
 test/crab/crab_*
+test/crab/*pkl
+test/crab/crab.log
 test/crab_gen/crab_*
+test/crab_gen/*pkl
+test/crab_gen/crab.log
+test/*root
+test/plots
+root
