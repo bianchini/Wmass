@@ -222,6 +222,7 @@ def pt_bias_vs_qt( q='Wplus', var='Wdress', qt_max=[], pt_max=60, pt_min=24, eta
         norm_out = h.Integral()
         mean_out = h.GetMean()
         mean_out_err = h.GetMeanError()
+        shifts['qt{:02.0f}'.format(qt)+'_'+'mean']     = mean_out
         shifts['qt{:02.0f}'.format(qt)+'_'+'mean_err'] = mean_out_err
         frac = norm_out/(norm_out+norm_in)
         shifts['qt{:02.0f}'.format(qt)+'_'+'out_frac'] = frac
@@ -252,4 +253,31 @@ def pt_bias_vs_qt( q='Wplus', var='Wdress', qt_max=[], pt_max=60, pt_min=24, eta
     pickle.dump(shifts, open('plots/'+q+'_'+var+'_pt'+'{:02.0f}'.format(pt_min)+'-'+'{:02.0f}'.format(pt_max)+'_bias_vs_qt.pkl','wb') )
     
     h.IsA().Destructor( h )
+
+def print_pt_bias_vs_qt(pt_min=25.0, pt_max=[], qt_max=[], q='Wplus', var='Wdress'):
+    plt.figure()
+    fig, ax = plt.subplots()
+    colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'w']
+    fmts = ['o', 'v', '^', '>', '<', '.']
+    for ipt, pt in enumerate(pt_max):
+        f = open('plots/'+q+'_'+var+'_pt'+'{:02.0f}'.format(pt_min)+'-'+'{:02.0f}'.format(pt)+'_bias_vs_qt.pkl')
+        res = pickle.load(f)
+        x = np.zeros(len(qt_max))
+        y = np.zeros(len(qt_max))
+        ye = np.zeros(len(qt_max))
+        for iqt,qt in enumerate(qt_max):
+            y[iqt]  = res['qt{:02.0f}'.format(qt)+'_tot']/res['qt{:02.0f}'.format(qt)+'_mean']
+            ye[iqt] = res['qt{:02.0f}'.format(qt)+'_mean_err']/res['qt{:02.0f}'.format(qt)+'_mean']
+            x[iqt] = qt_max[iqt]
+        ax.errorbar(x, y, xerr=0.0, yerr=0.0, fmt=fmts[ipt], color=colors[ipt], label='$p_{T}<'+'{:02.0f}'.format(pt)+'$ GeV', markersize=12)
+    plt.axis([qt_max[0]-5.0, qt_max[-1]+5.0, 1e-05, 1e-02 ])
+    legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
+    plt.yscale('log')
+    plt.xlabel('$q_{T}^{max}$ GeV', fontsize=20)
+    plt.ylabel('$\Delta p_{T}/p_{T}$', fontsize=20)
+    plt.title('bias', fontsize=20)
+    plt.grid(True)
+    plt.show()
+    plt.savefig('test.png')
+    plt.close()
 
