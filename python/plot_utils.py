@@ -8,6 +8,7 @@ from pylab import rcParams
 rcParams['figure.figsize'] = 8,7
 from array import array
 import pickle
+from scipy import stats
 
 import os.path
 
@@ -281,3 +282,181 @@ def print_pt_bias_vs_qt(pt_min=25.0, pt_max=[], qt_max=[], q='Wplus', var='Wdres
     plt.savefig('test.png')
     plt.close()
 
+
+def plot_closure_test(charge='Wplus', var='Wdress', coeff_eval='val'):
+
+    print "*** plot_closure_test ***"
+
+    from pylab import rcParams
+    rcParams['figure.figsize'] = 14,8
+
+    from tree_utils import np_bins_qt, np_bins_y
+
+    #np_bins_qt = np.array([0.0, 2.0, 4.0])
+    np_bins_y_p0 = np.linspace(-4.0, -2.5,  4)
+    np_bins_y_p1 = np.linspace(-2.0, +2.0, 21)
+    np_bins_y_p2 = np.linspace(+2.5, +4.0,  4)
+    np_bins_y    = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
+    #np_bins_qt = np.array([10.0, 12.0, 14.0, 16.0, 18.0, 20.0])
+    #np_bins_qt = np.array([20.0, 24.0, 28.0, 32.0, 36.0, 40.0])
+    #np_bins_qt = np.array([60, 80, 100, 150, 200])
+    #np_bins_y  = np.array([-0.4, -0.2, 0.0, 0.2, 0.4])
+
+    f = ROOT.TFile('../root/tree_histos2_CC.root')
+
+    counter = 0
+    for iqt in range(np_bins_qt.size-1):
+        for iy in range((np_bins_y.size-1)/2, np_bins_y.size-1):
+            counter += 1
+    res_mean      = np.zeros(counter)
+    res_mean_err  = np.zeros(counter)
+    res_sigma     = np.zeros(counter)
+    res_sigma_err = np.zeros(counter)
+    p_values = np.zeros(counter)
+    print counter, 'histograms'
+
+    counter = 0
+    for iqt in range(np_bins_qt.size-1):
+        for iy in range((np_bins_y.size-1)/2, np_bins_y.size-1):
+            bin_y = 'y{:03.2f}'.format(np_bins_y[iy])+'_'+'y{:03.2f}'.format(np_bins_y[iy+1])
+            bin_qt = 'qt{:03.1f}'.format(np_bins_qt[iqt])+'_'+'qt{:03.1f}'.format(np_bins_qt[iqt+1])
+            name = charge+'_'+var+'_'+coeff_eval+'_'+bin_y+'_'+bin_qt
+            canvas = ROOT.TCanvas("c", "canvas", 600, 600)            
+            h = f.Get(charge+'/'+var+'/'+coeff_eval+'/'+name)
+            norm2 = 0.0
+            err2  = 0.0
+            for ix in range(1, h.GetNbinsX()+1):
+                for iy in range(1, h.GetNbinsY()+1):
+                    err = h.GetBinError(ix,iy) if h.GetBinError(ix,iy)>0.0 else 9999.
+                    norm2 +=  h.GetBinContent(ix,iy)/err/err
+                    err2  +=  1./err/err
+            norm = (norm2/err2)
+            chi2 = 0.0
+            h_pull = ROOT.TH1F('h_pull_'+name, '', 81, -4.0, 4.0)                        
+            for ix in range(1, h.GetNbinsX()+1):
+                for iy in range(1, h.GetNbinsY()+1):
+                    val = h.GetBinContent(ix,iy)
+                    err = h.GetBinError(ix,iy)
+                    pull = (val - norm)/err if err>0 else 9999.
+                    chi2 += math.pow( (val - norm)/err if err>0 else 0.0, 2.0 )
+                    h_pull.Fill(pull)
+
+            p_values[counter] =  (1-stats.chi2.cdf(chi2, ( h.GetNbinsX()*h.GetNbinsY() - 1) ) - 0.5)
+            h_pull.Draw("HIST")
+            res_mean[counter] = h_pull.GetMean()
+            res_mean_err[counter] = h_pull.GetMeanError()
+            res_sigma[counter] = h_pull.GetRMS()-1.0
+            res_sigma_err[counter] = h_pull.GetRMSError()
+            print name, 'mean[', counter , ']=', res_mean[counter] 
+            canvas.SaveAs('plots/pull_'+name+'.png')
+            h.Draw("COLZ") 
+            canvas.SaveAs('plots/pull_2Dflat_'+name+'.png')
+            canvas.IsA().Destructor( canvas )
+            h_pull.IsA().Destructor( h_pull ) 
+            counter += 1
+            
+    plt.figure()
+    fig, ax = plt.subplots()
+    colors = ['b', 'r', 'g']
+    fmts = ['o', '^', '>']
+    x = np.linspace(0,counter-1,counter)
+    ax.errorbar(x, res_mean, xerr=0.0, yerr=res_mean_err, fmt=fmts[0], color=colors[0], label='mean', markersize=8)
+    ax.errorbar(x, res_sigma, xerr=0.0, yerr=res_sigma_err, fmt=fmts[1], color=colors[1], label='RMS-1', markersize=6)
+    ax.errorbar(x, p_values, xerr=0.0, yerr=0.0, fmt=fmts[2], color=colors[2], label='p-0.5', markersize=8)
+    plt.axis([-1, counter, -0.51, +0.51])
+    legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
+    plt.xlabel('Bin number', fontsize=20)
+    plt.ylabel('Value', fontsize=20)
+    plt.title('['+charge+', '+var+'], type = '+coeff_eval, fontsize=20)
+    plt.grid(True)
+    plt.show()
+    plt.savefig('plots/summary_'+charge+'_'+var+'_'+coeff_eval+'.png')
+    plt.close()
+
+
+def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val'):
+
+    print "*** plot_closure_test_cum ***"
+
+    from pylab import rcParams
+    rcParams['figure.figsize'] = 14,8
+
+    from tree_utils import np_bins_qt, np_bins_y, weight_coeff_cumulative
+    np_bins_qt = np.array([0.0, 2.0])
+    #np_bins_y  = np.array([-0.2, 0.0, 0.2])
+
+
+    f = ROOT.TFile('../root/tree_histos2_CC.root')
+    res = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_CC_'+charge+'_all.pkl') )
+
+    counter = 0
+    for iqt in range(np_bins_qt.size-1):
+        for iy in range((np_bins_y.size-1)/2, np_bins_y.size-1):
+            counter += 1
+    res_mean      = np.zeros(counter)
+    res_mean_err  = np.zeros(counter)
+    res_sigma     = np.zeros(counter)
+    res_sigma_err = np.zeros(counter)
+    p_values = np.zeros(counter)
+    print counter, 'histograms'
+
+    counter = 0
+    for iqt in range(np_bins_qt.size-1):
+        for iy in range((np_bins_y.size-1)/2, np_bins_y.size-1):
+            bin_y  = 'y{:03.2f}'.format(np_bins_y[iy])+'_'+'y{:03.2f}'.format(np_bins_y[iy+1])
+            bin_qt = 'qt{:03.1f}'.format(np_bins_qt[iqt])+'_'+'qt{:03.1f}'.format(np_bins_qt[iqt+1])
+            name = charge+'_'+var+'_'+coeff_eval+'_'+bin_y+'_'+bin_qt
+            canvas = ROOT.TCanvas("c", "canvas", 600, 600)            
+            h_pull = ROOT.TH1F('h_pull_'+name, '', 81, -4.0, 4.0)
+            h = f.Get(charge+'/'+var+'/'+coeff_eval+'/'+name+'_norm')
+            h.Scale(1./h.Integral())
+            chi2 = 0.0
+            for ix in range(1, h.GetNbinsX()+1):
+                bin_cos = (h.GetXaxis().GetBinLowEdge(ix), 
+                           h.GetXaxis().GetBinLowEdge(ix)+h.GetXaxis().GetBinWidth(ix))
+                for iy in range(1, h.GetNbinsY()+1):
+                    bin_phi = (h.GetYaxis().GetBinLowEdge(iy), 
+                               h.GetYaxis().GetBinLowEdge(iy)+h.GetYaxis().GetBinWidth(iy))
+                    norm = weight_coeff_cumulative(res=res, 
+                                                   coeff_eval=coeff_eval, 
+                                                   bin_y=bin_y, 
+                                                   qt=0.5*( np_bins_qt[iqt]+ np_bins_qt[iqt+1]), 
+                                                   bin_cos=bin_cos, bin_phi=bin_phi, 
+                                                   coeff=['A0', 'A1', 'A2', 'A3', 'A4'])
+                    h_pull.Fill( (h.GetBinContent(ix,iy) - norm)/h.GetBinError(ix,iy)  )
+                    chi2 += math.pow( (h.GetBinContent(ix,iy) - norm)/h.GetBinError(ix,iy) if h.GetBinError(ix,iy)>0.0 else 0.0, 2.0 )
+                    h.SetBinContent(ix,iy, h.GetBinContent(ix,iy) - norm )
+
+            p_values[counter] =  (1-stats.chi2.cdf(chi2, ( h.GetNbinsX()*h.GetNbinsY() - 1) ) - 0.5)
+            res_mean[counter] = h_pull.GetMean()
+            print name, 'mean[', counter , ']=', res_mean[counter] 
+            res_mean_err[counter] = h_pull.GetMeanError()
+            res_sigma[counter] = h_pull.GetRMS()-1.0
+            res_sigma_err[counter] = h_pull.GetRMSError()
+            counter += 1
+
+            h.SetStats(0)                    
+            h.Draw("COLZ") 
+            canvas.SaveAs('plots/pull_2DflatByPDF_COLZ_'+name+'.png')
+            h.Draw("SURF") 
+            canvas.SaveAs('plots/pull_2DflatByPDF_SURF_'+name+'.png')
+            h_pull.IsA().Destructor( h_pull )
+            canvas.IsA().Destructor( canvas )
+
+    plt.figure()
+    fig, ax = plt.subplots()
+    colors = ['b', 'r', 'g']
+    fmts = ['o', '^', '>']
+    x = np.linspace(0,counter-1,counter)
+    ax.errorbar(x, res_mean, xerr=0.0, yerr=res_mean_err, fmt=fmts[0], color=colors[0], label='mean', markersize=8)
+    ax.errorbar(x, res_sigma, xerr=0.0, yerr=res_sigma_err, fmt=fmts[1], color=colors[1], label='RMS-1', markersize=6)
+    ax.errorbar(x, p_values, xerr=0.0, yerr=0.0, fmt=fmts[2], color=colors[2], label='p-0.5', markersize=8)
+    plt.axis([-1, counter, -0.51, +0.51])
+    legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
+    plt.xlabel('Bin number', fontsize=20)
+    plt.ylabel('Value', fontsize=20)
+    plt.title('['+charge+', '+var+'], type = '+coeff_eval, fontsize=20)
+    plt.grid(True)
+    plt.show()
+    plt.savefig('plots/summary_byPDF_'+charge+'_'+var+'_'+coeff_eval+'.png')
+    plt.close()

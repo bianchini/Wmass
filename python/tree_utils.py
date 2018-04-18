@@ -246,7 +246,44 @@ def angular_pdf(ps=(), coeff_vals=[], verbose=False):
         print ('\t pdf = 3./16./math.pi * ( UL + %s*L + %s*T + %s*I + %s*A + %s*P + %s*p7 + %s*p8 + %s*p9)' % (coeff_vals[0], coeff_vals[1], coeff_vals[2], coeff_vals[3], coeff_vals[4], coeff_vals[5], coeff_vals[6], coeff_vals[7]) )
     return 3./16./math.pi * ( UL + coeff_vals[0]*L + coeff_vals[1]*T + coeff_vals[2]*I + coeff_vals[3]*A + coeff_vals[4]*P + coeff_vals[5]*p7 + coeff_vals[6]*p8 + coeff_vals[7]*p9)
 
-# determine the angular_pdf in a y-bin as a function of qt (read results 'res' from external file)
+# Evaluate the cumulative angular pdf given a PS point (cos*,phi*) and the value of the 8 parameters
+def cumulative_angular_pdf(bin_cos=(), bin_phi=(), coeff_vals=[], verbose=False):
+    (a,b) = bin_cos 
+    (c,d) = bin_phi     
+    
+    P1 = lambda x : math.pow(x,3.)/3. + x
+    UL = (P1(b)-P1(a))*(d-c)
+
+    P2 = lambda x : x-math.pow(x,3.)
+    L = 0.5*(P2(b)-P2(a))*(d-c)
+
+    P3 = lambda x : -2./3.*math.pow(1-x*x, 3./2.)
+    P4 = lambda x : math.sin(x)
+    T = (P3(b)-P3(a))*(P4(d)-P4(c))
+
+    P5 = lambda x : x - math.pow(x,3.)/3.
+    P6 = lambda x : 0.5*math.sin(2*x)
+    I = 0.5*(P5(b)-P5(a))*(P6(d)-P6(c))
+
+    P7 = lambda x : 0.5*(math.sqrt(1-x*x)*x + math.asin(x))
+    A =  (P7(b)-P7(a))*(P4(d)-P4(c))
+
+    P8 = lambda x : x*x/2.
+    P =  (P8(b)-P8(a))*(d-c)
+    
+    P9 = lambda x : -0.5*math.cos(2*x)
+    p7 = (P2(b)-P2(a))*(P9(d)-P9(c))
+
+    P10 = lambda x : -math.cos(x)
+    p8 = (P3(b)-P3(a))*(P10(d)-P10(c))
+
+    p9 = (P7(b)-P7(a))*(P10(d)-P10(c))
+
+    if verbose:
+        print ('\t pdf = 3./16./math.pi * ( UL + %s*L + %s*T + %s*I + %s*A + %s*P + %s*p7 + %s*p8 + %s*p9)' % (coeff_vals[0], coeff_vals[1], coeff_vals[2], coeff_vals[3], coeff_vals[4], coeff_vals[5], coeff_vals[6], coeff_vals[7]) )
+    return 3./16./math.pi * ( UL + coeff_vals[0]*L + coeff_vals[1]*T + coeff_vals[2]*I + coeff_vals[3]*A + coeff_vals[4]*P + coeff_vals[5]*p7 + coeff_vals[6]*p8 + coeff_vals[7]*p9)
+
+# Determine the angular_pdf in a y-bin as a function of qt (read results 'res' from external file)
 # Two modes:
 #  - 'fit' : read the coefficients of a polynomial fit to A(qT). Rebuild the polynomnial from it.
 #  - 'val' : read the bin-by-bin value of A
@@ -264,7 +301,7 @@ def weight_coeff(res={}, coeff_eval='fit', bin_y='', qt=0.0, ps=(), coeff=['A0']
             coeff_val = res[c+'_'+bin_y+'_val'][iqt]
         coeff_vals[ic] = coeff_val
     val = angular_pdf(ps=ps, coeff_vals=coeff_vals)
-    if abs(val) > 0.0:        
+    if val > 0.0:        
         if verbose:
             print 'Fit type', coeff_eval, ': bin', bin_y, 'at qt =', qt, 'for ps=', ps, 'yields val = ', val
         return val
@@ -272,6 +309,34 @@ def weight_coeff(res={}, coeff_eval='fit', bin_y='', qt=0.0, ps=(), coeff=['A0']
         if verbose:
             print ('Fit type', coeff_eval, ': bin', bin_y, 'at qt =', qt, 'for ps=', ps, 'yields pdf = ', val, '<=0.0. Return 1.0')
         return 1.0
+
+# Determine the cumulative angular_pdf in a y-bin as a function of qt (read results 'res' from external file)
+# Two modes:
+#  - 'fit' : read the coefficients of a polynomial fit to A(qT). Rebuild the polynomnial from it.
+#  - 'val' : read the bin-by-bin value of A
+# Negative values for the pdf are possible, but expected only for qT outside the fit range in 'fit' mode 
+def weight_coeff_cumulative(res={}, coeff_eval='fit', bin_y='', qt=0.0, bin_cos=(), bin_phi=(), coeff=['A0'], verbose=False):
+    coeff_vals = np.zeros(8)
+    for ic,c in enumerate(coeff):
+        coeff_val = 0.0
+        if coeff_eval == 'fit':
+            order = len(res[c+'_'+bin_y+'_fit'])
+            for o in range(order):
+                coeff_val += math.pow(qt,o)*res[c+'_'+bin_y+'_fit'][o]
+        elif coeff_eval == 'val':
+            iqt = np.where(np_bins_qt<=qt)[0][-1]
+            coeff_val = res[c+'_'+bin_y+'_val'][iqt]
+        coeff_vals[ic] = coeff_val
+    val = cumulative_angular_pdf(bin_cos=bin_cos, bin_phi=bin_phi, coeff_vals=coeff_vals)
+    if val > 0.0:        
+        if verbose:
+            print 'Fit type', coeff_eval, ': bin', bin_y, 'at qt =', qt, 'for ps=', ps, 'yields val = ', val
+        return val
+    else:
+        if verbose:
+            print ('Fit type', coeff_eval, ': bin', bin_y, 'at qt =', qt, 'for ps=', ps, 'yields pdf = ', val, '<=0.0. Return 1.0')
+        return 1.0
+
 
 # Given a ps_W point, find the bin in np_bins_y/qt. Return if the point is not within the bins
 # Fill a 2D map with ps_CS with weight 1/weight_coeff
