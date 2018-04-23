@@ -283,7 +283,7 @@ def print_pt_bias_vs_qt(pt_min=25.0, pt_max=[], qt_max=[], q='Wplus', var='Wdres
     plt.close()
 
 
-def plot_closure_test(charge='Wplus', var='Wdress', coeff_eval='val', min_val = -999.):
+def plot_closure_test(charge='Wplus', var='Wdress', coeff_eval='val', min_val = -999., save_2D=True, save_summary=True):
 
     print "*** plot_closure_test ***"
 
@@ -353,36 +353,40 @@ def plot_closure_test(charge='Wplus', var='Wdress', coeff_eval='val', min_val = 
             res_sigma_err[counter] = h_pull.GetRMSError()
             print name, 'mean[', counter , ']=', res_mean[counter] 
 
-            h_pull.Draw("HIST")
-            canvas.SaveAs('plots/pull_1D_byInvPDF_'+name+'.png')
-            h.Draw("COLZ") 
-            canvas.SaveAs('plots/pull_2Dflat_byInvPDF_COLZ_'+name+'.png')
-            h.Draw("SURF") 
-            canvas.SaveAs('plots/pull_2Dflat_byInvPDF_SURF_'+name+'.png')
+            if save_2D:
+                h_pull.Draw("HIST")
+                canvas.SaveAs('plots/pull_1D_byInvPDF_'+name+'.png')
+                h.Draw("COLZ") 
+                canvas.SaveAs('plots/pull_2Dflat_byInvPDF_COLZ_'+name+'.png')
+                h.Draw("SURF") 
+                canvas.SaveAs('plots/pull_2Dflat_byInvPDF_SURF_'+name+'.png')
             canvas.IsA().Destructor( canvas )
             h_pull.IsA().Destructor( h_pull ) 
             counter += 1
             
-    plt.figure()
-    fig, ax = plt.subplots()
-    colors = ['b', 'r', 'g']
-    fmts = ['o', '^', '>']
-    x = np.linspace(0,counter-1,counter)
-    ax.errorbar(x, res_mean, xerr=0.0, yerr=res_mean_err, fmt=fmts[0], color=colors[0], label='mean', markersize=8)
-    ax.errorbar(x, res_sigma, xerr=0.0, yerr=res_sigma_err, fmt=fmts[1], color=colors[1], label='RMS-1', markersize=6)
-    ax.errorbar(x, p_values, xerr=0.0, yerr=0.0, fmt=fmts[2], color=colors[2], label='p-0.5', markersize=8)
-    plt.axis([-1, counter, -0.51, +0.51])
-    legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
-    plt.xlabel('Bin number', fontsize=20)
-    plt.ylabel('Value', fontsize=20)
-    plt.title('['+charge+', '+var+'], type = '+coeff_eval+'. Flattened by 1/pdf', fontsize=20)
-    plt.grid(True)
-    plt.show()
-    plt.savefig('plots/summary_byInvPDF_'+charge+'_'+var+'_'+coeff_eval+'.png')
-    plt.close()
+    if save_summary:
+        plt.figure()
+        fig, ax = plt.subplots()
+        colors = ['b', 'r', 'g']
+        fmts = ['o', '^', '+']
+        x = np.linspace(0,counter-1,counter)
+        ax.errorbar(x, res_mean, xerr=0.0, yerr=0.0, fmt=fmts[0], color=colors[0], label='mean', markersize=6)
+        ax.errorbar(x, res_sigma, xerr=0.0, yerr=0.0, fmt=fmts[1], color=colors[1], label='RMS-1', markersize=6)
+        ax.errorbar(x, p_values, xerr=0.0, yerr=0.0, fmt=fmts[2], color=colors[2], label='p-0.5', markersize=8)
+        plt.axis([-1, counter, -0.51, +0.51])
+        legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
+        plt.xlabel('Bin number', fontsize=20)
+        plt.ylabel('Value', fontsize=20)
+        plt.title('['+charge+', '+var+'], type = '+coeff_eval+'. Flattened by 1/pdf', fontsize=20)
+        plt.grid(True)
+        plt.show()
+        plt.savefig('plots/summary_byInvPDF_'+charge+'_'+var+'_'+coeff_eval+'.png')
+        plt.close()
+
+    print 'Done'
 
 
-def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val', min_val=-999., verbose=False):
+def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val', min_val=-999., verbose=False, save_2D=True, save_summary=True):
 
     print "*** plot_closure_test_cum ***"
 
@@ -398,7 +402,8 @@ def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val', min_va
     np_bins_y = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
 
     f = ROOT.TFile('../root/tree_histos2_CC.root')
-    res = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_CC_'+charge+'_all.pkl') )
+    #res = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_CC_'+charge+'_all.pkl') )
+    res = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/test/plots/'+'fit_results_CC_'+charge+'_all_A0-7.pkl') )
 
     counter = 0
     for iqt in range(np_bins_qt.size-1):
@@ -453,30 +458,34 @@ def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val', min_va
             res_sigma[counter] = h_pull.GetRMS()-1.0
             res_sigma_err[counter] = h_pull.GetRMSError()
             counter += 1
-            h_pull.Draw("HIST")
-            canvas.SaveAs('plots/pull_1D_byPDF_'+name+'.png')
-            h.SetStats(0)                    
-            h.Draw("COLZ") 
-            canvas.SaveAs('plots/pull_2Dflat_byPDF_COLZ_'+name+'.png')
-            h.Draw("SURF") 
-            canvas.SaveAs('plots/pull_2Dflat_byPDF_SURF_'+name+'.png')
+            if save_2D:
+                h_pull.Draw("HIST")
+                canvas.SaveAs('plots/pull_1D_byPDF_'+name+'.png')
+                h.SetStats(0)                    
+                h.Draw("COLZ") 
+                canvas.SaveAs('plots/pull_2Dflat_byPDF_COLZ_'+name+'.png')
+                h.Draw("SURF") 
+                canvas.SaveAs('plots/pull_2Dflat_byPDF_SURF_'+name+'.png')
             h_pull.IsA().Destructor( h_pull )
             canvas.IsA().Destructor( canvas )
 
-    plt.figure()
-    fig, ax = plt.subplots()
-    colors = ['b', 'r', 'g']
-    fmts = ['o', '^', '>']
-    x = np.linspace(0,counter-1,counter)
-    ax.errorbar(x, res_mean, xerr=0.0, yerr=res_mean_err, fmt=fmts[0], color=colors[0], label='mean', markersize=8)
-    ax.errorbar(x, res_sigma, xerr=0.0, yerr=res_sigma_err, fmt=fmts[1], color=colors[1], label='RMS-1', markersize=6)
-    ax.errorbar(x, p_values, xerr=0.0, yerr=0.0, fmt=fmts[2], color=colors[2], label='p-0.5', markersize=8)
-    plt.axis([-1, counter, -0.51, +0.51])
-    legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
-    plt.xlabel('Bin number', fontsize=20)
-    plt.ylabel('Value', fontsize=20)
-    plt.title('['+charge+', '+var+'], type = '+coeff_eval+'. $\chi^2$ from pdf', fontsize=20)
-    plt.grid(True)
-    plt.show()
-    plt.savefig('plots/summary_byPDF_'+charge+'_'+var+'_'+coeff_eval+'.png')
-    plt.close()
+    if save_summary:
+        plt.figure()
+        fig, ax = plt.subplots()
+        colors = ['b', 'r', 'g']
+        fmts = ['o', '^', '+']
+        x = np.linspace(0,counter-1,counter)
+        ax.errorbar(x, res_mean, xerr=0.0, yerr=0.0, fmt=fmts[0], color=colors[0], label='mean', markersize=6)
+        ax.errorbar(x, res_sigma, xerr=0.0, yerr=0.0, fmt=fmts[1], color=colors[1], label='RMS-1', markersize=6)
+        ax.errorbar(x, p_values, xerr=0.0, yerr=0.0, fmt=fmts[2], color=colors[2], label='p-0.5', markersize=8)
+        plt.axis([-1, counter, -0.51, +0.51])
+        legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
+        plt.xlabel('Bin number', fontsize=20)
+        plt.ylabel('Value', fontsize=20)
+        plt.title('['+charge+', '+var+'], type = '+coeff_eval+'. $\chi^2$ from pdf', fontsize=20)
+        plt.grid(True)
+        plt.show()
+        plt.savefig('plots/summary_byPDF_'+charge+'_'+var+'_'+coeff_eval+'.png')
+        plt.close()
+
+    print 'Done'

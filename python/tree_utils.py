@@ -155,7 +155,7 @@ def fill_default(variables):
 
 # Create 2D maps for (qT,y) filled with the mean of the test functions
 # The binning is taken from global variables 
-def add_histo2D(charges=['Wminus','Wplus'], var=['Wdress'], coeff=['A0','A1','A2','A3','A4','A5', 'A6', 'A7'], weights=[0]):
+def add_histo2D(charges=['Wminus','Wplus'], var=['Wdress'], coeff=['A0','A1','A2','A3','A4','A5', 'A6', 'A7', 'A8'], weights=[0]):
     # binning
     bins_qt = array( 'f',  np_bins_qt )
     bins_y  = array( 'f',  np_bins_y )
@@ -221,6 +221,8 @@ def test_A(coeff='A0', ps=(0.0, 0.0)):
         val = 5.*2.*math.sqrt(1-ps[0]*ps[0])*ps[0]*math.sin(ps[1])
     elif coeff=='A7':
         val = 4.*math.sqrt(1-ps[0]*ps[0])*math.sin(ps[1])
+    elif coeff=='A8':
+        val = 14.-10.*(1+ps[0]*ps[0])
     return val
 
 # Fill a 2D map with the value of the test function needed to project-out one harmonic at the time.

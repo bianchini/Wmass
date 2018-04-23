@@ -58,5 +58,5 @@ elif argv[1]=='closure':
         for ceval in ['val', 
                       #'fit'
                       ]:
-            plot_closure_test(charge=q,  var='Wdress', coeff_eval=ceval)
-            plot_closure_test_cum(charge=q,  var='Wdress', coeff_eval=ceval)
+            #plot_closure_test(charge=q,  var='Wdress', coeff_eval=ceval)
+            plot_closure_test_cum(charge=q,  var='Wdress', coeff_eval=ceval, save_2D=False, save_summary=True)
