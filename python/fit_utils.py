@@ -7,6 +7,7 @@ from pylab import rcParams
 rcParams['figure.figsize'] = 8,7
 
 from scipy import stats
+from scipy.stats import f
 from array import array
 import ROOT
 
@@ -20,68 +21,105 @@ def polynomial(x, coeff, order):
 # Perform Fisher-test based on chi2 of fit to pol_order: [0] + [1]*x + [2]*x*x + ... 
 # Stop when p-value of chi2>0.05
 # If force_order>=0, force order; fix_to_zero requires [0] := 0.0
-def Fisher_test(h=None, coeff='A0', fix_to_zero=['A4'], fit_range=[0.0,50.0], force_order=-1):
+def Fisher_test(h=None, coeff='A0', fix_to_zero=['A4'], fit_range=[0.0,50.0], force_order=-1, start_order=0, threshold=0.05, threshold_chi2=0.03):
 
     # a large initial value
     chi2 = 99999.
 
     # start from pol1
-    order = 1
-    if force_order>=0:
-        order = force_order
+    order = start_order if force_order<0 else force_order
 
+    # initial values
     r = None
     fit = None
     pval = 0.0
-    while( pval<0.05 ):
+    chi2_prob = 0.0
 
-        # standard polynomial
+    while( pval<threshold ):
+
         formula = ''
         for p in range(order+1):
             formula += ('['+str(p)+']*TMath::Power(x,'+str(p)+')'+('+' if p<order else ''))
-
         #print formula
         this_fit = ROOT.TF1('fit_order'+str(order), formula,  fit_range[0], fit_range[1]) 
         this_fit.SetNpx(10000)
         for p in range(order+1):
+            if p==0 and coeff in fix_to_zero:
+                this_fit.FixParameter(p, 0.0 )
+                continue
             this_fit.SetParameter(p, math.pow(10,-p))
-        if coeff in fix_to_zero:
-            this_fit.FixParameter(0, 0.0 )
 
         this_r = h.Fit('fit_order'+str(order), 'SRQ')
-        delta_chi2 = chi2 - this_r.Chi2()
-        pval = 1-stats.chi2.cdf(delta_chi2, 1) 
+        ndof = this_r.Ndf()
 
-        if force_order<0:
-            print '\tOrder', order, 'pval=', pval, 'chi2=', this_r.Chi2(), '/', this_r.Ndf()
-        else:
-            r = this_r
-            fit = this_fit
-            chi2 = this_r.Chi2()        
-            order += 1 
+        # protection against impossible fits
+        if ndof<=1:
             break
 
-        if pval<0.05:            
+        this_chi2_prob = 1-stats.chi2.cdf( this_r.Chi2(), this_r.Ndf() )
+
+        if force_order>=0:
+            r = this_r
+            fit = this_fit
+            chi2 = this_r.Chi2()
+            chi2_prob = this_chi2_prob
+            break
+
+        if order==start_order:
+            print '\tOrder', order, 'chi2=', this_r.Chi2(), '/', this_r.Ndf(), ' [p =', this_chi2_prob, ']: go to next order' 
+            order += 1 
+            r = this_r
+            fit = this_fit
+            chi2 = this_r.Chi2()    
+            chi2_prob = this_chi2_prob
+            continue
+
+        if this_chi2_prob<threshold_chi2:
+            print '\tOrder', order, 'chi2=', this_r.Chi2(), '/', ndof,  ' [p =', this_chi2_prob, ']: this fit is bad, continue'
+            order += 1         
             r = this_r
             fit = this_fit
             chi2 = this_r.Chi2()        
-            order += 1
+            chi2_prob = this_chi2_prob            
+            continue
+
+        if chi2_prob<threshold_chi2:
+            print '\tOrder', order, 'chi2=', this_r.Chi2(), '/', ndof,  ' [p =', this_chi2_prob, ']: this fit is ok, previous is bad, continue'
+            order += 1         
+            r = this_r
+            fit = this_fit
+            chi2 = this_r.Chi2()        
+            chi2_prob = this_chi2_prob            
+            continue
+
+        pval = f.cdf(this_r.Chi2()/chi2*(ndof)/(ndof-1) , ndof, ndof-1)
+        if pval<threshold:
+            print '\tOrder', order, 'chi2=', this_r.Chi2(), '/', ndof,  ' [p =', this_chi2_prob, ']',  ': pval=', pval, ' small, continue' 
+            order += 1         
+            r = this_r
+            fit = this_fit
+            chi2 = this_r.Chi2()        
+            chi2_prob = this_chi2_prob            
+        else:
+            print '\tOrder', order, 'chi2=', this_r.Chi2(), '/', ndof, ' [p =', this_chi2_prob, ']', ': pval=', pval, '>=', threshold, ', stop!'        
 
     if force_order<0:
-        print 'P-value threshold at order', order-1, 'with chi2=', r.Chi2(), '/', r.Ndf()
+        # go back by one order: the match was at the order before!
+        order -= 1
+        print '\tP-value threshold at order', order, 'with chi2=', r.Chi2(), '/', r.Ndf()
     else:
-        print 'Fit performed at order ', order-1, 'with chi2=', r.Chi2(), '/', r.Ndf() 
+        print '\tFit performed at order ', force_order, 'with chi2=', r.Chi2(), '/', r.Ndf() 
 
     # nice formatting of results
     res = ''
-    for p in range(order):
+    for p in range(order+1):
         exp = '{:.1E}'.format(r.Parameter(p))[-3]+'{:.1E}'.format(r.Parameter(p))[-1] 
         val = '{:.1E}'.format(r.Parameter(p))[:-4]
         err = '{:.1E}'.format(r.ParError(p))[:-4]
         res += 'c_{'+str(p)+'}=('+val+' #pm '+err+')#times10^{'+exp+'}, '
 
     # remove 1 from order to go to the previous one
-    return (r,order-1,fit,res)
+    return (r,order,fit,res,chi2_prob)
 
 # plot covariance matrix provided by cov as a .png, .npy, and .C
 def plot_cov_matrix(n_vars=0, cov=None, label='', plot='cov', save_all=False):
@@ -131,9 +169,9 @@ def ranges_for_coeff_zoom(q='Wplus'):
 
 
 # project the (y,qt) plot along the qt axis for all bins of y
-def draw_y_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, do_fit=True):
+def draw_y_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, do_fit=True, threshold_chi2=0.02):
 
-    f = ROOT.TFile.Open(fname,'READ')
+    fin = ROOT.TFile.Open(fname,'READ')
 
     ranges = ranges_for_coeff()
 
@@ -141,8 +179,8 @@ def draw_y_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, d
     nbins_y = 0
     nbins_qt = 0
     for q in ['Wplus', 'Wminus']:
-        histos[q] = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(weight_name))
-        histos[q+'_norm'] = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(weight_name)+'_norm')
+        histos[q] = fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(weight_name))
+        histos[q+'_norm'] = fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(weight_name)+'_norm')
         nbins_y = histos[q].GetNbinsX()
         nbins_qt = histos[q].GetNbinsY()
 
@@ -175,7 +213,15 @@ def draw_y_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, d
             hslice_minus.SetXTitle('q_{T} (GeV)')
 
             if do_fit:
-                (r,order,fit,res) = Fisher_test(h=hslice_minus, coeff=coeff, fix_to_zero=['A0','A1','A2','A3','A5','A6','A7'], fit_range=[0.0,50.0])
+                (r,order,fit,res,chi2_prob) = Fisher_test(h=hslice_minus, coeff=coeff, 
+                                                          fix_to_zero=['A0','A1','A2','A3','A5','A6','A7'], 
+                                                          fit_range=[0.0,50.0])
+                if chi2_prob<threshold_chi2:
+                    print 'Iterative fit did not converge: try with looser threshold on chi2_prob'
+                    (r,order,fit,res,chi2_prob) = Fisher_test(h=hslice_minus, coeff=coeff, 
+                                                              fix_to_zero=['A0','A1','A2','A3','A5','A6','A7'], 
+                                                              fit_range=[0.0,50.0], threshold_chi2=1e-04)
+                    
                 hslice_minus.GetFunction('fit_order'+str(order+1)).SetBit(ROOT.TF1.kNotDraw)
 
             hslice_minus.SetLineWidth(2)
@@ -189,7 +235,7 @@ def draw_y_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, d
                 fit.SetLineStyle(ROOT.kDashed)
                 fit.SetLineColor(ROOT.kRed if q=='Wplus' else ROOT.kBlue)
                 hslices[q+'_fit'] = fit
-                leg_text = '#splitline{W^{'+('+' if q=='Wplus' else '-')+'}, #chi^{2}/ndof = '+'{:02.1f}'.format(r.Chi2()/r.Ndf())+'}{'+res+'}'
+                leg_text = '#splitline{W^{'+('+' if q=='Wplus' else '-')+'}, #chi^{2}/ndof = '+'{:02.1f}'.format(r.Chi2()/r.Ndf())+' (prob='+'{:03.2f}'.format(chi2_prob)+ ')}{'+res+'}'
                 leg.AddEntry(fit, 'Fit', "L")
 
             leg.AddEntry(hslice_minus, leg_text, "f")
@@ -206,21 +252,21 @@ def draw_y_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, d
         c.IsA().Destructor( c )        
         leg.IsA().Destructor( leg )        
 
-    f.Close()
+    fin.Close()
 
 # project the (y,qt) plot along the y axis for all bins of qt
 def draw_qt_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, do_fit=True):
 
     ranges = ranges_for_coeff()
 
-    f = ROOT.TFile.Open(fname,'READ')
+    fin = ROOT.TFile.Open(fname,'READ')
 
     histos = {}
     nbins_y = 0
     nbins_qt = 0
     for q in ['Wplus', 'Wminus']:
-        histos[q] = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(weight_name))
-        histos[q+'_norm'] = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(weight_name)+'_norm')
+        histos[q] = fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(weight_name))
+        histos[q+'_norm'] = fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(weight_name)+'_norm')
         nbins_y = histos[q].GetNbinsX()
         nbins_qt = histos[q].GetNbinsY()
 
@@ -253,7 +299,11 @@ def draw_qt_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, 
             hslice.SetXTitle('|y|')
 
             if do_fit:
-                (r,order,fit,res) = Fisher_test(h=hslice, coeff=coeff, fix_to_zero=['A1', 'A3', 'A6', 'A7'], fit_range=[0.0, 3.0])
+                (r,order,fit,res,chi2_prob) = Fisher_test(h=hslice, coeff=coeff, fix_to_zero=['A1', 'A3', 'A6', 'A7'], fit_range=[0.0, 3.0])
+                if chi2_prob<threshold_chi2:
+                    print 'Iterative fit did not converge: try with looser threshold on chi2_prob'
+                    (r,order,fit,res,chi2_prob) = Fisher_test(h=hslice_minus, coeff=coeff, 
+                                                              fix_to_zero=['A1', 'A3', 'A6', 'A7'], fit_range=[0.0, 3.0], threshold_chi2=1e-04)
                 hslice.GetFunction('fit_order'+str(order+1)).SetBit(ROOT.TF1.kNotDraw)
 
             hslice.SetLineWidth(2)
@@ -285,11 +335,12 @@ def draw_qt_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, 
         c.IsA().Destructor( c )        
         leg.IsA().Destructor( leg )        
 
-    f.Close()
+    fin.Close()
 
 
 def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coefficients=['A0'], weights={}, add_stat_uncert=False, postfix='',
-                   fix_to_zero=['A0','A1','A2','A3','A5','A6','A7'], fit_range=[0.0, 50.0]):
+                   fix_to_zero=['A0','A1','A2','A3','A5','A6','A7'], fit_range=[0.0, 50.0], threshold_chi2=0.02, verbose=False, 
+                   save_corr=True, save_coeff=True, save_tree=True, save_pkl=True):
 
     # bins used for the (y,qt) plots
     from tree_utils import np_bins_qt, np_bins_y, np_bins_qt_width, np_bins_y_width, np_bins_qt_mid, np_bins_y_mid
@@ -298,51 +349,57 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
     nbins_y = np_bins_y.size - 1 
     nbins_qt = np_bins_qt.size - 1 
 
-    out = ROOT.TFile.Open('plots/'+'covariance_'+q+'_'+postfix+'.root', 'RECREATE')
-    tree = ROOT.TTree('cov','cov')
+    # tree saving the results of the fit for the PDF replicas and scales
+    fout = ROOT.TFile.Open('plots/'+'covariance_'+q+'_'+postfix+'.root', 'RECREATE')
+    tree = ROOT.TTree('cov','cov')    
     variables = {}
 
+    # fit & bin-by-bin results (to be saved in a pkl file)
     results = {}
     results['fit_range'] = fit_range
 
-    covariances = {}
+    # covariance matrix from the fit (stat. only)
+    fit_covariances = {}
+
+    # map between coeff_bin_y and order of polynomial
     orders = {}
 
     # input file
-    f = ROOT.TFile.Open(fname,'READ')
+    fin = ROOT.TFile.Open(fname,'READ')
 
     # first loop: determine order of polynomials and book tree branches
+    # n_vars = total number of variables = [order+1]*len(coefficients)*n_bins_y
     n_vars = 0
     for coeff in coefficients:
         for y in range(nbins_y/2+1, nbins_y+1):
             y_bin = 'y{:03.2f}'.format(np_bins_y[y-1])+'_'+'y{:03.2f}'.format(np_bins_y[y])
             print 'Bin Y: ', y_bin
             name = q+'_'+str(0)
-            h = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(0))
-            h_norm = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(0)+'_norm')
-            hslice = h.ProjectionY(str(y)+'_'+name+'_py', nbins_y+1-y, nbins_y+1-y)
-            hslice_plus  = h.ProjectionY(str(y)+'_'+name+'_plus_py', y, y)
-            hnorm  = h_norm.ProjectionY(str(y)+'_'+name+'_norm_py', nbins_y+1-y, nbins_y+1-y)
-            hnorm_plus   = h_norm.ProjectionY(str(y)+'_'+name+'_plus_norm_py', y, y)
+            (h, h_norm) = (fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(0)), 
+                           fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(0)+'_norm'))
+            (hslice, hslice_plus, hnorm, hnorm_plus) = (h.ProjectionY(str(y)+'_'+name+'_py', nbins_y+1-y, nbins_y+1-y),
+                                                        h.ProjectionY(str(y)+'_'+name+'_plus_py', y, y),
+                                                        h_norm.ProjectionY(str(y)+'_'+name+'_norm_py', nbins_y+1-y, nbins_y+1-y),
+                                                        h_norm.ProjectionY(str(y)+'_'+name+'_plus_norm_py', y, y))
             print  '(', nbins_y+1-y, ' + ', y, ') /', nbins_y
             hslice.Add(hslice_plus)
             hnorm.Add(hnorm_plus)
             hslice.Divide(hnorm)
-            (r,order,fit,res) = Fisher_test(h=hslice, coeff=coeff, fix_to_zero=fix_to_zero, fit_range=fit_range)
-            orders[coeff+'_'+y_bin] = order
-            covariances[coeff+'_'+y_bin] = r.GetCovarianceMatrix()
 
+            # make the fit to decide the pol order
+            (r,order,fit,res,chi2_prob) = Fisher_test(h=hslice, coeff=coeff, fix_to_zero=fix_to_zero, fit_range=fit_range)
+            if chi2_prob<threshold_chi2:
+                print 'Iterative fit did not converge: try with looser threshold on chi2_prob'
+                (r,order,fit,res,chi2_prob) = Fisher_test(h=hslice, coeff=coeff, fix_to_zero=fix_to_zero, fit_range=fit_range, threshold_chi2=1e-04)
+
+            orders[coeff+'_'+y_bin] = order
+            # protection against fit with zero parameters (cov = ())
+            fit_covariances[coeff+'_'+y_bin] = r.GetCovarianceMatrix() if r.NFreeParameters()>0 else ROOT.TMatrixDSym(1)
+
+            # save the point values with errors
             results[coeff+'_'+y_bin+'_val'] = [hslice.GetBinContent(i+1) for i in range(hslice.GetNbinsX())] 
             results[coeff+'_'+y_bin+'_val_err'] = [hslice.GetBinError(i+1) for i in range(hslice.GetNbinsX())] 
             results[coeff+'_'+y_bin+'_fit'] = [] 
-
-            # add branches for bin-by-bin results
-            #variables[coeff+'_'+y_bin+'_nbins'] = array('i', [hslice.GetNbinsX()] )            
-            #tree.Branch(coeff+'_'+y_bin+'_nbins',  variables[coeff+'_'+y_bin+'_nbins'], coeff+'_'+y_bin+'_nbins'+'/I')
-            #variables[coeff+'_'+y_bin+'_val'] = array('f', results[coeff+'_'+y_bin+'_val'] )            
-            #tree.Branch(coeff+'_'+y_bin+'_val', variables[coeff+'_'+y_bin+'_val'], coeff+'_'+y_bin+'_val['+coeff+'_'+y_bin+'_nbins'+']'+'/F')
-            #variables[coeff+'_'+y_bin+'_val_err'] = array('f', results[coeff+'_'+y_bin+'_val_err'] )            
-            #tree.Branch(coeff+'_'+y_bin+'_val_err', variables[coeff+'_'+y_bin+'_val_err'], coeff+'_'+y_bin+'_val_err['+coeff+'_'+y_bin+'_nbins'+']'+'/F')
 
             # create tree branches
             for o in range(order+1):
@@ -354,7 +411,7 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
                 tree.Branch(nuis_name+'_id', variables[nuis_name+'_id'], nuis_name+'_id'+'/I')
                 n_vars += 1
 
-    # arrays that contain the coefficients for all pdf and scale variations
+    # map of np matrix of all fit-coefficients for all weights
     data = {}
     for syst in ['scale', 'pdf']:
         ws =  weights[syst]
@@ -365,29 +422,34 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
                 for y in range(nbins_y/2+1, nbins_y+1):
                     y_bin = 'y{:03.2f}'.format(np_bins_y[y-1])+'_'+'y{:03.2f}'.format(np_bins_y[y])
                     name = q+'_'+str(w)
-                    h = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w))
-                    h_norm = f.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w)+'_norm')
-                    hslice = h.ProjectionY(str(y)+'_'+name+'_py', nbins_y+1-y, nbins_y+1-y)
-                    hslice_plus  = h.ProjectionY(str(y)+'_'+name+'_plus_py', y, y)
-                    hnorm  = h_norm.ProjectionY(str(y)+'_'+name+'_norm_py', nbins_y+1-y, nbins_y+1-y)
-                    hnorm_plus   = h_norm.ProjectionY(str(y)+'_'+name+'_plus_norm_py', y, y)
+                    (h, h_norm) = (fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w)),
+                                   fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w)+'_norm'))
+                    (hslice, hslice_plus, hnorm, hnorm_plus) = (h.ProjectionY(str(y)+'_'+name+'_py', nbins_y+1-y, nbins_y+1-y),
+                                                                h.ProjectionY(str(y)+'_'+name+'_plus_py', y, y),
+                                                                h_norm.ProjectionY(str(y)+'_'+name+'_norm_py', nbins_y+1-y, nbins_y+1-y),
+                                                                h_norm.ProjectionY(str(y)+'_'+name+'_plus_norm_py', y, y))
                     hslice.Add(hslice_plus)
                     hnorm.Add(hnorm_plus)
                     hslice.Divide(hnorm)
-                    (r,order,fit,res) = Fisher_test(h=hslice, coeff=coeff, fix_to_zero=fix_to_zero, fit_range=fit_range, force_order=orders[coeff+'_'+y_bin])
+                    print 'Syst:', syst, 'weight:', str(w), 'coeff:', coeff, 'y_bin:', y_bin
+                    (r,order,fit,res,chi2_prob) = Fisher_test(h=hslice, coeff=coeff, fix_to_zero=fix_to_zero, fit_range=fit_range, 
+                                                              force_order=orders[coeff+'_'+y_bin])                        
                     for o in range(order+1):
                         nuis_name = coeff+'_'+y_bin+'_p'+str(o) 
                         variables[nuis_name][0] = r.Parameter(o)
                         variables[nuis_name+'_id'][0] = int(w)
                         data[syst][vars_count][iw] = r.Parameter(o)
                         vars_count += 1
-            #if w==0:
+            # fill the tree
             tree.Fill()    
 
-    # covariance matrix
+    # covariance matrix for n_vars patrameters
+    print 'Making the covariance matrix...'
     cov_map = {}
     for syst in ['pdf', 'scale', 'stat']:
-        # statistical one is formed from the cov matrix of the fits
+        # statistical one is formed from 
+        # the cov matrix of the fit
+        print '\t> '+syst
         if syst=='stat':
             cov_map['stat']  = np.zeros((n_vars,n_vars))
             vars_count1 = 0 
@@ -403,46 +465,63 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
                                 for o2 in range(orders[coeff2+'_'+y_bin2]+1):
                                     nuis_name2 = coeff2+'_'+y_bin2
                                     if  nuis_name1==nuis_name2:
-                                        cov_map['stat'][vars_count1,vars_count2] += covariances[coeff1+'_'+y_bin1][o1][o2]
+                                        cov_map['stat'][vars_count1,vars_count2] += fit_covariances[coeff1+'_'+y_bin1][o1][o2]
                                     vars_count2 += 1
                         vars_count1 += 1
-        # systematics formed from the pdf and scal variations
+
+        # systematics formed from 
+        # the pdf and scale variations
         else:                
             cov_map[syst] = np.cov(data[syst])
-        # plot the matrix
-        syst_label = (q+'_'+syst)+'_'+postfix
-        plot_cov_matrix(n_vars=n_vars, cov=cov_map[syst], label=syst_label, plot='corr')
+
+        # make a snapshot of the matrix
+        if save_corr:
+            syst_label = (q+'_'+syst)+'_'+postfix
+            plot_cov_matrix(n_vars=n_vars, cov=cov_map[syst], label='correlation_'+syst_label, plot='corr')
 
     # total covariance matrix
-    cov_map['sum'] = np.zeros((n_vars,n_vars))
+    cov_map['sum']  = np.zeros((n_vars,n_vars))
     cov_map['syst'] = np.zeros((n_vars,n_vars))
     for syst in ['pdf', 'scale', 'stat']:
         cov_map['sum'] += cov_map[syst]
         if syst in ['pdf', 'scale']:
             cov_map['syst'] += cov_map[syst]
-    cov_label = (q+'_stat_plus_syst')+'_'+postfix
-    plot_cov_matrix(n_vars=n_vars, cov=cov_map['sum'], label=cov_label, plot='corr')
+    # make a snapshot of the matrix
+    if save_corr:
+        cov_label = (q+'_stat_plus_syst')+'_'+postfix
+        plot_cov_matrix(n_vars=n_vars, cov=cov_map['sum'], label='correlation_'+cov_label, plot='corr')
 
     # save firt results as a pkl file
-    import pickle
-    pickle.dump(results, open('plots/fit_results_'+DY+'_'+q+'_'+postfix+'.pkl','wb') )
+    if save_pkl:
+        print 'Save results to pickle file....'+'plots/fit_results_'+DY+'_'+q+'_'+postfix+'.pkl'
+        import pickle
+        pickle.dump(results, open('plots/fit_results_'+DY+'_'+q+'_'+postfix+'.pkl','wb') )
 
     bin_count = 0 
-    last_bin = 16
+    last_bin = np.where(np_bins_qt_mid_from_zero<=fit_range[1])[0][-1] 
+
+    print 'Making plots per coefficient/bin_y...'
     for coeff in coefficients:
+        if not save_coeff:
+            continue
+        print '\t> '+coeff
         for y in range(nbins_y/2+1, nbins_y+1):
             y_bin = 'y{:03.2f}'.format(np_bins_y[y-1])+'_'+'y{:03.2f}'.format(np_bins_y[y])
             bin_name = coeff+'_'+y_bin
             order = orders[bin_name]
-            #print 'Taking sub-matrix: [', bin_count, ',' , bin_count+(order) , ']' 
-
-            y = results[bin_name+'_val']
+            print 'Taking sub-matrix: [', bin_count, ',' , bin_count+order , ']' 
+            y     = results[bin_name+'_val']
             y_err = results[bin_name+'_val_err']
-            p = results[bin_name+'_fit']
-            print 'Save fit:', bin_name, ':', order
-            #print '\t Val         :', y
-            #print '\t Err         :', y_err
-            #print '\t Coefficients:', p
+            p     = results[bin_name+'_fit']
+            print 'Save fit:', bin_name, 'at order :', order
+
+            if verbose:
+                print '\t Val         :', y
+                print '\t Err         :', y_err
+                print '\t Coefficients:', p            
+                print cov_map['scale'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] 
+                print cov_map['pdf'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] 
+                print cov_map['stat'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] 
 
             plt.figure()
             fig, ax = plt.subplots()
@@ -470,14 +549,15 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
             plt.title(DY+', charge='+q[1:]+', $|y| \in ['+y_bin[1:5]+','+y_bin[7:11]+']$', fontsize=20)
             plt.show()
             plt.savefig('plots/coefficient_'+q+'_'+var+'_'+coeff+'_'+y_bin+'_fit.png')
-            plt.close()            
+            plt.close('all')            
             bin_count += (order+1)
 
     # save output tree
-    out.cd()
-    tree.Write("cov", ROOT.TObject.kOverwrite)
-    out.Close()
-    f.Close()
+    fout.cd()
+    if save_tree:
+        tree.Write("cov", ROOT.TObject.kOverwrite)
+    fout.Close()
+    fin.Close()
     
 
 

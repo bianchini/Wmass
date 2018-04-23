@@ -28,22 +28,35 @@ elif argv[1]=='pt_bias':
 
 elif argv[1]=='fit':
     for coeff in ['A0','A1','A2','A3','A4','A5', 'A6', 'A7']:
-    #for coeff in ['A0']:
-        draw_y_slice(fname='../root/tree_histos_NC.root', var='Wdress', coeff=coeff, weight_name=0, do_fit=True)
-        draw_qt_slice(fname='../root/tree_histos_NC.root', var='Wdress', coeff=coeff, weight_name=0, do_fit=False)
+    #for coeff in ['A3']:
+        draw_y_slice(fname='../root/tree_histos_CC.root', var='Wdress', coeff=coeff, weight_name=0, do_fit=True)
+        #draw_qt_slice(fname='../root/tree_histos_NC.root', var='Wdress', coeff=coeff, weight_name=0, do_fit=False)
 
-elif argv[1]=='cov':
+elif 'cov' in argv[1]:
     weights = {}
     weights['scale'] = ([0] + [1,2,3,4,6,8])
     weights['pdf'] = range(9,109)
-    for q in ['Wplus', 'Wminus']:
-        #for coeff in ['A0','A1','A2','A3','A4']:
-            #get_covariance(fname='../root/tree_histos_CC.root', DY='CC', var='Wdress', q=q, weights=weights, coefficients=[coeff], add_stat_uncert=True, postfix=coeff)
-        get_covariance(fname='../root/tree_histos_CC.root', DY='CC', var='Wdress', q=q, weights=weights, coefficients=['A0','A1','A2','A3','A4'], add_stat_uncert=True, postfix='all')
+    for q in ['Wplus', 
+              #'Wminus'
+              ]:
+        if 'all' in argv[1]:
+            get_covariance(fname='../root/tree_histos_CC.root', DY='CC', var='Wdress', q=q, weights=weights, 
+                           coefficients=['A0','A1','A2','A3','A4','A5','A6','A7'], 
+                           add_stat_uncert=True, postfix='all_A0-7',
+                           save_corr=True, save_coeff=True, save_tree=True, save_pkl=True)
+        else:
+            for coeff in ['A7']:
+                get_covariance(fname='../root/tree_histos_CC.root', DY='CC', var='Wdress', q=q, weights=weights, 
+                               coefficients=[coeff], 
+                               add_stat_uncert=True, postfix=coeff,
+                               save_corr=True, save_coeff=True, save_tree=True, save_pkl=True)
 
 elif argv[1]=='closure':
-    plot_closure_test_cum(charge='Wplus',  var='Wdress', coeff_eval='val')
-    #plot_closure_test(charge='Wplus',  var='Wdress', coeff_eval='val')
-    #plot_closure_test(charge='Wplus',  var='Wdress', coeff_eval='fit')
-    #plot_closure_test(charge='Wminus', var='Wdress', coeff_eval='val')
-    #plot_closure_test(charge='Wminus', var='Wdress', coeff_eval='fit')
+    for q in ['Wplus', 
+              #'Wminus'
+              ]:
+        for ceval in ['val', 
+                      #'fit'
+                      ]:
+            plot_closure_test(charge=q,  var='Wdress', coeff_eval=ceval)
+            plot_closure_test_cum(charge=q,  var='Wdress', coeff_eval=ceval)
