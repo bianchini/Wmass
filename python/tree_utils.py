@@ -368,4 +368,55 @@ def fill_weighted_CS(res={}, histos={}, q='', var='Wdress', coeff_eval=['fit'], 
         h.Fill(ps_CS[0], ps_CS[1], weight/weight_coeff(res=res, coeff_eval=ceval, bin_y=bin_y, qt=ps_W[1], ps=ps_CS, coeff=coeff) )
         h_norm.Fill(ps_CS[0], ps_CS[1], weight)
 
+
+# compute dsigma/dphidcos in the CS frame
+def angular_pdf(x, y, coeff=[]):
+    UL = (1.0 + x*x)
+    L = 0.5*(1-3*x*x)
+    T = 2.0*x*np.sqrt(1-x*x)*np.cos(y)
+    I = 0.5*(1-x*x)*np.cos(2*y)
+    A = np.sqrt(1-x*x)*np.cos(y)
+    P = x
+    p7 = (1-x*x)*np.sin(2*y)
+    p8 = 2.0*x*np.sqrt(1-x*x)*np.sin(y)
+    p9 = np.sqrt(1-x*x)*np.sin(y)
+    return 3./16./math.pi * ( UL + coeff[0]*L + coeff[1]*T + coeff[2]*I + coeff[3]*A + coeff[4]*P + coeff[5]*p7 + coeff[6]*p8 + coeff[7]*p9)
+
+# fill (cos,phi) grid in CS frame
+def make_grid_CS(res={}, coeff_eval='fit', bin_y='', qt=0.0, h=None, coeff=[], ntoys=1000):
+
+    coeff_vals = np.zeros(8)
+    for ic,c in enumerate(coeff):
+        coeff_val = 0.0
+        if coeff_eval == 'fit':
+            order = len(res[c+'_'+bin_y+'_fit'])
+            for o in range(order):
+                coeff_val += math.pow(qt,o)*res[c+'_'+bin_y+'_fit'][o]
+        elif coeff_eval == 'val':
+            iqt = np.where(np_bins_qt<=qt)[0][-1]
+            coeff_val = res[c+'_'+bin_y+'_val'][iqt]
+        coeff_vals[ic] = coeff_val
+
+    bins_cos = np.linspace(h.GetXaxis().GetXmin(), h.GetXaxis().GetXmax()-h.GetXaxis().GetBinWidth(1), h.GetNbinsX())
+    bins_phi = np.linspace(h.GetYaxis().GetXmin(), h.GetYaxis().GetXmax()-h.GetYaxis().GetBinWidth(1), h.GetNbinsY())
+    xx, yy = np.meshgrid( bins_cos, bins_phi )        
+
+    pdf_evals = np.zeros( bins_cos.size*bins_phi.size)
+    #pdf_evals = angular_pdf(xx,yy, coeff=coeff_vals).flatten()    
+    for ix in range(10):
+        for iy in range(10):
+            delta_xx = ix*h.GetXaxis().GetBinWidth(1)/10.
+            delta_yy = iy*h.GetYaxis().GetBinWidth(1)/10.
+            pdf_evals += angular_pdf(xx+delta_xx,yy+delta_yy, coeff=coeff_vals).flatten()    
+
+    pdf_evals_norm = np.sum(pdf_evals)    
+    pdf_evals *= (1./pdf_evals_norm if pdf_evals_norm>0. else 1.0)        
+
+    rnd = np.random.choice(  np.arange(0, len(bins_cos)*len(bins_phi), 1), size=ntoys, p=pdf_evals )
+
+    for i,idx in enumerate(rnd):
+        idx_cos =  idx%len(bins_cos)+1
+        idx_phi =  idx/len(bins_cos)+1
+        h.Fill( h.GetXaxis().GetBinCenter(idx_cos),  h.GetYaxis().GetBinCenter(idx_phi) )
+
 ###########################

@@ -59,4 +59,4 @@ elif argv[1]=='closure':
                       #'fit'
                       ]:
             #plot_closure_test(charge=q,  var='Wdress', coeff_eval=ceval)
-            plot_closure_test_cum(charge=q,  var='Wdress', coeff_eval=ceval, save_2D=False, save_summary=True)
+            plot_closure_test_cum(charge=q,  var='Wdress', coeff_eval=ceval, save_2D=True, save_pdf=False, save_summary=True, do_toy=False)
