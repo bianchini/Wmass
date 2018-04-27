@@ -52,11 +52,13 @@ elif 'cov' in argv[1]:
                                save_corr=True, save_coeff=True, save_tree=True, save_pkl=True)
 
 elif argv[1]=='closure':
-    for q in ['Wplus', 
-              #'Wminus'
-              ]:
-        for ceval in ['val', 
-                      #'fit'
-                      ]:
-            #plot_closure_test(charge=q,  var='Wdress', coeff_eval=ceval)
-            plot_closure_test_cum(charge=q,  var='Wdress', coeff_eval=ceval, save_2D=True, save_pdf=False, save_summary=True, do_toy=False)
+    for q in ['Wplus']:
+        for ceval in ['val']:
+            # MC
+            #plot_closure_test_cum(charge=q,  var='Wdress', coeff_eval=ceval, coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
+            #                      save_2D=False, save_pdf=False, save_summary=True, 
+            #                      do_toy=False, extra_variance_toy=0.07)
+            # toys
+            plot_closure_test_cum(charge=q,  var='Wdress', coeff_eval=ceval, coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
+                                  save_2D=False, save_pdf=False, save_summary=True, 
+                                  do_toy=True, extra_variance_toy=0.001)

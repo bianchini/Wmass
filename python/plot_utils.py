@@ -386,26 +386,39 @@ def plot_closure_test(charge='Wplus', var='Wdress', coeff_eval='val', min_val = 
     print 'Done'
 
 
-def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val', min_val=-999., verbose=False, save_2D=True, save_pdf=True, save_summary=True, do_toy=False):
+def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val', 
+                          min_val=-999., 
+                          coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'],
+                          verbose=False, 
+                          save_2D=True, save_pdf=True, save_summary=True, 
+                          do_toy=False, extra_variance_toy=0.07):
 
-    print "*** plot_closure_test_cum ***"
+    print "Running plot_closure_test_cum"
+
+    if do_toy:
+        print 'Set rnd seed to 0'
+        np.random.seed(0)
 
     from pylab import rcParams
     rcParams['figure.figsize'] = 14,8
 
     from tree_utils import np_bins_qt, np_bins_y, weight_coeff_cumulative
-    np_bins_qt = np.array([32.0, 36.0])
-    #np_bins_qt = np.array([10.0, 12.0])
-    #np_bins_y  = np.array([-0.2, 0.0, 0.2])
+    #np_bins_qt = np.array([0.0, 2.0])
     np_bins_y_p0 = np.linspace(-4.0, -2.5,  4)
     np_bins_y_p1 = np.linspace(-2.0, +2.0, 21)
     np_bins_y_p2 = np.linspace(+2.5, +4.0,  4)
     np_bins_y = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
+    print 'The following (qt,y) bins will be considered:'
+    print '> qt:', np_bins_qt
+    print '>  y:', np_bins_y
 
-    f = ROOT.TFile('../root/tree_histos2_CC.root')
+    fin_name = '../root/tree_histos2_CC.root'
+    fin = ROOT.TFile(fin_name, 'READ')
+    print 'Read histograms from '+fin_name
 
-    #res = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_CC_'+charge+'_all.pkl') )
-    res = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/test/plots/'+'fit_results_CC_'+charge+'_all_A0-7.pkl') )
+    res_name = os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_CC_'+charge+'_all_A0-7.pkl'
+    res = pickle.load( open(res_name) )
+    print 'Read coefficients from '+res_name
 
     counter = 0
     for iqt in range(np_bins_qt.size-1):
@@ -416,7 +429,7 @@ def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val', min_va
     res_sigma     = np.zeros(counter)
     res_sigma_err = np.zeros(counter)
     p_values = np.zeros(counter)
-    print counter, 'histograms'
+    print 'Total number of histograms:', counter
 
     x_labels = []
     counter = 0
@@ -428,21 +441,21 @@ def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val', min_va
             name = charge+'_'+var+'_'+coeff_eval+'_'+bin_y+'_'+bin_qt
             canvas = ROOT.TCanvas("c", "canvas", 600, 600)            
             h_pull = ROOT.TH1F('h_pull_byPDF_'+name, '', 81, -4.0, 4.0)
-            h = f.Get(charge+'/'+var+'/'+coeff_eval+'/'+name+'_norm')
+            h = fin.Get(charge+'/'+var+'/'+coeff_eval+'/'+name+'_norm')
             h_pdf = h.Clone(h.GetName()+'_pdf')
             h_pdf.Reset()
 
             if do_toy:
                 from tree_utils import make_grid_CS
                 ntoys=int(h.Integral())
-                print ntoys
+                print 'Generating ', ntoys, 'toys'
                 h.Reset()
                 make_grid_CS(res=res, h=h, coeff_eval=coeff_eval, 
                              bin_y=bin_y, qt=0.5*( np_bins_qt[iqt]+ np_bins_qt[iqt+1]), 
-                             coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], ntoys=ntoys)
+                             coeff=coeff, ntoys=ntoys)
                              
-            chi2 = 0.0
             integ = h.Integral()
+            chi2 = 0.0
             ndof = 0
             for ix in range(1, h.GetNbinsX()+1):
                 bin_cos = (h.GetXaxis().GetBinLowEdge(ix), 
@@ -450,23 +463,31 @@ def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val', min_va
                 for iy in range(1, h.GetNbinsY()+1):
                     bin_phi = (h.GetYaxis().GetBinLowEdge(iy), 
                                h.GetYaxis().GetBinLowEdge(iy)+h.GetYaxis().GetBinWidth(iy))                    
-                    norm = weight_coeff_cumulative(res=res, 
+
+                    n = h.GetBinContent(ix,iy)
+                    err = h.GetBinError(ix,iy)
+                    if do_toy:
+                        err_weight = -1.0
+                        while err_weight<0.:
+                            err_weight = err*(1.0 + np.random.normal(0.0, extra_variance_toy))
+                        err = err_weight
+
+                    mu = weight_coeff_cumulative(res=res, 
                                                    coeff_eval=coeff_eval, 
                                                    bin_y=bin_y, 
                                                    qt=0.5*( np_bins_qt[iqt]+ np_bins_qt[iqt+1]), 
                                                    bin_cos=bin_cos, bin_phi=bin_phi, 
-                                                   coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'])
-                    norm *= integ
+                                                   coeff=coeff)
                     if verbose:
-                        print '\tBin (', ix, ',', iy , ') = ' , h.GetBinContent(ix,iy), ' +/- ', h.GetBinError(ix,iy)
-                    if (h.GetBinContent(ix,iy) < min_val or h.GetBinContent(ix,iy)==0.):
+                        print '\tBin (', ix, ',', iy , ') = ' , n, ' +/- ', err
+                    if (n < min_val or n==0.):
                         continue
-                    pull = (h.GetBinContent(ix,iy) - norm)/h.GetBinError(ix,iy)
+                    pull = (n - mu*integ)/err
                     h_pull.Fill( pull )
                     chi2 += pull*pull
                     ndof += 1
                     h.SetBinContent(ix,iy, pull )
-                    h_pdf.SetBinContent(ix,iy, norm/integ )
+                    h_pdf.SetBinContent(ix,iy, mu )
 
             p_values[counter] =  (1-stats.chi2.cdf(chi2, ( ndof - 1) ) - 0.5)
             res_mean[counter] = h_pull.GetMean()
@@ -477,21 +498,22 @@ def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val', min_va
             counter += 1
             if save_2D:
                 h_pull.Draw("HIST")
-                canvas.SaveAs('plots/pull_1D_byPDF_'+name+'.png')
+                canvas.SaveAs('plots/pull_1D_byPDF_'+name+('_toy' if do_toy else '')+'.png')
                 h.SetStats(0)                    
                 h.Draw("COLZ") 
-                canvas.SaveAs('plots/pull_2Dflat_byPDF_COLZ_'+name+'.png')
+                canvas.SaveAs('plots/pull_2Dflat_byPDF_COLZ_'+name+('_toy' if do_toy else '')+'.png')
                 h.Draw("SURF") 
-                canvas.SaveAs('plots/pull_2Dflat_byPDF_SURF_'+name+'.png')
+                canvas.SaveAs('plots/pull_2Dflat_byPDF_SURF_'+name+('_toy' if do_toy else '')+'.png')
                 if save_pdf:
                     h_pdf.Draw("COLZ") 
-                    canvas.SaveAs('plots/pdf_2Dflat_byPDF_COLZ_'+name+'.png')
+                    canvas.SaveAs('plots/pdf_2Dflat_byPDF_COLZ_'+name+('_toy' if do_toy else '')+'.png')
                     h_pdf.Draw("SURF") 
-                    canvas.SaveAs('plots/pdf_2Dflat_byPDF_SURF_'+name+'.png')
+                    canvas.SaveAs('plots/pdf_2Dflat_byPDF_SURF_'+name+('_toy' if do_toy else '')+'.png')
             h_pull.IsA().Destructor( h_pull )
             canvas.IsA().Destructor( canvas )
 
     if save_summary:
+        print 'Summary plot...'
         plt.figure()
         fig, ax = plt.subplots()
         colors = ['b', 'r', 'g']
@@ -503,14 +525,13 @@ def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val', min_va
         plt.axis([-1, counter, -0.51, +0.51])        
         ax.set_xticks( x[ np.arange(0, x.size-1, np_bins_y.size/2) ] )
         ax.set_xticklabels( x_labels, rotation=45, ha='center', fontsize=15 )
-
         legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
-        #plt.xlabel('Bin number', fontsize=20)
         plt.ylabel('Value', fontsize=20)
-        plt.title('['+charge+', '+var+'], type = '+coeff_eval+'. $\chi^2$ from pdf', fontsize=20)
+        plt.title('['+charge+', '+var+'], type = '+coeff_eval+'. $\chi^2$ from pdf. Data = '+('toys' if do_toy else 'MC'), fontsize=20)
         plt.grid(True)
         plt.show()
-        plt.savefig('plots/summary_byPDF_'+charge+'_'+var+'_'+coeff_eval+'.png')
+        plt.savefig('plots/summary_byPDF_'+charge+'_'+var+'_'+coeff_eval+('_toy' if do_toy else '')+'.png')
         plt.close()
 
-    print 'Done'
+    fin.Close()
+    print 'Done!'
