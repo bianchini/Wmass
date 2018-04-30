@@ -284,6 +284,7 @@ def cumulative_angular_pdf(bin_cos=(), bin_phi=(), coeff_vals=[], verbose=False)
     if verbose:
         print ('\t pdf = 3./16./math.pi * ( UL + %s*L + %s*T + %s*I + %s*A + %s*P + %s*p7 + %s*p8 + %s*p9)' % (coeff_vals[0], coeff_vals[1], coeff_vals[2], coeff_vals[3], coeff_vals[4], coeff_vals[5], coeff_vals[6], coeff_vals[7]) )
     return 3./16./math.pi * ( UL + coeff_vals[0]*L + coeff_vals[1]*T + coeff_vals[2]*I + coeff_vals[3]*A + coeff_vals[4]*P + coeff_vals[5]*p7 + coeff_vals[6]*p8 + coeff_vals[7]*p9)
+    #return (b-a)*(d-c)/(4.*math.pi)
 
 # Determine the angular_pdf in a y-bin as a function of qt (read results 'res' from external file)
 # Two modes:
@@ -328,6 +329,8 @@ def weight_coeff_cumulative(res={}, coeff_eval='fit', bin_y='', qt=0.0, bin_cos=
         elif coeff_eval == 'val':
             iqt = np.where(np_bins_qt<=qt)[0][-1]
             coeff_val = res[c+'_'+bin_y+'_val'][iqt]
+            #if c=='A3':
+            #    coeff_val *= 1.2
         coeff_vals[ic] = coeff_val
     val = cumulative_angular_pdf(bin_cos=bin_cos, bin_phi=bin_phi, coeff_vals=coeff_vals)
     if val > 0.0:        
@@ -370,7 +373,7 @@ def fill_weighted_CS(res={}, histos={}, q='', var='Wdress', coeff_eval=['fit'], 
 
 
 # compute dsigma/dphidcos in the CS frame
-def angular_pdf(x, y, coeff=[]):
+def angular_pdf_CS(x, y, coeff=[]):
     UL = (1.0 + x*x)
     L = 0.5*(1-3*x*x)
     T = 2.0*x*np.sqrt(1-x*x)*np.cos(y)
@@ -381,6 +384,7 @@ def angular_pdf(x, y, coeff=[]):
     p8 = 2.0*x*np.sqrt(1-x*x)*np.sin(y)
     p9 = np.sqrt(1-x*x)*np.sin(y)
     return 3./16./math.pi * ( UL + coeff[0]*L + coeff[1]*T + coeff[2]*I + coeff[3]*A + coeff[4]*P + coeff[5]*p7 + coeff[6]*p8 + coeff[7]*p9)
+    #return (1.0 + 0.0*x)/(4.0*math.pi)
 
 # fill (cos,phi) grid in CS frame
 def make_grid_CS(res={}, coeff_eval='fit', bin_y='', qt=0.0, h=None, coeff=[], ntoys=1000):
@@ -402,12 +406,12 @@ def make_grid_CS(res={}, coeff_eval='fit', bin_y='', qt=0.0, h=None, coeff=[], n
     xx, yy = np.meshgrid( bins_cos, bins_phi )        
 
     pdf_evals = np.zeros( bins_cos.size*bins_phi.size)
-    #pdf_evals = angular_pdf(xx,yy, coeff=coeff_vals).flatten()    
+    #pdf_evals = angular_pdf_CS(xx,yy, coeff=coeff_vals).flatten()    
     for ix in range(10):
         for iy in range(10):
             delta_xx = ix*h.GetXaxis().GetBinWidth(1)/10.
             delta_yy = iy*h.GetYaxis().GetBinWidth(1)/10.
-            pdf_evals += angular_pdf(xx+delta_xx,yy+delta_yy, coeff=coeff_vals).flatten()    
+            pdf_evals += angular_pdf_CS(xx+delta_xx,yy+delta_yy, coeff=coeff_vals).flatten()    
 
     pdf_evals_norm = np.sum(pdf_evals)    
     pdf_evals *= (1./pdf_evals_norm if pdf_evals_norm>0. else 1.0)        

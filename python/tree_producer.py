@@ -51,7 +51,7 @@ class TreeProducer:
         # save the histograms in the output file
         self.save_histo1 = save_histo1 
         if self.save_histo1:
-            self.histos = add_histo2D(charges=['Wminus','Wplus'], var=['Wdress'], 
+            self.histos = add_histo2D(charges=['Wminus','Wplus'], var=['Wdress', 'Wbare', 'WpreFSR'], 
                                       coeff=self.coefficients_for_histos, 
                                       weights=self.weights_for_histos)
 
@@ -60,9 +60,9 @@ class TreeProducer:
         self.fit_result_Wplus = None
         self.fit_result_Wminus = None
         if save_histo2:
-            self.fit_result_Wplus = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_Wplus_all.pkl') )
-            self.fit_result_Wminus = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_Wminus_all.pkl') )
-            self.histos = add_histo2D_CS( charges=['Wminus','Wplus'], var=['Wdress'], coeff_eval=['fit','val'])
+            self.fit_result_Wplus  = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_Wplus_all_A0-7.pkl') )
+            self.fit_result_Wminus = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_Wminus_all_A0-7.pkl') )
+            self.histos = add_histo2D_CS( charges=['Wminus','Wplus'], var=['Wdress', 'Wbare', 'WpreFSR'], coeff_eval=['val'])
 
         # add branches to tree (needed even if self.save_tree=False)
         self.variables = add_vars(self.outtree)
@@ -323,7 +323,7 @@ class TreeProducer:
                 self.variables[t+'_phiCS'][0] = ps[2] 
 
                 if self.save_histo1:
-                    if t not in ['Wdress']:
+                    if t not in ['Wdress', 'Wbare', 'WpreFSR']:
                         continue
                     for w in self.weights_for_histos:
                         q1 = 'Wplus' if self.variables['mu_charge'][0]==-13 else 'Wminus'
@@ -347,7 +347,7 @@ class TreeProducer:
                                               weight=self.variables['weights'][w] )
 
                 if self.save_histo2:
-                    if t not in ['Wdress']:
+                    if t not in ['Wdress', 'Wbare', 'WpreFSR']:
                         continue
                     q1 = 'Wplus' if self.variables['mu_charge'][0]==-13 else 'Wminus'
                     fill_weighted_CS(res=getattr(self, "fit_result_"+q1),

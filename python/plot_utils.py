@@ -283,117 +283,22 @@ def print_pt_bias_vs_qt(pt_min=25.0, pt_max=[], qt_max=[], q='Wplus', var='Wdres
     plt.close()
 
 
-def plot_closure_test(charge='Wplus', var='Wdress', coeff_eval='val', min_val = -999., save_2D=True, save_summary=True):
-
-    print "*** plot_closure_test ***"
-
-    from pylab import rcParams
-    rcParams['figure.figsize'] = 14,8
-
-    from tree_utils import np_bins_qt, np_bins_y
-
-    #np_bins_qt = np.array([0.0, 2.0])
-    np_bins_y_p0 = np.linspace(-4.0, -2.5,  4)
-    np_bins_y_p1 = np.linspace(-2.0, +2.0, 21)
-    np_bins_y_p2 = np.linspace(+2.5, +4.0,  4)
-    np_bins_y = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
-
-    f = ROOT.TFile('../root/tree_histos2_CC.root')
-
-    counter = 0
-    for iqt in range(np_bins_qt.size-1):
-        for iy in range((np_bins_y.size-1)/2, np_bins_y.size-1):
-            counter += 1
-    res_mean      = np.zeros(counter)
-    res_mean_err  = np.zeros(counter)
-    res_sigma     = np.zeros(counter)
-    res_sigma_err = np.zeros(counter)
-    p_values = np.zeros(counter)
-    print counter, 'histograms'
-
-    counter = 0
-    for iqt in range(np_bins_qt.size-1):
-        for iy in range((np_bins_y.size-1)/2, np_bins_y.size-1):
-            bin_y = 'y{:03.2f}'.format(np_bins_y[iy])+'_'+'y{:03.2f}'.format(np_bins_y[iy+1])
-            bin_qt = 'qt{:03.1f}'.format(np_bins_qt[iqt])+'_'+'qt{:03.1f}'.format(np_bins_qt[iqt+1])
-            name = charge+'_'+var+'_'+coeff_eval+'_'+bin_y+'_'+bin_qt
-            canvas = ROOT.TCanvas("c", "canvas", 600, 600)            
-            h = f.Get(charge+'/'+var+'/'+coeff_eval+'/'+name)
-            h_norm = f.Get(charge+'/'+var+'/'+coeff_eval+'/'+name+'_norm')
-            norm2 = 0.0
-            err2  = 0.0
-            ndof = 0
-            for ix in range(1, h.GetNbinsX()+1):
-                for iy in range(1, h.GetNbinsY()+1):
-                    if (h_norm.GetBinContent(ix,iy) < min_val or h_norm.GetBinContent(ix,iy)==0.):
-                        continue
-                    ndof += 1
-                    err = h.GetBinError(ix,iy)
-                    norm2 +=  h.GetBinContent(ix,iy)/err/err
-                    err2  +=  1./err/err
-            norm = norm2/err2 if err2>0.0 else 0.0
-
-            chi2 = 0.0
-            h_pull = ROOT.TH1F('h_pull_byInvPDF'+name, '', 81, -4.0, 4.0)                        
-            for ix in range(1, h.GetNbinsX()+1):
-                for iy in range(1, h.GetNbinsY()+1):
-                    val = h.GetBinContent(ix,iy)
-                    err = h.GetBinError(ix,iy)
-                    if (h_norm.GetBinContent(ix,iy) < min_val or h_norm.GetBinContent(ix,iy)==0.):
-                        continue
-                    pull = (val - norm)/err
-                    chi2 +=  pull*pull
-                    h_pull.Fill(pull)
-                    h.SetBinContent(ix,iy, h.GetBinContent(ix,iy)-norm )
-
-            p_values[counter] =  (1-stats.chi2.cdf(chi2, ndof-1 ) - 0.5)
-            res_mean[counter] = h_pull.GetMean()
-            res_mean_err[counter] = h_pull.GetMeanError()
-            res_sigma[counter] = h_pull.GetRMS()-1.0
-            res_sigma_err[counter] = h_pull.GetRMSError()
-            print name, 'mean[', counter , ']=', res_mean[counter] 
-
-            if save_2D:
-                h_pull.Draw("HIST")
-                canvas.SaveAs('plots/pull_1D_byInvPDF_'+name+'.png')
-                h.Draw("COLZ") 
-                canvas.SaveAs('plots/pull_2Dflat_byInvPDF_COLZ_'+name+'.png')
-                h.Draw("SURF") 
-                canvas.SaveAs('plots/pull_2Dflat_byInvPDF_SURF_'+name+'.png')
-            canvas.IsA().Destructor( canvas )
-            h_pull.IsA().Destructor( h_pull ) 
-            counter += 1
-            
-    if save_summary:
-        plt.figure()
-        fig, ax = plt.subplots()
-        colors = ['b', 'r', 'g']
-        fmts = ['o', '^', '+']
-        x = np.linspace(0,counter-1,counter)
-        ax.errorbar(x, res_mean, xerr=0.0, yerr=0.0, fmt=fmts[0], color=colors[0], label='mean', markersize=6)
-        ax.errorbar(x, res_sigma, xerr=0.0, yerr=0.0, fmt=fmts[1], color=colors[1], label='RMS-1', markersize=6)
-        ax.errorbar(x, p_values, xerr=0.0, yerr=0.0, fmt=fmts[2], color=colors[2], label='p-0.5', markersize=8)
-        plt.axis([-1, counter, -0.51, +0.51])
-        legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
-        plt.xlabel('Bin number', fontsize=20)
-        plt.ylabel('Value', fontsize=20)
-        plt.title('['+charge+', '+var+'], type = '+coeff_eval+'. Flattened by 1/pdf', fontsize=20)
-        plt.grid(True)
-        plt.show()
-        plt.savefig('plots/summary_byInvPDF_'+charge+'_'+var+'_'+coeff_eval+'.png')
-        plt.close()
-
-    print 'Done'
-
-
-def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val', 
-                          min_val=-999., 
-                          coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'],
-                          verbose=False, 
-                          save_2D=True, save_pdf=True, save_summary=True, 
-                          do_toy=False, extra_variance_toy=0.07):
-
+def plot_closure_test(charge='Wplus', var='Wdress', coeff_eval='val', 
+                      min_val=-999., 
+                      coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'],
+                      byInvPdf=False,
+                      verbose=False, 
+                      save_2D=True, save_pdf=True, save_summary=True, 
+                      do_toy=False, extra_variance_toy=0.07):
+    
     print "Running plot_closure_test_cum"
+    postfix = ''
+    if byInvPdf:
+        postfix = 'byInvPDF'
+        print '> Compare MC distribution in (cos,phi) weighted by 1/pdf with flat distribution'
+    else:
+        postfix = 'byPDF'
+        print '> Compare MC distribution in (cos,phi) with N*pdf'        
 
     if do_toy:
         print 'Set rnd seed to 0'
@@ -403,11 +308,14 @@ def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val',
     rcParams['figure.figsize'] = 14,8
 
     from tree_utils import np_bins_qt, np_bins_y, weight_coeff_cumulative
-    #np_bins_qt = np.array([0.0, 2.0])
     np_bins_y_p0 = np.linspace(-4.0, -2.5,  4)
     np_bins_y_p1 = np.linspace(-2.0, +2.0, 21)
     np_bins_y_p2 = np.linspace(+2.5, +4.0,  4)
     np_bins_y = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
+
+    # for fast check:
+    #np_bins_qt = np.array([32.0, 36.0])    
+    #np_bins_y  = np.array([0.8, 1.0])  
     print 'The following (qt,y) bins will be considered:'
     print '> qt:', np_bins_qt
     print '>  y:', np_bins_y
@@ -441,43 +349,49 @@ def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val',
             name = charge+'_'+var+'_'+coeff_eval+'_'+bin_y+'_'+bin_qt
             canvas = ROOT.TCanvas("c", "canvas", 600, 600)            
             h_pull = ROOT.TH1F('h_pull_byPDF_'+name, '', 81, -4.0, 4.0)
-            h = fin.Get(charge+'/'+var+'/'+coeff_eval+'/'+name+'_norm')
-            h_pdf = h.Clone(h.GetName()+'_pdf')
+            (h, h_norm) = (fin.Get(charge+'/'+var+'/'+coeff_eval+'/'+name),
+                           fin.Get(charge+'/'+var+'/'+coeff_eval+'/'+name+'_norm'))
+            h_pdf = h_norm.Clone(h_norm.GetName()+'_pdf')
             h_pdf.Reset()
 
             if do_toy:
                 from tree_utils import make_grid_CS
-                ntoys=int(h.Integral())
+                ntoys=int(h_norm.Integral())
                 print 'Generating ', ntoys, 'toys'
-                h.Reset()
-                make_grid_CS(res=res, h=h, coeff_eval=coeff_eval, 
+                h_norm.Reset()
+                make_grid_CS(res=res, h=h_norm, coeff_eval=coeff_eval, 
                              bin_y=bin_y, qt=0.5*( np_bins_qt[iqt]+ np_bins_qt[iqt+1]), 
                              coeff=coeff, ntoys=ntoys)
                              
-            integ = h.Integral()
+            integ = h_norm.Integral() if not byInvPdf else h.Integral()
             chi2 = 0.0
             ndof = 0
-            for ix in range(1, h.GetNbinsX()+1):
-                bin_cos = (h.GetXaxis().GetBinLowEdge(ix), 
-                           h.GetXaxis().GetBinLowEdge(ix)+h.GetXaxis().GetBinWidth(ix))
-                for iy in range(1, h.GetNbinsY()+1):
-                    bin_phi = (h.GetYaxis().GetBinLowEdge(iy), 
-                               h.GetYaxis().GetBinLowEdge(iy)+h.GetYaxis().GetBinWidth(iy))                    
+            for ix in range(1, h_norm.GetNbinsX()+1):
+                bin_cos = (h_norm.GetXaxis().GetBinLowEdge(ix), 
+                           h_norm.GetXaxis().GetBinLowEdge(ix)+h_norm.GetXaxis().GetBinWidth(ix))
+                for iy in range(1, h_norm.GetNbinsY()+1):
+                    bin_phi = (h_norm.GetYaxis().GetBinLowEdge(iy), 
+                               h_norm.GetYaxis().GetBinLowEdge(iy)+h_norm.GetYaxis().GetBinWidth(iy))                    
 
-                    n = h.GetBinContent(ix,iy)
-                    err = h.GetBinError(ix,iy)
+                    n = h_norm.GetBinContent(ix,iy) if not byInvPdf else h.GetBinContent(ix,iy)
+                    err = h_norm.GetBinError(ix,iy) if not byInvPdf else h.GetBinError(ix,iy)
+
                     if do_toy:
                         err_weight = -1.0
                         while err_weight<0.:
                             err_weight = err*(1.0 + np.random.normal(0.0, extra_variance_toy))
                         err = err_weight
 
-                    mu = weight_coeff_cumulative(res=res, 
-                                                   coeff_eval=coeff_eval, 
-                                                   bin_y=bin_y, 
-                                                   qt=0.5*( np_bins_qt[iqt]+ np_bins_qt[iqt+1]), 
-                                                   bin_cos=bin_cos, bin_phi=bin_phi, 
-                                                   coeff=coeff)
+                    mu = 0.0
+                    if byInvPdf:
+                        mu = 1.0/(h.GetNbinsX()*h.GetNbinsY())
+                    else:
+                        mu = weight_coeff_cumulative(res=res, 
+                                                     coeff_eval=coeff_eval, 
+                                                     bin_y=bin_y, 
+                                                     qt=0.5*( np_bins_qt[iqt]+ np_bins_qt[iqt+1]), 
+                                                     bin_cos=bin_cos, bin_phi=bin_phi, 
+                                                     coeff=coeff)
                     if verbose:
                         print '\tBin (', ix, ',', iy , ') = ' , n, ' +/- ', err
                     if (n < min_val or n==0.):
@@ -486,29 +400,31 @@ def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val',
                     h_pull.Fill( pull )
                     chi2 += pull*pull
                     ndof += 1
-                    h.SetBinContent(ix,iy, pull )
+                    h_norm.SetBinContent(ix,iy, pull )
                     h_pdf.SetBinContent(ix,iy, mu )
 
             p_values[counter] =  (1-stats.chi2.cdf(chi2, ( ndof - 1) ) - 0.5)
             res_mean[counter] = h_pull.GetMean()
             print name, 'mean[', counter , ']=', res_mean[counter] 
-            res_mean_err[counter] = h_pull.GetMeanError()
-            res_sigma[counter] = h_pull.GetRMS()-1.0
+            res_mean_err[counter]  = h_pull.GetMeanError()
+            res_sigma[counter]     = h_pull.GetRMS()-1.0
             res_sigma_err[counter] = h_pull.GetRMSError()
             counter += 1
             if save_2D:
                 h_pull.Draw("HIST")
-                canvas.SaveAs('plots/pull_1D_byPDF_'+name+('_toy' if do_toy else '')+'.png')
-                h.SetStats(0)                    
-                h.Draw("COLZ") 
-                canvas.SaveAs('plots/pull_2Dflat_byPDF_COLZ_'+name+('_toy' if do_toy else '')+'.png')
-                h.Draw("SURF") 
-                canvas.SaveAs('plots/pull_2Dflat_byPDF_SURF_'+name+('_toy' if do_toy else '')+'.png')
-                if save_pdf:
-                    h_pdf.Draw("COLZ") 
-                    canvas.SaveAs('plots/pdf_2Dflat_byPDF_COLZ_'+name+('_toy' if do_toy else '')+'.png')
-                    h_pdf.Draw("SURF") 
-                    canvas.SaveAs('plots/pdf_2Dflat_byPDF_SURF_'+name+('_toy' if do_toy else '')+'.png')
+                canvas.SaveAs('plots/pull_1D_'+postfix+'_'+name+('_toy' if do_toy else '')+'.png')                
+                h_norm.SetMaximum(+4.0)
+                h_norm.SetMinimum(-4.0)
+                h_norm.SetStats(0)                    
+                h_norm.Draw("COLZ") 
+                canvas.SaveAs('plots/pull_2Dflat_'+postfix+'_COLZ_'+name+('_toy' if do_toy else '')+'.png')
+                h_norm.Draw("LEGO") 
+                canvas.SaveAs('plots/pull_2Dflat_'+postfix+'_LEGO_'+name+('_toy' if do_toy else '')+'.png')
+            if save_pdf:
+                h_pdf.Draw("COLZ") 
+                canvas.SaveAs('plots/pdf_2Dflat_'+postfix+'_COLZ_'+name+('_toy' if do_toy else '')+'.png')
+                h_pdf.Draw("SURF") 
+                canvas.SaveAs('plots/pdf_2Dflat_'+postfix+'_SURF_'+name+('_toy' if do_toy else '')+'.png')
             h_pull.IsA().Destructor( h_pull )
             canvas.IsA().Destructor( canvas )
 
@@ -527,10 +443,10 @@ def plot_closure_test_cum(charge='Wplus', var='Wdress', coeff_eval='val',
         ax.set_xticklabels( x_labels, rotation=45, ha='center', fontsize=15 )
         legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
         plt.ylabel('Value', fontsize=20)
-        plt.title('['+charge+', '+var+'], type = '+coeff_eval+'. $\chi^2$ from pdf. Data = '+('toys' if do_toy else 'MC'), fontsize=20)
+        plt.title('['+charge+', '+var+'], type = '+coeff_eval+('. Flattened by 1/pdf' if byInvPdf else '. Compared to N*pdf.')+' Data = '+('toys' if do_toy else 'MC'), fontsize=20)
         plt.grid(True)
         plt.show()
-        plt.savefig('plots/summary_byPDF_'+charge+'_'+var+'_'+coeff_eval+('_toy' if do_toy else '')+'.png')
+        plt.savefig('plots/summary_'+postfix+'_'+charge+'_'+var+'_'+coeff_eval+('_toy' if do_toy else '')+'.png')
         plt.close()
 
     fin.Close()
