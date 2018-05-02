@@ -338,7 +338,7 @@ def draw_qt_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, 
     fin.Close()
 
 
-def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coefficients=['A0'], weights={}, add_stat_uncert=False, postfix='',
+def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress', coefficients=['A0'], weights={}, add_stat_uncert=False, postfix='',
                    fix_to_zero=['A0','A1','A2','A3','A5','A6','A7'], fit_range=[0.0, 50.0], threshold_chi2=0.02, verbose=False, 
                    save_corr=True, save_coeff=True, save_tree=True, save_pkl=True):
 
@@ -350,7 +350,7 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
     nbins_qt = np_bins_qt.size - 1 
 
     # tree saving the results of the fit for the PDF replicas and scales
-    fout = ROOT.TFile.Open('plots/'+'covariance_'+q+'_'+postfix+'.root', 'RECREATE')
+    fout = ROOT.TFile.Open('plots/'+'covariance_'+DY+'_'+q+'_'+var+'_'+postfix+'.root', 'RECREATE')
     tree = ROOT.TTree('cov','cov')    
     variables = {}
 
@@ -476,7 +476,7 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
 
         # make a snapshot of the matrix
         if save_corr:
-            syst_label = (q+'_'+syst)+'_'+postfix
+            syst_label = (DY+'_'+q+'_'+var+'_'+syst)+'_'+postfix
             plot_cov_matrix(n_vars=n_vars, cov=cov_map[syst], label='correlation_'+syst_label, plot='corr')
 
     # total covariance matrix
@@ -488,14 +488,15 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
             cov_map['syst'] += cov_map[syst]
     # make a snapshot of the matrix
     if save_corr:
-        cov_label = (q+'_stat_plus_syst')+'_'+postfix
+        cov_label = (DY+'_'+q+'_'+var+'_stat_plus_syst')+'_'+postfix
         plot_cov_matrix(n_vars=n_vars, cov=cov_map['sum'], label='correlation_'+cov_label, plot='corr')
 
     # save firt results as a pkl file
     if save_pkl:
-        print 'Save results to pickle file....'+'plots/fit_results_'+DY+'_'+q+'_'+postfix+'.pkl'
+        pkl_name = 'fit_results_'+DY+'_'+q+'_'+var+'_'+postfix+'.pkl'
+        print 'Save results to pickle file....'+'plots/'+pkl_name
         import pickle
-        pickle.dump(results, open('plots/fit_results_'+DY+'_'+q+'_'+postfix+'.pkl','wb') )
+        pickle.dump(results, open('plots/'+pkl_name,'wb') )
 
     bin_count = 0 
     last_bin = np.where(np_bins_qt_mid_from_zero<=fit_range[1])[0][-1] 
@@ -546,9 +547,9 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
             legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
             plt.xlabel('$q_{T}$ (GeV)', fontsize=20)
             plt.ylabel('$'+coeff[0]+'_{'+coeff[1]+'}$', fontsize=20)
-            plt.title(DY+', charge='+q[1:]+', $|y| \in ['+y_bin[1:5]+','+y_bin[7:11]+']$', fontsize=20)
+            plt.title(DY+', charge='+q[1:]+', var='+var[1:]+', $|y| \in ['+y_bin[1:5]+','+y_bin[7:11]+']$', fontsize=20)
             plt.show()
-            plt.savefig('plots/coefficient_'+q+'_'+var+'_'+coeff+'_'+y_bin+'_fit.png')
+            plt.savefig('plots/coefficient_'+DY+'_'+q+'_'+var+'_'+coeff+'_'+y_bin+'_fit.png')
             plt.close('all')            
             bin_count += (order+1)
 
@@ -559,6 +560,60 @@ def get_covariance(fname='./tree.root', DY='CC', var='Wdress', q='Wplus', coeffi
     fout.Close()
     fin.Close()
     
+
+
+# compare fit results
+def compare_fit_results(DYs=['CC_MG5', 'CC_FxFx'], charges=['Wplus', 'Wminus'], variables=['Wdress', 'Wbare', 'WpreFSR'], coefficients=['A0'], fit_range=[0.0, 50.0], postfix='', compare=''):
+
+    import pickle
+    from tree_utils import np_bins_qt, np_bins_y, np_bins_qt_width, np_bins_y_width, np_bins_qt_mid, np_bins_y_mid
+    np_bins_qt_mid_from_zero = np.append(np.array([0.0]), np_bins_qt_mid)
+    nbins_y  = np_bins_y.size - 1 
+    nbins_qt = np_bins_qt.size - 1 
+
+    last_bin = np.where(np_bins_qt_mid_from_zero<=fit_range[1])[0][-1]
+    x = np_bins_qt_mid_from_zero[0:last_bin+1]
+
+    colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'w']
+    fmts   = ['o', 'v', '^', '>', '<', '.', '+', '-']
+
+    for coeff in coefficients:
+        print '\>Doing coef '+coeff
+        for y in range(nbins_y/2+1, nbins_y+1):
+            y_bin = 'y{:03.2f}'.format(np_bins_y[y-1])+'_'+'y{:03.2f}'.format(np_bins_y[y])
+            bin_name = coeff+'_'+y_bin        
+            print '\t>Doing bin '+y_bin
+            plt.figure()
+            fig, ax = plt.subplots()
+            counter = 0
+            for iDY,DY in enumerate(DYs):
+                for iq,q in enumerate(charges):
+                    plt.axis( [0.0, np_bins_qt[last_bin]] + ranges_for_coeff_zoom(q=q)[coeff] )
+                    for ivar,var in enumerate(variables):
+                        pkl_name = 'fit_results_'+DY+'_'+q+'_'+var+'_'+postfix+'.pkl'
+                        fin = open('plots/'+pkl_name,'r')
+                        results = pickle.load(fin)
+                        y     = results[bin_name+'_val']
+                        y_err = results[bin_name+'_val_err']
+                        #p     = results[bin_name+'_fit']
+                        #order = len(p)-1
+                        label = DY[3:]+' '+('$W' if 'CC' in DY else '$Z')+('^{+}$' if q[1:]=='plus' else '^{-}$')+' '+var[1:]
+                        ax.errorbar(np_bins_qt_mid[0:last_bin], y[0:last_bin], xerr=np_bins_qt_width[0:last_bin]/2, yerr=y_err[0:last_bin], fmt=fmts[counter], color=colors[counter], label=label)            
+                        fin.close()
+                        counter += 1
+
+            plt.grid(True)
+            legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
+            plt.xlabel('$q_{T}$ (GeV)', fontsize=20)
+            plt.ylabel('$'+coeff[0]+'_{'+coeff[1]+'}$', fontsize=20)
+            plt.title('$|y| \in ['+y_bin[1:5]+','+y_bin[7:11]+']$', fontsize=20)
+            plt.show()
+            plt.savefig('plots/coefficient_compare_'+coeff+'_'+y_bin+'_'+compare+'.png')
+            plt.close('all')
+
+
+
+
 
 
 def fit_BreitWigner(tree=ROOT.TTree(), running=0, var='', cut='', tag=''):

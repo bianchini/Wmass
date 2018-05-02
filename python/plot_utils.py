@@ -282,8 +282,8 @@ def print_pt_bias_vs_qt(pt_min=25.0, pt_max=[], qt_max=[], q='Wplus', var='Wdres
     plt.savefig('test.png')
     plt.close()
 
-
-def plot_closure_test(charge='Wplus', var='Wdress', coeff_eval='val', 
+# closure test of the angular coefficients
+def plot_closure_test(charge='Wplus', DY='CC', var='Wdress', coeff_eval='val', 
                       min_val=-999., 
                       coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'],
                       byInvPdf=False,
@@ -291,7 +291,7 @@ def plot_closure_test(charge='Wplus', var='Wdress', coeff_eval='val',
                       save_2D=True, save_pdf=True, save_summary=True, 
                       do_toy=False, extra_variance_toy=0.07):
     
-    print "Running plot_closure_test_cum"
+    print "Running plot_closure_test"
     postfix = ''
     if byInvPdf:
         postfix = 'byInvPDF'
@@ -314,17 +314,17 @@ def plot_closure_test(charge='Wplus', var='Wdress', coeff_eval='val',
     np_bins_y = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
 
     # for fast check:
-    #np_bins_qt = np.array([32.0, 36.0])    
+    np_bins_qt = np.array([0.0, 2.0])    
     #np_bins_y  = np.array([0.8, 1.0])  
     print 'The following (qt,y) bins will be considered:'
     print '> qt:', np_bins_qt
     print '>  y:', np_bins_y
 
-    fin_name = '../root/tree_histos2_CC.root'
+    fin_name = '../root/tree_histos2_'+DY+'.root'
     fin = ROOT.TFile(fin_name, 'READ')
     print 'Read histograms from '+fin_name
 
-    res_name = os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_CC_'+charge+'_all_A0-7.pkl'
+    res_name = os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_'+charge+'_'+var+'_all_A0-7.pkl'
     res = pickle.load( open(res_name) )
     print 'Read coefficients from '+res_name
 
@@ -360,7 +360,7 @@ def plot_closure_test(charge='Wplus', var='Wdress', coeff_eval='val',
                 print 'Generating ', ntoys, 'toys'
                 h_norm.Reset()
                 make_grid_CS(res=res, h=h_norm, coeff_eval=coeff_eval, 
-                             bin_y=bin_y, qt=0.5*( np_bins_qt[iqt]+ np_bins_qt[iqt+1]), 
+                             bin_y=bin_y, qt=0.5*( np_bins_qt[iqt]+ np_bins_qt[iqt+1] ), 
                              coeff=coeff, ntoys=ntoys)
                              
             integ = h_norm.Integral() if not byInvPdf else h.Integral()

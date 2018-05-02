@@ -57,11 +57,12 @@ class TreeProducer:
 
         # read result on fit parameters
         self.save_histo2 = save_histo2
-        self.fit_result_Wplus = None
-        self.fit_result_Wminus = None
+        self.fit_result = {}
         if save_histo2:
-            self.fit_result_Wplus  = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_Wplus_all_A0-7.pkl') )
-            self.fit_result_Wminus = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_Wminus_all_A0-7.pkl') )
+            for q in ['Wplus', 'Wminus']:
+                self.fit_result[q]  = {}
+                for var in ['Wdress', 'Wbare', 'WpreFSR']:
+                    self.fit_result[q][var] = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_'+q+'_'+var+'_all_A0-7.pkl') )
             self.histos = add_histo2D_CS( charges=['Wminus','Wplus'], var=['Wdress', 'Wbare', 'WpreFSR'], coeff_eval=['val'])
 
         # add branches to tree (needed even if self.save_tree=False)
@@ -69,10 +70,12 @@ class TreeProducer:
 
         self.filenames = filenames
         if self.debug:
-            if self.DY == 'NC':
+            if 'NC' in self.DY:
                 self.filenames.append('root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/DYJetsToLL_M-50_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6_ext1-v2/120000/02A210D6-F5C3-E611-B570-008CFA197BD4.root')
-            else:
+            elif self.DY=='CC_FxFx':
                 self.filenames.append('root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/120000/0AF0207B-EFBE-E611-B4BE-0CC47A7FC858.root')
+            elif self.DY=='CC_MG5':
+                self.filenames.append('root://xrootd-cms.infn.it//store/mc/RunIISummer16MiniAODv2/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/MINIAODSIM/PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6_ext2-v1/100000/00933E2A-A0D5-E611-B2CD-00266CF89130.root')
 
         print "Opening file..."
         self.events = Events(self.filenames)
@@ -97,7 +100,7 @@ class TreeProducer:
             if self.debug:
                 if i%100==0:
                     print "Processing event", i, '/', self.events.size()
-                if i>10000:
+                if i>1000:
                     break
 
             # fill with default values
@@ -128,7 +131,7 @@ class TreeProducer:
                     self.variables['x2'][0] = hepeup.PUP[p][3]/6500.
                 if abs(hepeup.IDUP[p])==13:
                     isWToMuNu = True
-                if abs(hepeup.IDUP[p])== (24 if self.DY=='CC' else 23):
+                if abs(hepeup.IDUP[p])== (24 if 'CC' in self.DY else 23):
                     isW = True
                     for x in range(5):                
                         Wp4_lhe[x] = hepeup.PUP[p][x]
@@ -167,7 +170,7 @@ class TreeProducer:
             neutrinos.sort(reverse=True)
     
             # CC: consider events with 0 muons to study acceptance 
-            if self.DY=='CC' and len(muons)==0:
+            if 'CC' in self.DY and len(muons)==0:
                 if self.verbose:
                     print "No muon in W>munu for event", i, ". Try to understand why:"
                     print " > W rapidity:    ", self.variables['lhe_y'][0]
@@ -178,7 +181,7 @@ class TreeProducer:
                     self.variables[t+'_nu_phi'][0] = neutrinos[0].p4().Phi()
 
             # consider events with 0 neutrinos to study acceptance 
-            if self.DY=='CC' and len(neutrinos)==0:
+            if 'CC' in self.DY and len(neutrinos)==0:
                 if self.verbose:
                     print "No muon neutrinos for event", i, ". Try to understand why:"
                     print " > W rapidity:    ", self.variables['lhe_y'][0]
@@ -190,7 +193,7 @@ class TreeProducer:
                     self.variables[t+'_mu_phi'][0] = muons[0].p4().Phi()
 
             # NC: consider events with 1 muons to study acceptance 
-            if self.DY=='NC' and len(muons)<2:
+            if 'NC' in self.DY and len(muons)<2:
                 if self.verbose:
                     print "No muons in Z>mumu for event", i, ". Try to understand why:"
                     print " > Z rapidity:    ", self.variables['lhe_y'][0]
@@ -201,12 +204,12 @@ class TreeProducer:
                     self.variables[t+'_nu_phi'][0] = muons[0].p4().Phi()
 
             # if no muons or no neutrinos, save the event and continue
-            if self.DY=='CC':
+            if 'CC' in self.DY:
                 if (len(muons)==0 or len(neutrinos)==0):
                     if self.save_tree:
                         self.outtree.Fill()
                     continue
-            elif self.DY=='NC':
+            elif 'NC' in self.DY:
                 if len(muons)<2:
                     if self.save_tree:
                         self.outtree.Fill()
@@ -214,20 +217,20 @@ class TreeProducer:
         
             # the muon is the first ranked by pt if CC else the mu+
             mu = muons[0]
-            if self.DY=='NC':
+            if 'NC' in self.DY:
                 mu = (muons[0] if muons[0].pdgId()==-13 else muons[1])
-            self.variables['isFromW'][0] += int(isFromW(mu) if self.DY=='CC' else isFromZ(mu))
+            self.variables['isFromW'][0] += int(isFromW(mu) if 'CC' in self.DY else isFromZ(mu))
             self.variables['mu_charge'][0] = mu.pdgId()
             if self.verbose:
                 printp('muon', mu, '')
 
             # the neutrino is the first ranked by pt if CC else the mu-
             nu = None
-            if self.DY=='CC':
+            if 'CC' in self.DY:
                 nu = neutrinos[0]
-            elif self.DY=='NC':
+            elif 'NC' in self.DY:
                 nu = (muons[0] if muons[0].pdgId()==+13 else muons[1])
-            self.variables['isFromW'][0] += int(isFromW(nu) if self.DY=='CC' else isFromZ(nu))
+            self.variables['isFromW'][0] += int(isFromW(nu) if 'CC' in self.DY else isFromZ(nu))
             self.variables['nu_charge'][0] = nu.pdgId()
             if self.verbose:
                 printp('neut', nu, '')
@@ -257,13 +260,13 @@ class TreeProducer:
             for ng,g in enumerate(gammas):
                 dR_mu = deltaR(mu,g)
                 dR_nu = deltaR(nu,g)
-                dR = (dR_mu if self.DY=='CC' else min(dR_mu,dR_nu))
+                dR = (dR_mu if 'CC' in self.DY else min(dR_mu,dR_nu))
                 if dR<0.1:
-                    if self.DY=='CC':
+                    if 'CC' in self.DY:
                         mu_fsr.append(g.p4())
                         if self.verbose:
                             printp('>gam', g, 'dR:{:03.2f}'.format(dR)+' to muon')
-                    elif self.DY=='NC':
+                    elif 'NC' in self.DY:
                         if dR_mu<dR_nu:
                             mu_fsr.append(g.p4())
                             if self.verbose:
@@ -279,14 +282,14 @@ class TreeProducer:
             
             # pre-FSR
             mup4_prefsr = ROOT.TLorentzVector(mu_prefsr.p4().Px(), mu_prefsr.p4().Py(), mu_prefsr.p4().Pz(), mu_prefsr.p4().E() )
-            nup4_prefsr = copy.deepcopy(nup4) if self.DY=='CC' else ROOT.TLorentzVector(nu_prefsr.p4().Px(), nu_prefsr.p4().Py(), nu_prefsr.p4().Pz(), nu_prefsr.p4().E() )
+            nup4_prefsr = copy.deepcopy(nup4) if 'CC' in self.DY else ROOT.TLorentzVector(nu_prefsr.p4().Px(), nu_prefsr.p4().Py(), nu_prefsr.p4().Pz(), nu_prefsr.p4().E() )
 
             # dressed
             mup4_recfsr = copy.deepcopy(mup4)
             for g in mu_fsr:
                 mup4_recfsr += ROOT.TLorentzVector(g.Px(), g.Py(), g.Pz(), g.E() )
             nup4_recfsr = copy.deepcopy(nup4)
-            if self.DY=='NC':
+            if 'NC' in self.DY:
                 for g in nu_fsr:
                     nup4_recfsr += ROOT.TLorentzVector(g.Px(), g.Py(), g.Pz(), g.E() )
 
@@ -335,7 +338,7 @@ class TreeProducer:
                                           ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt()), 
                                           ps_CS=(ps[1],ps[2]), 
                                           weight=self.variables['weights'][w] )
-                        if self.DY=='NC':
+                        if 'NC' in self.DY:
                             q2 = 'Wplus' if self.variables['nu_charge'][0]==-13 else 'Wminus'
                             fill_coefficients(histos=self.histos, 
                                               q=q2,
@@ -350,11 +353,11 @@ class TreeProducer:
                     if t not in ['Wdress', 'Wbare', 'WpreFSR']:
                         continue
                     q1 = 'Wplus' if self.variables['mu_charge'][0]==-13 else 'Wminus'
-                    fill_weighted_CS(res=getattr(self, "fit_result_"+q1),
+                    fill_weighted_CS(res=getattr(self, "fit_result")[q1][t],
                                      histos=self.histos, 
                                      q=q1,
                                      var=t,
-                                     coeff_eval=['fit','val'],
+                                     coeff_eval=['val'],
                                      ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt()), 
                                      ps_CS=(ps[1],ps[2]),
                                      weight=self.variables['weights'][0],
