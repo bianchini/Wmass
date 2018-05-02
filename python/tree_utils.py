@@ -329,8 +329,6 @@ def weight_coeff_cumulative(res={}, coeff_eval='fit', bin_y='', qt=0.0, bin_cos=
         elif coeff_eval == 'val':
             iqt = np.where(np_bins_qt<=qt)[0][-1]
             coeff_val = res[c+'_'+bin_y+'_val'][iqt]
-            #if c=='A3':
-            #    coeff_val *= 1.2
         coeff_vals[ic] = coeff_val
     val = cumulative_angular_pdf(bin_cos=bin_cos, bin_phi=bin_phi, coeff_vals=coeff_vals)
     if val > 0.0:        
@@ -412,6 +410,9 @@ def make_grid_CS(res={}, coeff_eval='fit', bin_y='', qt=0.0, h=None, coeff=[], n
             delta_xx = ix*h.GetXaxis().GetBinWidth(1)/10.
             delta_yy = iy*h.GetYaxis().GetBinWidth(1)/10.
             pdf_evals += angular_pdf_CS(xx+delta_xx,yy+delta_yy, coeff=coeff_vals).flatten()    
+
+    # prevent negative pdf values 
+    pdf_evals = np.absolute(pdf_evals)
 
     pdf_evals_norm = np.sum(pdf_evals)    
     pdf_evals *= (1./pdf_evals_norm if pdf_evals_norm>0. else 1.0)        
