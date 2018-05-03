@@ -314,7 +314,7 @@ def plot_closure_test(charge='Wplus', DY='CC', var='Wdress', coeff_eval='val',
     np_bins_y = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
 
     # for fast check:
-    np_bins_qt = np.array([0.0, 2.0])    
+    #np_bins_qt = np.array([0.0, 2.0])    
     #np_bins_y  = np.array([0.8, 1.0])  
     print 'The following (qt,y) bins will be considered:'
     print '> qt:', np_bins_qt
@@ -412,19 +412,19 @@ def plot_closure_test(charge='Wplus', DY='CC', var='Wdress', coeff_eval='val',
             counter += 1
             if save_2D:
                 h_pull.Draw("HIST")
-                canvas.SaveAs('plots/pull_1D_'+postfix+'_'+name+('_toy' if do_toy else '')+'.png')                
+                canvas.SaveAs('plots/pull_1D_'+postfix+'_'+DY+'_'+name+('_toy' if do_toy else '')+'.png')                
                 h_norm.SetMaximum(+4.0)
                 h_norm.SetMinimum(-4.0)
                 h_norm.SetStats(0)                    
                 h_norm.Draw("COLZ") 
-                canvas.SaveAs('plots/pull_2Dflat_'+postfix+'_COLZ_'+name+('_toy' if do_toy else '')+'.png')
+                canvas.SaveAs('plots/pull_2Dflat_'+postfix+'_COLZ_'+DY+'_'+name+('_toy' if do_toy else '')+'.png')
                 h_norm.Draw("LEGO") 
-                canvas.SaveAs('plots/pull_2Dflat_'+postfix+'_LEGO_'+name+('_toy' if do_toy else '')+'.png')
+                canvas.SaveAs('plots/pull_2Dflat_'+postfix+'_LEGO_'+DY+'_'+name+('_toy' if do_toy else '')+'.png')
             if save_pdf:
                 h_pdf.Draw("COLZ") 
-                canvas.SaveAs('plots/pdf_2Dflat_'+postfix+'_COLZ_'+name+('_toy' if do_toy else '')+'.png')
+                canvas.SaveAs('plots/pdf_2Dflat_'+postfix+'_COLZ_'+DY+'_'+name+('_toy' if do_toy else '')+'.png')
                 h_pdf.Draw("SURF") 
-                canvas.SaveAs('plots/pdf_2Dflat_'+postfix+'_SURF_'+name+('_toy' if do_toy else '')+'.png')
+                canvas.SaveAs('plots/pdf_2Dflat_'+postfix+'_SURF_'+DY+'_'+name+('_toy' if do_toy else '')+'.png')
             h_pull.IsA().Destructor( h_pull )
             canvas.IsA().Destructor( canvas )
 
@@ -446,7 +446,7 @@ def plot_closure_test(charge='Wplus', DY='CC', var='Wdress', coeff_eval='val',
         plt.title('['+charge+', '+var+'], type = '+coeff_eval+('. Flattened by 1/pdf' if byInvPdf else '. Compared to N*pdf.')+' Data = '+('toys' if do_toy else 'MC'), fontsize=20)
         plt.grid(True)
         plt.show()
-        plt.savefig('plots/summary_'+postfix+'_'+charge+'_'+var+'_'+coeff_eval+('_toy' if do_toy else '')+'.png')
+        plt.savefig('plots/summary_'+postfix+'_'+DY+'_'+charge+'_'+var+'_'+coeff_eval+('_toy' if do_toy else '')+'.png')
         plt.close()
 
     fin.Close()
