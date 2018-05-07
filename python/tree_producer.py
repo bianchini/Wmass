@@ -20,7 +20,7 @@ from DataFormats.FWLite import Handle, Events
 
 class TreeProducer:
 
-    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test', save_tree=True, save_histo1=False, save_histo2=False):
+    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test', save_tree=True, save_histo1=False, save_histo2=False, save_histo3=False, masses=[80.419]):
     
         print "****** TreeProducer *****"
         print 'Running for '+DY+' Drell-Yan'
@@ -43,6 +43,9 @@ class TreeProducer:
         if self.save_tree:
             self.outtree = ROOT.TTree('tree', 'tree')
 
+        # mW for reweighting
+        self.masses = masses
+
         # add histos
         #self.weights_for_histos = [0]
         self.weights_for_histos = range(109)
@@ -64,6 +67,15 @@ class TreeProducer:
                 for var in ['Wdress', 'Wbare', 'WpreFSR']:
                     self.fit_result[q][var] = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_'+q+'_'+var+'_all_A0-7.pkl') )
             self.histos = add_histo2D_CS( charges=['Wminus','Wplus'], var=['Wdress', 'Wbare', 'WpreFSR'], coeff_eval=['val'])
+
+        # pt-eta
+        self.save_histo3 = save_histo3
+        if save_histo3:
+            for q in ['Wplus', 'Wminus']:
+                self.fit_result[q]  = {}
+                for var in ['Wdress', 'Wbare', 'WpreFSR']:
+                    self.fit_result[q][var] = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_'+q+'_'+var+'_all_A0-7.pkl') )
+            self.histos = add_histo2D_lepton( charges=['Wminus','Wplus'], var=['WpreFSR'], coeff_eval=['val'], masses=masses, coeff=['A0','A1','A2','A3','A4','A5','A6','A7'] ) 
 
         # add branches to tree (needed even if self.save_tree=False)
         self.variables = add_vars(self.outtree)
@@ -95,13 +107,15 @@ class TreeProducer:
         ###############################################
         for i,event in enumerate(self.events):    
 
-            if i%1000==0:
-                print "Processing event", i, '/', self.events.size()
             if self.debug:
                 if i%100==0:
                     print "Processing event", i, '/', self.events.size()
-                if i>1000:
+                if i>10000:
                     break
+            else:
+                if i%1000==0:
+                    print "Processing event", i, '/', self.events.size()
+
 
             # fill with default values
             fill_default(self.variables)
@@ -364,6 +378,23 @@ class TreeProducer:
                                      coeff=['A0', 'A1', 'A2', 'A3', 'A4']
                                      )
 
+                if self.save_histo3:
+                    if t not in ['WpreFSR']:
+                        continue
+                    q1 = 'Wplus' if self.variables['mu_charge'][0]==-13 else 'Wminus'
+                    fill_lepton_lab(res=getattr(self, "fit_result")[q1][t],
+                                    histos=self.histos, 
+                                    q=q1,
+                                    var=t,
+                                    coeff_eval=['val'],
+                                    masses=self.masses,
+                                    ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt(), Wp4[t].M()), 
+                                    ps_CS=(ps[1],ps[2]),
+                                    ps_lep=(self.variables['Wbare_mu_eta'][0], self.variables['Wbare_mu_pt'][0]),
+                                    weight=self.variables['weights'][0],
+                                    coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7']
+                                    )
+
 
             # fill the tree
             if self.save_tree:
@@ -393,6 +424,29 @@ class TreeProducer:
                             w[0].Write('', ROOT.TObject.kOverwrite)
                             w[1].Write('', ROOT.TObject.kOverwrite)
                 self.outfile.cd()
+
+        if self.save_histo3:
+            for kq,q in self.histos.items():
+                print 'Charge: '+kq
+                self.outfile.mkdir(kq)
+                for kv,v in q.items():
+                    print '\tVar: '+kv
+                    self.outfile.mkdir(kq+'/'+kv)
+                    for kc,c in v.items():
+                        print '\t\tEval: '+kc
+                        self.outfile.mkdir(kq+'/'+kv+'/'+kc)
+                        for km,m in c.items():
+                            print '\t\t\tMass: '+km
+                            self.outfile.mkdir(kq+'/'+kv+'/'+kc+'/'+km)
+                            for kb,b in m.items():
+                                print '\t\t\t\tBin: '+kb
+                                self.outfile.mkdir(kq+'/'+kv+'/'+kc+'/'+km+'/'+kb)
+                                for ka,a in b.items():
+                                    print '\t\t\t\t\tCoeff: '+ka+'.....', a.GetEntries(), 'entries'                                    
+                                    self.outfile.cd(kq+'/'+kv+'/'+kc+'/'+km+'/'+kb)
+                                    a.Write('', ROOT.TObject.kOverwrite)
+                self.outfile.cd()
+
 
         if self.debug and self.save_tree:
             add_vars(tree=self.outtree, debug=True)

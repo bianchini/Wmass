@@ -30,6 +30,8 @@ config.Site.storageSite = "T2_IT_Pisa"
 datasets = [
     ['/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/RunIISummer16MiniAODv2-PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/MINIAODSIM',      'WJets_FxFx_ext0'],
     ['/WJetsToLNu_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/RunIISummer16MiniAODv2-PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6_ext2-v2/MINIAODSIM', 'WJets_FxFx_ext1']
+    #['/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/RunIISummer16MiniAODv2-PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6-v1/MINIAODSIM', 'WJets_MG5_ext0'],
+    #['/WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8/RunIISummer16MiniAODv2-PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6_ext2-v1/MINIAODSIM', 'WJets_MG5_ext1']
     #['/DYJetsToLL_M-50_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8/RunIISummer16MiniAODv2-PUMoriond17_80X_mcRun2_asymptotic_2016_TrancheIV_v6_ext2-v1/MINIAODSIM', 'DYJets_FxFx']
     ]
 
@@ -37,5 +39,5 @@ from CRABAPI.RawCommand import crabCommand
 
 for data in datasets:
     config.Data.inputDataset = data[0]
-    config.General.requestName = 'TreeProducer_HistosWeights_'+data[1]
+    config.General.requestName = 'TreeProducer_Histo3_'+data[1]
     crabCommand('submit', config = config)    

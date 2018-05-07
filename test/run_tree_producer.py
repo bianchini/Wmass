@@ -5,6 +5,9 @@ from sys import argv
 
 from tree_producer import TreeProducer
 
-treeProducer = TreeProducer(DY='CC', verbose=False, debug=True, filenames=[], save_tree=False, save_histo1=False,  save_histo2=True)
+mass_mc = 80.419
+masses = [mass_mc]
+
+treeProducer = TreeProducer(DY='CC_FxFx', verbose=False, debug=True, filenames=[], save_tree=False, save_histo1=False, save_histo2=False, save_histo3=True, masses=masses)
 treeProducer.run()
 

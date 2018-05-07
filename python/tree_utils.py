@@ -21,6 +21,40 @@ np_bins_y    = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
 np_bins_y_width = np.array( [np_bins_y[i+1]-np_bins_y[i] for i in range(np_bins_y.size-1)] )
 np_bins_y_mid   = np.array( [(np_bins_y[i+1]+np_bins_y[i])*0.5 for i in range(np_bins_y.size-1)] )
 
+np_bins_pt  = np.linspace( 25.0, 65.0, 81  )
+np_bins_eta = np.linspace( -2.5, 2.5,  101 )
+
+# find bin corresponding to a given ps=(|y|,qt) point
+# if an over/underflow is found, return 'OF' 
+def find_y_qt_bin( ps=(), verbose=False ):
+
+    y = abs(ps[0])
+    iy_low  = np.where(np_bins_y<=y)[0][-1] if np.where(np_bins_y<=y)[0].size>0 else -1
+    iy_high = np.where(np_bins_y>y)[0][0]   if np.where(np_bins_y>y)[0].size>0  else -1
+    bin_y='OF'
+    if iy_low==-1 or iy_high==-1:
+        if verbose:
+            print 'y=', y, 'yields (', iy_low, iy_high, ') => return'
+    else:
+        bin_y = 'y{:03.2f}'.format(np_bins_y[iy_low])+'_'+'y{:03.2f}'.format(np_bins_y[iy_high])
+
+    qt = ps[1]
+    iqt_low = np.where(np_bins_qt<=qt)[0][-1] if np.where(np_bins_qt<=qt)[0].size>0 else -1
+    iqt_high = np.where(np_bins_qt>qt)[0][0] if np.where(np_bins_qt>qt)[0].size>0 else -1
+    bin_qt='OF'
+    if iqt_low==-1 or iqt_high==-1:
+        if verbose:
+            print 'qt=', qt, 'yields (', iqt_low, iqt_high, ') => return'
+    else:
+        bin_qt = 'qt{:03.1f}'.format(np_bins_qt[iqt_low])+'_'+'qt{:03.1f}'.format(np_bins_qt[iqt_high])
+
+    if verbose:
+        print 'y=', y, 'yields bins (', iy_low, iy_high, ') => Ok'
+        print 'qt=', qt, 'yields bins (', iqt_low, iqt_high, ') => Ok'
+    
+    return (bin_y, iy_low, bin_qt, iqt_low)
+
+
 def isFromW(p):
     mother = p
     while(mother.numberOfMothers()>0):
@@ -202,6 +236,45 @@ def add_histo2D_CS(charges=['Wminus','Wplus'], var=['Wdress'], coeff_eval=['fit'
         
     return histos
 
+def add_histo2D_lepton(charges=['Wminus','Wplus'], var=['Wdress'], coeff_eval=['val'], masses=[80.000], coeff=['A0']):
+    # binning
+    bins_pt  = array( 'f',  np_bins_pt )
+    bins_eta = array( 'f',  np_bins_eta )
+
+    np_bins_y_extL = np.insert(np_bins_y,   0, [-10.])
+    np_bins_y_ext  = np.append(np_bins_y_extL, [+10.])
+    np_bins_qt_ext = np.append(np_bins_qt, 999.)
+
+    nbins_y = np_bins_y_ext.size - 1 
+    nbins_qt = np_bins_qt_ext.size - 1 
+
+    histos = {}
+
+    # create TH2D
+    for q in charges:
+        histos[q] = {}
+        for v in var:
+            histos[q][v] = {}
+            for ceval in coeff_eval:
+                histos[q][v][ceval] = {}
+                for m in masses:
+                    mass_str = 'M'+'{:05.3f}'.format(m)
+                    histos[q][v][ceval][mass_str] = {}
+                    for qt in range(1, nbins_qt+1):
+                        qt_bin = 'qt{:03.1f}'.format(np_bins_qt_ext[qt-1])+'_'+'qt{:03.1f}'.format(np_bins_qt_ext[qt]) if qt<nbins_qt else 'OF'
+                        for y in range(nbins_y/2+1, nbins_y+1):
+                            y_bin = 'y{:03.2f}'.format(np_bins_y_ext[y-1])+'_'+'y{:03.2f}'.format(np_bins_y_ext[y]) if y<nbins_y else 'OF'
+                            bin_name = qt_bin+'_'+y_bin
+                            histos[q][v][ceval][mass_str][bin_name] = {}                                
+                            for c in (coeff+['', 'UL']):
+                                name = q+'_'+v+'_'+ceval+'_'+mass_str+'_'+bin_name+'_'+c
+                                h2 = ROOT.TH2F(name, name, len(bins_eta)-1, bins_eta, len(bins_pt)-1, bins_pt) 
+                                h2.Sumw2()
+                                histos[q][v][ceval][mass_str][bin_name][c]= h2
+    return histos
+
+
+
 # The test function for projecting-out one harmonic at the time
 def test_A(coeff='A0', ps=(0.0, 0.0)):
     val = 0.0
@@ -231,6 +304,12 @@ def fill_coefficients(histos={}, q='', coefficients_for_histos=['A0'], var='Wdre
         (h,h_norm) = histos[q][var][coeff][str(weight_name)]
         h.Fill(ps_W[0],ps_W[1], weight*test_A(coeff=coeff,ps=ps_CS) )
         h_norm.Fill(ps_W[0],ps_W[1], weight )
+
+# mass reweighting
+def mass_weight(mass=80.000, mass_target=80.419, mass_mc=80.419, width_target=2.047, width_mc=2.047):
+    weight = (math.pow(mass*mass - mass_mc*mass_mc, 2.0) + math.pow(mass_mc*width_mc, 2.0))/(math.pow(mass*mass - mass_target*mass_target, 2.0) + math.pow(mass_target*width_target, 2.0))
+    #print 'mass=', mass, ' => ', weight
+    return weight
 
 # Evaluate the angular pdf given a PS point (cos*,phi*) and the value of the 8 parameters
 def angular_pdf(ps=(), coeff_vals=[], verbose=False):
@@ -344,30 +423,52 @@ def weight_coeff_cumulative(res={}, coeff_eval='fit', bin_y='', qt=0.0, bin_cos=
 # Given a ps_W point, find the bin in np_bins_y/qt. Return if the point is not within the bins
 # Fill a 2D map with ps_CS with weight 1/weight_coeff
 def fill_weighted_CS(res={}, histos={}, q='', var='Wdress', coeff_eval=['fit'], ps_W=(), ps_CS=(), weight=1.0, coeff=['A0', 'A1', 'A2', 'A3', 'A4'], verbose=False):
-    y = abs(ps_W[0])
-    iy_low  = np.where(np_bins_y<=y)[0][-1] if np.where(np_bins_y<=y)[0].size>0 else -1
-    iy_high = np.where(np_bins_y>y)[0][0]   if np.where(np_bins_y>y)[0].size>0  else -1
-    if iy_low==-1 or iy_high==-1:
-        if verbose:
-            print 'y=', y, 'yields (', iy_low, iy_high, ') => return'
+
+    bin = find_y_qt_bin( ps=ps_W, verbose=verbose)
+    if bin[0]=='OF' or bin[2]=='OF':
         return
-    bin_y = 'y{:03.2f}'.format(np_bins_y[iy_low])+'_'+'y{:03.2f}'.format(np_bins_y[iy_high])
-    qt = ps_W[1]
-    iqt_low = np.where(np_bins_qt<=qt)[0][-1] if np.where(np_bins_qt<=qt)[0].size>0 else -1
-    iqt_high = np.where(np_bins_qt>qt)[0][0] if np.where(np_bins_qt>qt)[0].size>0 else -1
-    if iqt_low==-1 or iqt_high==-1:
-        if verbose:
-            print 'qt=', qt, 'yields (', iqt_low, iqt_high, ') => return'
-        return
-    if verbose:
-        print 'qt=', qt, 'yields bins (', iqt_low, iqt_high, ') => Ok'
-        print 'y=', y, 'yields bins (', iy_low, iy_high, ') => Ok'
-    bin_qt = 'qt{:03.1f}'.format(np_bins_qt[iqt_low])+'_'+'qt{:03.1f}'.format(np_bins_qt[iqt_high])
+
+    (bin_y, iy_low, bin_qt, iqt_low) = bin 
+
     for ceval in coeff_eval:
         name = q+'_'+var+'_'+ceval+'_'+bin_y+'_'+bin_qt
         (h,h_norm) = histos[q][var][ceval][name]
         h.Fill(ps_CS[0], ps_CS[1], weight/weight_coeff(res=res, coeff_eval=ceval, bin_y=bin_y, qt=ps_W[1], ps=ps_CS, coeff=coeff) )
         h_norm.Fill(ps_CS[0], ps_CS[1], weight)
+
+# fill lepton kinematics (pt,eta) in the lab
+def fill_lepton_lab(res={}, histos={}, q='', var='WpreFSR', coeff_eval=['val'], masses=[80.419], ps_W=(), ps_CS=(), ps_lep=(), weight=1.0, coeff=[]):
+
+    # if (qt,y) not in the bins, use MC
+    useMC = False
+    (bin_y, iy_low, bin_qt, iqt_low) = find_y_qt_bin( ps=ps_W, verbose=False )
+    if bin_y=='OF' or bin_qt=='OF':
+        useMC = True
+
+    # loop over evaluation methods ['val', 'fit']
+    for ceval in coeff_eval:
+        # the total pdf ~ [(1+cos^2) + Sum Ai*Pi]
+        pdf = weight_coeff(res=res, coeff_eval=ceval, bin_y=bin_y, qt=ps_W[1], ps=ps_CS, coeff=coeff) if (not useMC) else 1.0
+        if pdf<=0.0:
+            print ('Fit type', coeff_eval, ': bin', bin_y, 'at qt =', qt, 'for ps=', ps_CS, 'yields pdf = ', pdf, '<=0.0. Return 1.0')
+            return
+        # loop over MW hypotheses
+        for m in masses:
+            wm = mass_weight(mass=ps_W[2], mass_target=m )
+            mass_str = 'M'+'{:05.3f}'.format(m)
+            # '' => MC, UL => (1+cos^2), others : [0,0,...,1,...,0,0]
+            for c in (coeff+['', 'UL']):
+                wc = 1.0
+                if c=='':
+                    wc = 1.0
+                else:
+                    coeff_vals = np.zeros(8)
+                    if c!='UL':
+                        coeff_vals[int(c[1])] = 1.0
+                    wc = angular_pdf(ps=ps_CS, coeff_vals=coeff_vals)/pdf if (not useMC) else 1.0
+                #print c, 'weight=', wc
+                h2 = histos[q][var][ceval][mass_str][bin_qt+'_'+bin_y][c]
+                h2.Fill( ps_lep[0], ps_lep[1], weight*wc*wm)
 
 
 # compute dsigma/dphidcos in the CS frame
