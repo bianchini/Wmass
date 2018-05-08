@@ -57,25 +57,25 @@ elif argv[1]=='cov':
                                    save_corr=True, save_coeff=True, save_tree=True, save_pkl=True)
 
 elif argv[1]=='closure':
-    for DY in ['CC_FxFx', 'CC_MG5']:
+    for DY in ['CC_FxFx']:
         for q in ['Wplus', 'Wminus']:
-            for var in ['Wdress', 'Wbare', 'WpreFSR']:
+            for var in ['Wbare', 'Wdress', 'WpreFSR']:
                 for ceval in ['val']:
                     # MC
                     plot_closure_test(charge=q,  DY=DY, var=var, coeff_eval=ceval, coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
                                       byInvPdf=False,
-                                      save_2D=True, save_pdf=False, save_summary=False, 
+                                      save_2D=False, save_pdf=False, save_summary=True, 
                                       do_toy=False, extra_variance_toy=0.0)
                     # toy
-                    plot_closure_test(charge=q,  DY=DY, var=var, coeff_eval=ceval, coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
-                                      byInvPdf=False,
-                                      save_2D=False, save_pdf=False, save_summary=True, 
-                                      do_toy=True, extra_variance_toy=0.001)
+                    #plot_closure_test(charge=q,  DY=DY, var=var, coeff_eval=ceval, coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
+                    #                  byInvPdf=False,
+                    #                  save_2D=False, save_pdf=False, save_summary=True, 
+                    #                  do_toy=True, extra_variance_toy=0.001)
                     # MC byInvPdf
-                    plot_closure_test(charge=q,  DY=DY, var=var, coeff_eval=ceval, coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
-                                      byInvPdf=True,
-                                      save_2D=True, save_pdf=False, save_summary=True, 
-                                      do_toy=False, extra_variance_toy=0.0)            
+                    #plot_closure_test(charge=q,  DY=DY, var=var, coeff_eval=ceval, coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
+                    #                  byInvPdf=True,
+                    #                  save_2D=True, save_pdf=False, save_summary=True, 
+                    #                  do_toy=False, extra_variance_toy=0.0)            
 
 elif argv[1]=='compare':
     compare_fit_results(DYs=['CC_FxFx'], 
@@ -102,3 +102,18 @@ elif argv[1]=='compare':
                         coefficients=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
                         fit_range=[0.0, 50.0], postfix='all_A0-7', 
                         compare='CC_Wminus_Wdress_generator')
+
+elif argv[1]=='templates':
+    np_bins_template_qt = np.array([   0.,     4.,   8.,   12.,   16.,
+                                       20.,   24.,  32.,   40.,   60. ])
+    np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2,
+                                     -0.8, -0.4,  0. ,  0.4, 0.8, 
+                                     1.2,  1.6,  2. ,  2.5,  3. ,  3.5])
+    #np_bins_template_y  = np.array([-0.20, 0.0, 0.20])
+    merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], 
+                    masses=[80.419], coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
+                    np_bins_template_qt=np_bins_template_qt, 
+                    np_bins_template_y=np_bins_template_y,
+                    rebin=(2,4)
+                    )
+

@@ -24,8 +24,6 @@ np_bins_y_mid   = np.array( [(np_bins_y[i+1]+np_bins_y[i])*0.5 for i in range(np
 np_bins_pt  = np.linspace( 25.0, 65.0, 81  )
 np_bins_eta = np.linspace( -2.5, 2.5,  101 )
 
-np_bins_template_qt = np.array([0.0, 4.0, 8.0 ])
-np_bins_template_y  = np.array([-4.0, -2.0, 0.0, 2.0, 4.0])
 
 # find bin corresponding to a given ps=(|y|,qt) point
 # if an over/underflow is found, return 'OF' 
@@ -330,6 +328,26 @@ def angular_pdf(ps=(), coeff_vals=[], verbose=False):
         print ('\t pdf = 3./16./math.pi * ( UL + %s*L + %s*T + %s*I + %s*A + %s*P + %s*p7 + %s*p8 + %s*p9)' % (coeff_vals[0], coeff_vals[1], coeff_vals[2], coeff_vals[3], coeff_vals[4], coeff_vals[5], coeff_vals[6], coeff_vals[7]) )
     return 3./16./math.pi * ( UL + coeff_vals[0]*L + coeff_vals[1]*T + coeff_vals[2]*I + coeff_vals[3]*A + coeff_vals[4]*P + coeff_vals[5]*p7 + coeff_vals[6]*p8 + coeff_vals[7]*p9)
 
+def angular_pdf_string(coeff_vals=[]):
+    title = r'$\frac{3}{16\pi}['
+    UL = r'(1 + \cos^2\theta)'
+    pols = [r'\frac{1}{2}(1-3\cos^2\theta)',   
+            r'\sin2\theta \cos\phi',
+            r'\frac{1}{2}\sin^2\theta\cos2\phi',
+            r'\sin\theta\cos\phi',
+            r'\cos\theta',
+            r'\sin^2\theta\sin2\phi',
+            r'\sin2\theta\sin\phi',
+            r'\sin\theta\sin\phi'
+            ]
+    title += UL
+    for ic,c in enumerate(coeff_vals):
+        if c!=0.0:
+            title += ('+'+pols[ic])
+    title += r']$'
+    #print title
+    return title
+
 # Evaluate the cumulative angular pdf given a PS point (cos*,phi*) and the value of the 8 parameters
 def cumulative_angular_pdf(bin_cos=(), bin_phi=(), coeff_vals=[], verbose=False):
     (a,b) = bin_cos 
@@ -529,71 +547,3 @@ def make_grid_CS(res={}, coeff_eval='fit', bin_y='', qt=0.0, h=None, coeff=[], n
         h.Fill( h.GetXaxis().GetBinCenter(idx_cos),  h.GetYaxis().GetBinCenter(idx_phi) )
 
 ###########################
-
-def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], masses=[80.419], coeff=['A0']):
-
-    # available templates
-    np_bins_y_extL = np.insert(np_bins_y,   0, [-10.])
-    np_bins_y_ext  = np.append(np_bins_y_extL, [+10.])
-    np_bins_qt_ext = np.append(np_bins_qt, 999.)
-    nbins_y = np_bins_y_ext.size - 1 
-    nbins_qt = np_bins_qt_ext.size - 1 
-
-    # target templates
-    np_bins_template_y_extL = np.insert(np_bins_template_y,   0, [-10.])
-    np_bins_template_y_ext  = np.append(np_bins_template_y_extL, [+10.])
-    np_bins_template_qt_ext = np.append(np_bins_template_qt, 999.)
-    nbins_template_y = np_bins_template_y_ext.size - 1 
-    nbins_template_qt = np_bins_template_qt_ext.size - 1 
-    
-    fin = ROOT.TFile('../test/tree_test.root', 'READ')
-
-    # create TH2D
-    for q in charges:
-        for v in var:
-            for ceval in coeff_eval:
-                for m in masses:
-                    mass_str = 'M'+'{:05.3f}'.format(m)
-
-                    for qt in range(1, nbins_template_qt+1):
-                        qt_template_bin = 'qt{:03.1f}'.format(np_bins_template_qt_ext[qt-1])+'_'+'qt{:03.1f}'.format(np_bins_template_qt_ext[qt]) if qt<nbins_template_qt else 'OF'
-                        (qt_template_low, qt_template_high) = (np_bins_template_qt_ext[qt-1], np_bins_template_qt_ext[qt])
-                        for y in range(nbins_template_y/2+1, nbins_template_y+1):
-                            y_template_bin = 'y{:03.2f}'.format(np_bins_template_y_ext[y-1])+'_'+'y{:03.2f}'.format(np_bins_template_y_ext[y]) if y<nbins_template_y else 'OF'
-                            (y_template_low, y_template_high) = (np_bins_template_y_ext[y-1], np_bins_template_y_ext[y])
-                            template_bin_name = qt_template_bin+'_'+y_template_bin
-
-                            print template_bin_name
-
-                            iqts = []
-                            for qt in range(1, nbins_qt+1):
-                                (qt_low, qt_high) = (np_bins_qt_ext[qt-1], np_bins_qt_ext[qt])
-                                if qt_low>=qt_template_low and qt_high<=qt_template_high:
-                                    print '\t\t[',qt_low,',',qt_high, '] is in ', '[',qt_template_low,',',qt_template_high, ']'
-                                    iqts.append(qt)
-
-                            iys = []
-                            for y in range(nbins_y/2+1, nbins_y+1):
-                                (y_low, y_high) = (np_bins_y_ext[y-1], np_bins_y_ext[y])
-                                if y_low>=y_template_low and y_high<=y_template_high:
-                                    print '\t\t[',y_low,',',y_high, '] is in ', '[',y_template_low,',',y_template_high, ']'
-                                    iys.append(y)
-
-                            print '>Adding qt bins with index:', iqts
-                            print '>Adding y  bins with index:', iys
-
-                            for c in (coeff+['', 'UL']):
-                                h = None
-                                for iqt in iqts:
-                                    qt_bin = 'qt{:03.1f}'.format(np_bins_qt_ext[iqt-1])+'_'+'qt{:03.1f}'.format(np_bins_qt_ext[iqt]) if iqt<nbins_qt else 'OF'
-                                    for iy in iys:
-                                        y_bin = 'y{:03.2f}'.format(np_bins_y_ext[iy-1])+'_'+'y{:03.2f}'.format(np_bins_y_ext[iy]) if iy<nbins_y else 'OF'
-                                        (dir_name, h_name) = (q+'/'+v+'/'+ceval+'/'+mass_str+'/'+qt_bin+'_'+y_bin, q+'_'+v+'_'+ceval+'_'+mass_str+'_'+qt_bin+'_'+y_bin+'_'+c)
-                                        h_tmp = fin.Get(dir_name+'/'+h_name)
-                                        if h==None:
-                                            h = h_tmp.Clone(q+'_'+v+'_'+ceval+'_'+mass_str+'_'+qt_template_bin+'_'+y_template_bin+'_'+c)
-                                        else:
-                                            h.Add( h_tmp )
-                                if h!=None:
-                                    print c
-                                    
