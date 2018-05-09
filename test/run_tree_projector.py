@@ -117,9 +117,16 @@ elif argv[1]=='templates':
     np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2,
                                      -0.8, -0.4,  0. ,  0.4, 0.8, 
                                      1.2,  1.6,  2. ,  2.5,  3. ,  3.5])
-    np_bins_template_qt = np.array([   0., 4.])
-    np_bins_template_y  = np.array([-0.20, 0.0, 0.20])
+    #np_bins_template_qt = np.array([   0., 4.])
+    #np_bins_template_y  = np.array([-0.20, 0.0, 0.20])
     merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], 
+                    masses=[80.419], coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
+                    np_bins_template_qt=np_bins_template_qt, 
+                    np_bins_template_y=np_bins_template_y,
+                    rebin=(2,4)
+                    )
+
+    merge_templates(charges=['Wminus'], var=['WpreFSR'], coeff_eval=['val'], 
                     masses=[80.419], coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
                     np_bins_template_qt=np_bins_template_qt, 
                     np_bins_template_y=np_bins_template_y,

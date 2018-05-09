@@ -610,3 +610,46 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
                 for f in res.files:
                     print 'File: '+f, 'with size = ', res[f].size
                     print res[f]
+                    
+# draw derivative of template against one coefficient at the time
+def derivative_templates(charge='Wplus', var='WpreFSR', coeff_eval='val', bin=(0,0)):
+
+    rcParams['figure.figsize'] = 8,8
+
+    outname = 'plots/template_'+charge+'_'+var+'_'+coeff_eval
+    print 'Content of file '+outname+'.npz'
+    res = np.load(outname+'.npz')
+    for f in res.files:
+        print 'File: '+f, 'with size = ', res[f].shape
+
+    (iqt,iy) = bin
+
+    templates = []
+    for i in range(8):
+        templates.append( (res['arr_0'][0][iqt][iy][i]-res['arr_0'][0][iqt][iy][-2]) )
+
+    np_bins_qt = res['arr_2']
+    np_bins_y  = res['arr_3']
+    np_bins_rebin_eta = res['arr_5']
+    np_bins_rebin_pt  = res['arr_6']
+    xx,yy = np.meshgrid(np_bins_rebin_pt, np_bins_rebin_eta)        
+    
+    for i in range(8):
+        plt.subplot(4, 2, i+1)
+        plt.pcolormesh(yy, xx, templates[i])
+        plt.colorbar(format='%.0e')
+        plt.title(r'$A_{'+str(i)+r'}$')
+        plt.axis([np_bins_rebin_eta.min(), np_bins_rebin_eta.max(), np_bins_rebin_pt.min(), np_bins_rebin_pt.max()])        
+        if i%2==0:
+            plt.ylabel('$p_{T}$ (GeV)', fontsize=12)
+        if i>=6:
+            plt.xlabel('$\eta$', fontsize=12)
+
+    plt.suptitle(r'$q_{T} \in ['+'{:0.1f}'.format(np_bins_qt[iqt])+', '+'{:0.1f}'.format(np_bins_qt[iqt+1])+']$ GeV, '+'$|y| \in ['+'{:0.1f}'.format(np_bins_y[iy])+', '+'{:0.1f}'.format(np_bins_y[iy+1])+']$', fontsize=20)
+    plt.subplots_adjust(wspace=0.4, hspace=0.4)
+    plt.show()
+    plt.savefig('plots/derivative_'+charge+'_'+var+'_'+coeff_eval+'.png')
+    plt.close('all')
+
+
+
