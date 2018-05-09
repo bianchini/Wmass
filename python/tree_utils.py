@@ -386,12 +386,8 @@ def cumulative_angular_pdf(bin_cos=(), bin_phi=(), coeff_vals=[], verbose=False)
     return 3./16./math.pi * ( UL + coeff_vals[0]*L + coeff_vals[1]*T + coeff_vals[2]*I + coeff_vals[3]*A + coeff_vals[4]*P + coeff_vals[5]*p7 + coeff_vals[6]*p8 + coeff_vals[7]*p9)
     #return (b-a)*(d-c)/(4.*math.pi)
 
-# Determine the angular_pdf in a y-bin as a function of qt (read results 'res' from external file)
-# Two modes:
-#  - 'fit' : read the coefficients of a polynomial fit to A(qT). Rebuild the polynomnial from it.
-#  - 'val' : read the bin-by-bin value of A
-# Negative values for the pdf are possible, but expected only for qT outside the fit range in 'fit' mode 
-def weight_coeff(res={}, coeff_eval='fit', bin_y='', qt=0.0, ps=(), coeff=['A0'], verbose=False):
+# read coefficients from res
+def get_coeff_vals(res={}, coeff_eval='fit', bin_y='', qt=0.0, ps=(), coeff=['A0']):
     coeff_vals = np.zeros(8)
     for ic,c in enumerate(coeff):
         coeff_val = 0.0
@@ -403,6 +399,15 @@ def weight_coeff(res={}, coeff_eval='fit', bin_y='', qt=0.0, ps=(), coeff=['A0']
             iqt = np.where(np_bins_qt<=qt)[0][-1]
             coeff_val = res[c+'_'+bin_y+'_val'][iqt]
         coeff_vals[ic] = coeff_val
+    return coeff_vals
+
+# Determine the angular_pdf in a y-bin as a function of qt (read results 'res' from external file)
+# Two modes:
+#  - 'fit' : read the coefficients of a polynomial fit to A(qT). Rebuild the polynomnial from it.
+#  - 'val' : read the bin-by-bin value of A
+# Negative values for the pdf are possible, but expected only for qT outside the fit range in 'fit' mode 
+def weight_coeff(res={}, coeff_eval='fit', bin_y='', qt=0.0, ps=(), coeff=['A0'], verbose=False):
+    coeff_vals = get_coeff_vals(res=res, coeff_eval=coeff_eval, bin_y=bin_y, qt=qt, coeff=coeff)
     val = angular_pdf(ps=ps, coeff_vals=coeff_vals)
     if val > 0.0:        
         if verbose:
@@ -419,17 +424,7 @@ def weight_coeff(res={}, coeff_eval='fit', bin_y='', qt=0.0, ps=(), coeff=['A0']
 #  - 'val' : read the bin-by-bin value of A
 # Negative values for the pdf are possible, but expected only for qT outside the fit range in 'fit' mode 
 def weight_coeff_cumulative(res={}, coeff_eval='fit', bin_y='', qt=0.0, bin_cos=(), bin_phi=(), coeff=['A0'], verbose=False):
-    coeff_vals = np.zeros(8)
-    for ic,c in enumerate(coeff):
-        coeff_val = 0.0
-        if coeff_eval == 'fit':
-            order = len(res[c+'_'+bin_y+'_fit'])
-            for o in range(order):
-                coeff_val += math.pow(qt,o)*res[c+'_'+bin_y+'_fit'][o]
-        elif coeff_eval == 'val':
-            iqt = np.where(np_bins_qt<=qt)[0][-1]
-            coeff_val = res[c+'_'+bin_y+'_val'][iqt]
-        coeff_vals[ic] = coeff_val
+    coeff_vals = get_coeff_vals(res=res, coeff_eval=coeff_eval, bin_y=bin_y, qt=qt, coeff=coeff)
     val = cumulative_angular_pdf(bin_cos=bin_cos, bin_phi=bin_phi, coeff_vals=coeff_vals)
     if val > 0.0:        
         if verbose:
@@ -509,18 +504,7 @@ def angular_pdf_CS(x, y, coeff=[]):
 # fill (cos,phi) grid in CS frame
 def make_grid_CS(res={}, coeff_eval='fit', bin_y='', qt=0.0, h=None, coeff=[], ntoys=1000):
 
-    coeff_vals = np.zeros(8)
-    for ic,c in enumerate(coeff):
-        coeff_val = 0.0
-        if coeff_eval == 'fit':
-            order = len(res[c+'_'+bin_y+'_fit'])
-            for o in range(order):
-                coeff_val += math.pow(qt,o)*res[c+'_'+bin_y+'_fit'][o]
-        elif coeff_eval == 'val':
-            iqt = np.where(np_bins_qt<=qt)[0][-1]
-            coeff_val = res[c+'_'+bin_y+'_val'][iqt]
-        coeff_vals[ic] = coeff_val
-
+    coeff_vals = get_coeff_vals(res=res, coeff_eval=coeff_eval, bin_y=bin_y, qt=qt, coeff=coeff)
     bins_cos = np.linspace(h.GetXaxis().GetXmin(), h.GetXaxis().GetXmax()-h.GetXaxis().GetBinWidth(1), h.GetNbinsX())
     bins_phi = np.linspace(h.GetYaxis().GetXmin(), h.GetYaxis().GetXmax()-h.GetYaxis().GetBinWidth(1), h.GetNbinsY())
     xx, yy = np.meshgrid( bins_cos, bins_phi )        
