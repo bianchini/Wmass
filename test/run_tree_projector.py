@@ -58,14 +58,22 @@ elif argv[1]=='cov':
 
 elif argv[1]=='closure':
     for DY in ['CC_FxFx']:
-        for q in ['Wplus', 'Wminus']:
-            for var in ['Wbare', 'Wdress', 'WpreFSR']:
+        for q in ['Wplus']:
+            for var in ['WpreFSR']:
                 for ceval in ['val']:
-                    # MC
-                    plot_closure_test(charge=q,  DY=DY, var=var, coeff_eval=ceval, coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
+                    plot_closure_test(charge=q,  DY=DY, var=var, coeff_eval=ceval, 
+                                      coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
                                       byInvPdf=False,
-                                      save_2D=False, save_pdf=False, save_summary=True, 
-                                      do_toy=False, extra_variance_toy=0.0)
+                                      save_2D=True, save_pdf=False, save_summary=True, 
+                                      do_toy=False, extra_variance_toy=0.0,
+                                      do_pt_eta=True)
+
+                    
+                    # MC
+                    #plot_closure_test(charge=q,  DY=DY, var=var, coeff_eval=ceval, coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
+                    #                  byInvPdf=False,
+                    #                  save_2D=False, save_pdf=False, save_summary=True, 
+                    #                  do_toy=False, extra_variance_toy=0.0)
                     # toy
                     #plot_closure_test(charge=q,  DY=DY, var=var, coeff_eval=ceval, coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
                     #                  byInvPdf=False,
@@ -109,7 +117,8 @@ elif argv[1]=='templates':
     np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2,
                                      -0.8, -0.4,  0. ,  0.4, 0.8, 
                                      1.2,  1.6,  2. ,  2.5,  3. ,  3.5])
-    #np_bins_template_y  = np.array([-0.20, 0.0, 0.20])
+    np_bins_template_qt = np.array([   0., 4.])
+    np_bins_template_y  = np.array([-0.20, 0.0, 0.20])
     merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], 
                     masses=[80.419], coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7'], 
                     np_bins_template_qt=np_bins_template_qt, 

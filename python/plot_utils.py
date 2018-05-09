@@ -289,7 +289,8 @@ def plot_closure_test(charge='Wplus', DY='CC', var='Wdress', coeff_eval='val',
                       byInvPdf=False,
                       verbose=False, 
                       save_2D=True, save_pdf=True, save_summary=True, 
-                      do_toy=False, extra_variance_toy=0.07):
+                      do_toy=False, extra_variance_toy=0.07,
+                      do_pt_eta=False):
     
     print "Running plot_closure_test"
     postfix = ''
@@ -307,20 +308,20 @@ def plot_closure_test(charge='Wplus', DY='CC', var='Wdress', coeff_eval='val',
     from pylab import rcParams
     rcParams['figure.figsize'] = 14,8
 
-    from tree_utils import np_bins_qt, np_bins_y, weight_coeff_cumulative
+    from tree_utils import np_bins_qt, np_bins_y, weight_coeff_cumulative, get_coeff_vals
     np_bins_y_p0 = np.linspace(-4.0, -2.5,  4)
     np_bins_y_p1 = np.linspace(-2.0, +2.0, 21)
     np_bins_y_p2 = np.linspace(+2.5, +4.0,  4)
     np_bins_y = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
 
     # for fast check:
-    #np_bins_qt = np.array([0.0, 2.0])    
+    np_bins_qt = np.array([0.0, 2.0])    
     #np_bins_y  = np.array([0.8, 1.0])  
     print 'The following (qt,y) bins will be considered:'
     print '> qt:', np_bins_qt
     print '>  y:', np_bins_y
 
-    fin_name = '../root/tree_histos2_'+DY+'.root'
+    fin_name = '../root/tree_histos'+('2' if not do_pt_eta else '3')+'_'+DY+'.root'
     fin = ROOT.TFile(fin_name, 'READ')
     print 'Read histograms from '+fin_name
 
@@ -349,8 +350,27 @@ def plot_closure_test(charge='Wplus', DY='CC', var='Wdress', coeff_eval='val',
             name = charge+'_'+var+'_'+coeff_eval+'_'+bin_y+'_'+bin_qt
             canvas = ROOT.TCanvas("c", "canvas", 600, 600)            
             h_pull = ROOT.TH1F('h_pull_byPDF_'+name, '', 81, -4.0, 4.0)
-            (h, h_norm) = (fin.Get(charge+'/'+var+'/'+coeff_eval+'/'+name),
-                           fin.Get(charge+'/'+var+'/'+coeff_eval+'/'+name+'_norm'))
+
+            (h, h_norm) = (None, None)
+            if not do_pt_eta:
+                (h, h_norm) = (fin.Get(charge+'/'+var+'/'+coeff_eval+'/'+name),
+                               fin.Get(charge+'/'+var+'/'+coeff_eval+'/'+name+'_norm'))
+            else:
+                coeff_vals = get_coeff_vals(res=res, coeff_eval=coeff_eval, bin_y=bin_y, qt=0.5*(np_bins_qt[iqt]+np_bins_qt[iqt+1]), coeff=coeff)
+                h = fin.Get(charge+'/'+var+'/'+coeff_eval+'/'+'M'+'{:05.3f}'.format(80.419)+'/'+bin_qt+'_'+bin_y+'/'+charge+'_'+var+'_'+coeff_eval+'_'+'M'+'{:05.3f}'.format(80.419)+'_'+bin_qt+'_'+bin_y+'_')
+                h_norm_UL = fin.Get(charge+'/'+var+'/'+coeff_eval+'/'+'M'+'{:05.3f}'.format(80.419)+'/'+bin_qt+'_'+bin_y+'/'+charge+'_'+var+'_'+coeff_eval+'_'+'M'+'{:05.3f}'.format(80.419)+'_'+bin_qt+'_'+bin_y+'_UL')
+                scale_UL = 1.0
+                for ic,c in enumerate(coeff):
+                    scale_UL -= coeff_vals[ic]
+                    (dir_name, h_name) = (charge+'/'+var+'/'+coeff_eval+'/'+'M'+'{:05.3f}'.format(80.419)+'/'+bin_qt+'_'+bin_y, 
+                                          charge+'_'+var+'_'+coeff_eval+'_'+'M'+'{:05.3f}'.format(80.419)+'_'+bin_qt+'_'+bin_y+'_'+c)
+                    if h_norm==None:
+                        h_norm = fin.Get(dir_name+'/'+h_name).Clone(h_name)
+                        h_norm.Scale( coeff_vals[ic] )
+                    else:
+                        h_norm.Add( fin.Get(dir_name+'/'+h_name), coeff_vals[ic] )
+                h_norm.Add(h_norm_UL, scale_UL)
+
             h_pdf = h_norm.Clone(h_norm.GetName()+'_pdf')
             h_pdf.Reset()
 
@@ -386,16 +406,21 @@ def plot_closure_test(charge='Wplus', DY='CC', var='Wdress', coeff_eval='val',
                     if byInvPdf:
                         mu = 1.0/(h.GetNbinsX()*h.GetNbinsY())
                     else:
-                        mu = weight_coeff_cumulative(res=res, 
-                                                     coeff_eval=coeff_eval, 
-                                                     bin_y=bin_y, 
-                                                     qt=0.5*( np_bins_qt[iqt]+ np_bins_qt[iqt+1]), 
-                                                     bin_cos=bin_cos, bin_phi=bin_phi, 
-                                                     coeff=coeff)
+                        if not do_pt_eta:
+                            mu = weight_coeff_cumulative(res=res, 
+                                                         coeff_eval=coeff_eval, 
+                                                         bin_y=bin_y, 
+                                                         qt=0.5*( np_bins_qt[iqt]+ np_bins_qt[iqt+1]), 
+                                                         bin_cos=bin_cos, bin_phi=bin_phi, 
+                                                         coeff=coeff)
+                        else:
+                            mu = h.GetBinContent(ix,iy)/integ
+
                     if verbose:
                         print '\tBin (', ix, ',', iy , ') = ' , n, ' +/- ', err
                     if (n < min_val or n==0.):
                         continue
+
                     pull = (n - mu*integ)/err
                     h_pull.Fill( pull )
                     chi2 += pull*pull
@@ -470,57 +495,60 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
     np_bins_template_qt_ext = np.append(np_bins_template_qt, 999.)
     nbins_template_y  = np_bins_template_y_ext.size - 1 
     nbins_template_qt = np_bins_template_qt_ext.size - 1 
-    
+
+    (np_bins_rebin_eta, np_bins_rebin_pt) = (np_bins_eta,np_bins_pt)    
+    if rebin!=():
+        np_bins_rebin_eta = np.linspace(np_bins_eta[0], np_bins_eta[-1], (np_bins_eta.size-1)/rebin[0]+1 )
+        np_bins_rebin_pt  = np.linspace(np_bins_pt[0],  np_bins_pt[-1],  (np_bins_pt.size-1)/rebin[1]+1 )
+
+    xx, yy = np.meshgrid(np_bins_rebin_pt, np_bins_rebin_eta)        
+    coeff_ext = coeff+['UL', '']
+    np_coeff_ext = np.chararray(len(coeff_ext), itemsize=2, unicode=True)
+    np_coeff_ext[:] = coeff_ext
+
     fin = ROOT.TFile('../root/tree_histos3_CC_FxFx.root', 'READ')
 
     # create TH2D
     for q in charges:
         for v in var:
             for ceval in coeff_eval:
-                for m in masses:
-                    mass_str = 'M'+'{:05.3f}'.format(m)
+                template = np.zeros( (len(masses), nbins_template_qt, nbins_template_y/2, len(coeff_ext), np_bins_rebin_eta.size-1, np_bins_rebin_pt.size-1) )    
+                
+                bin_template_qt_index = -1
+                for qt in range(1, nbins_template_qt+1):
+                    bin_template_qt_index += 1
+                    qt_template_bin = 'qt{:03.1f}'.format(np_bins_template_qt_ext[qt-1])+'_'+'qt{:03.1f}'.format(np_bins_template_qt_ext[qt]) if qt<nbins_template_qt else 'OF'
+                    (qt_template_low, qt_template_high) = (np_bins_template_qt_ext[qt-1], np_bins_template_qt_ext[qt])
 
-                    '''
-                    print 'First loop to compute normalisation...'
-                    norm = 0.0
-                    for iqt in range(1, nbins_qt+1):
-                        qt_bin = 'qt{:03.1f}'.format(np_bins_qt_ext[iqt-1])+'_'+'qt{:03.1f}'.format(np_bins_qt_ext[iqt]) if iqt<nbins_qt else 'OF'
-                        for iy in range(nbins_y/2+1, nbins_y+1):
-                            y_bin = 'y{:03.2f}'.format(np_bins_y_ext[iy-1])+'_'+'y{:03.2f}'.format(np_bins_y_ext[iy]) if iy<nbins_y else 'OF'
-                            (dir_name, h_name) = (q+'/'+v+'/'+ceval+'/'+mass_str+'/'+qt_bin+'_'+y_bin, q+'_'+v+'_'+ceval+'_'+mass_str+'_'+qt_bin+'_'+y_bin+'_')
-                            norm += fin.Get(dir_name+'/'+h_name).Integral(0, h_tmp.GetNbinsX()+1,0, h_tmp.GetNbinsY()+1)
-                    print ' => normalisation for '+q+', '+v+', '+ceval+', '+mass_str+': ', norm
-                    '''
-
-                    # loop over templates
-                    for qt in range(1, nbins_template_qt+1):
-                        qt_template_bin = 'qt{:03.1f}'.format(np_bins_template_qt_ext[qt-1])+'_'+'qt{:03.1f}'.format(np_bins_template_qt_ext[qt]) if qt<nbins_template_qt else 'OF'
-                        (qt_template_low, qt_template_high) = (np_bins_template_qt_ext[qt-1], np_bins_template_qt_ext[qt])
-                        for y in range(nbins_template_y/2+1, nbins_template_y+1):
-                            y_template_bin = 'y{:03.2f}'.format(np_bins_template_y_ext[y-1])+'_'+'y{:03.2f}'.format(np_bins_template_y_ext[y]) if y<nbins_template_y else 'OF'
-                            (y_template_low, y_template_high) = (np_bins_template_y_ext[y-1], np_bins_template_y_ext[y])
+                    bin_template_y_index = -1
+                    for y in range(nbins_template_y/2+1, nbins_template_y+1):
+                        bin_template_y_index += 1
+                        y_template_bin = 'y{:03.2f}'.format(np_bins_template_y_ext[y-1])+'_'+'y{:03.2f}'.format(np_bins_template_y_ext[y]) if y<nbins_template_y else 'OF'
+                        (y_template_low, y_template_high) = (np_bins_template_y_ext[y-1], np_bins_template_y_ext[y])
                                                   
-                            template_bin_name = qt_template_bin+'_'+y_template_bin
-                            print 'Doing....'+template_bin_name
+                        template_bin_name = qt_template_bin+'_'+y_template_bin
+                        print 'Doing....'+template_bin_name
 
-                            iqts = []
-                            for iqt in range(1, nbins_qt+1):
-                                (qt_low, qt_high) = (np_bins_qt_ext[iqt-1], np_bins_qt_ext[iqt])
-                                if (qt_low>qt_template_low or np.isclose(qt_low,qt_template_low)) and (qt_high<qt_template_high or np.isclose(qt_high,qt_template_high)):
-                                    print '\t\t[',qt_low,',',qt_high, '] < [', qt_template_low,',',qt_template_high, ']'
-                                    iqts.append(iqt)
+                        iqts = []
+                        for iqt in range(1, nbins_qt+1):
+                            (qt_low, qt_high) = (np_bins_qt_ext[iqt-1], np_bins_qt_ext[iqt])
+                            if (qt_low>qt_template_low or np.isclose(qt_low,qt_template_low)) and (qt_high<qt_template_high or np.isclose(qt_high,qt_template_high)):
+                                print '\t\t[',qt_low,',',qt_high, '] < [', qt_template_low,',',qt_template_high, ']'
+                                iqts.append(iqt)
 
-                            iys = []
-                            for iy in range(nbins_y/2+1, nbins_y+1):
-                                (y_low, y_high) = (np_bins_y_ext[iy-1], np_bins_y_ext[iy])
-                                if (y_low>y_template_low or np.isclose(y_low,y_template_low)) and (y_high<y_template_high or np.isclose(y_high,y_template_high)):
-                                    print '\t\t[',y_low,',',y_high, '] < [', y_template_low,',',y_template_high, ']'
-                                    iys.append(iy)
+                        iys = []
+                        for iy in range(nbins_y/2+1, nbins_y+1):
+                            (y_low, y_high) = (np_bins_y_ext[iy-1], np_bins_y_ext[iy])
+                            if (y_low>y_template_low or np.isclose(y_low,y_template_low)) and (y_high<y_template_high or np.isclose(y_high,y_template_high)):
+                                print '\t\t[',y_low,',',y_high, '] < [', y_template_low,',',y_template_high, ']'
+                                iys.append(iy)
 
-                            print '\tMerging qt bins with index:', [ iqt-1 for iqt in iqts ]
-                            print '\tMerging y  bins with index:', [ iy-1  for iy  in iys ]
+                        print '\tMerging qt bins with index:', [ iqt-1 for iqt in iqts ]
+                        print '\tMerging y  bins with index:', [ iy-1  for iy  in iys ]
 
-                            for c in (coeff+['', 'UL']):                                
+                        for im,m in enumerate(masses):
+                            mass_str = 'M'+'{:05.3f}'.format(m)
+                            for ic,c in enumerate(coeff_ext):                                
                                 norm = 0.0 
                                 print '\t\tCoefficient...'+c
                                 template_name = q+'_'+v+'_'+ceval+'_'+mass_str+'_'+qt_template_bin+'_'+y_template_bin+'_'+c
@@ -535,25 +563,16 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
                                         if h==None:
                                             h = h_tmp.Clone(template_name)
                                         else:
-                                            h.Add( h_tmp )
-
-                                (np_bins_rebin_eta, np_bins_rebin_pt) = (np_bins_eta,np_bins_pt)
+                                            h.Add( h_tmp )                                        
 
                                 if rebin!=():
                                     h.Rebin2D(rebin[0], rebin[1])
-                                    np_bins_rebin_eta = np.linspace(np_bins_eta[0], np_bins_eta[-1], (np_bins_eta.size-1)/rebin[0]+1 )
-                                    np_bins_rebin_pt  = np.linspace(np_bins_pt[0],  np_bins_pt[-1],  (np_bins_pt.size-1)/rebin[1]+1 )
 
-                                template = np.zeros( (np_bins_rebin_eta.size-1, np_bins_rebin_pt.size-1) )
                                 for ipt in range(np_bins_rebin_pt.size-1):
                                     for ieta in range(np_bins_rebin_eta.size-1):
-                                        template[ieta][ipt] = h.GetBinContent(ieta+1,ipt+1)/norm                                        
-
-                                #template = np.absolute(template)
-                                np.save('plots/template_'+template_name+'.npy', template)
+                                        template[im][bin_template_qt_index][bin_template_y_index][ic][ieta][ipt] = h.GetBinContent(ieta+1,ipt+1)/(norm if c!='' else 1.0)
                                         
-                                xx, yy = np.meshgrid(np_bins_rebin_pt, np_bins_rebin_eta)        
-                                plt.pcolormesh(yy, xx, template)
+                                plt.pcolormesh(yy, xx, template[im][bin_template_qt_index][bin_template_y_index][ic])
                                 plt.colorbar()
 
                                 words = template_name.split('_')
@@ -568,10 +587,26 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
                                 plt.axis([np_bins_rebin_eta[0], np_bins_rebin_eta[-1], np_bins_rebin_pt[0], np_bins_rebin_pt[-1]])        
                                 plt.figtext(0.15, 0.86, r'$M_{W}$ = '+words[3][1:]+' GeV', color='white')
                                 plt.figtext(0.15, 0.81, r'$N$ = '+'{:0.0f}'.format(norm)+', $\epsilon_{A}$ = '+'{:0.4f}'.format(template.sum()), color='white')
-                                plt.figtext(0.15, 0.76, r'$\frac{d\sigma}{d\Omega^*}$ = '+pdf_c, color='white')
+                                plt.figtext(0.15, 0.76, r'$\frac{1}{\sigma}\frac{d\sigma}{d\Omega}$ = '+pdf_c, color='white')
                                 plt.xlabel('$\eta$', fontsize=20)
                                 plt.ylabel('$p_{T}$ (GeV)', fontsize=20)
                                 plt.show()
                                 plt.savefig('plots/template_'+template_name+'.png')
                                 plt.close('all')
                                 #return
+
+                outname = 'plots/template_'+q+'_'+v+'_'+ceval
+                np.savez(outname,
+                         template, 
+                         np.array(masses), 
+                         np_bins_template_qt_ext, 
+                         np_bins_template_y_ext[(nbins_template_y/2):], 
+                         np_coeff_ext, 
+                         np_bins_rebin_eta, np_bins_rebin_pt)
+
+                # for validation
+                print 'Content of file '+outname+'.npz'
+                res = np.load(outname+'.npz')
+                for f in res.files:
+                    print 'File: '+f, 'with size = ', res[f].size
+                    print res[f]
