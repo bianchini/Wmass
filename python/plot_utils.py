@@ -513,7 +513,7 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
         for v in var:
             for ceval in coeff_eval:
                 template = np.zeros( (len(masses), nbins_template_qt, nbins_template_y/2, len(coeff_ext), np_bins_rebin_eta.size-1, np_bins_rebin_pt.size-1) )    
-                
+                mc_acceptances = np.zeros( (len(masses), nbins_template_qt, nbins_template_y/2) )
                 bin_template_qt_index = -1
                 for qt in range(1, nbins_template_qt+1):
                     bin_template_qt_index += 1
@@ -549,7 +549,7 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
                         for im,m in enumerate(masses):
                             mass_str = 'M'+'{:05.3f}'.format(m)
                             for ic,c in enumerate(coeff_ext):                                
-                                norm = 0.0 
+                                norm_c = 0.0 
                                 print '\t\tCoefficient...'+c
                                 template_name = q+'_'+v+'_'+ceval+'_'+mass_str+'_'+qt_template_bin+'_'+y_template_bin+'_'+c
                                 h = None
@@ -559,7 +559,7 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
                                         y_bin = 'y{:03.2f}'.format(np_bins_y_ext[iy-1])+'_'+'y{:03.2f}'.format(np_bins_y_ext[iy]) if iy<nbins_y else 'OF'
                                         (dir_name, h_name) = (q+'/'+v+'/'+ceval+'/'+mass_str+'/'+qt_bin+'_'+y_bin, q+'_'+v+'_'+ceval+'_'+mass_str+'_'+qt_bin+'_'+y_bin+'_'+c)
                                         h_tmp = fin.Get(dir_name+'/'+h_name)
-                                        norm += h_tmp.Integral(0, h_tmp.GetNbinsX()+1,0, h_tmp.GetNbinsY()+1)
+                                        norm_c += h_tmp.Integral(0, h_tmp.GetNbinsX()+1,0, h_tmp.GetNbinsY()+1)
                                         if h==None:
                                             h = h_tmp.Clone(template_name)
                                         else:
@@ -568,10 +568,15 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
                                 if rebin!=():
                                     h.Rebin2D(rebin[0], rebin[1])
 
+                                # templates are normalised in acceptance
                                 for ipt in range(np_bins_rebin_pt.size-1):
                                     for ieta in range(np_bins_rebin_eta.size-1):
-                                        template[im][bin_template_qt_index][bin_template_y_index][ic][ieta][ipt] = h.GetBinContent(ieta+1,ipt+1)/(norm if c!='' else 1.0)
+                                        template[im][bin_template_qt_index][bin_template_y_index][ic][ieta][ipt] = h.GetBinContent(ieta+1,ipt+1)/(norm_c if c!='' else 1.0)
                                         
+                                # save a map of MC acceptances (for closure-test)
+                                if c=='':
+                                    mc_acceptances[im][bin_template_qt_index][bin_template_y_index] = h.Integral()/norm_c 
+
                                 plt.pcolormesh(yy, xx, template[im][bin_template_qt_index][bin_template_y_index][ic])
                                 plt.colorbar()
 
@@ -586,7 +591,11 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
                                 pdf_c = angular_pdf_string(coeff_vals=coeff_vals) if c!='' else 'MC'
                                 plt.axis([np_bins_rebin_eta[0], np_bins_rebin_eta[-1], np_bins_rebin_pt[0], np_bins_rebin_pt[-1]])        
                                 plt.figtext(0.15, 0.86, r'$M_{W}$ = '+words[3][1:]+' GeV', color='white')
-                                plt.figtext(0.15, 0.81, r'$N$ = '+'{:0.0f}'.format(norm)+', $\epsilon_{A}$ = '+'{:0.4f}'.format(template.sum()), color='white')
+                                acc = template[im][bin_template_qt_index][bin_template_y_index][ic].sum() / (norm_c if c=='' else 1.0)
+                                acc_err = math.sqrt(acc*(1-acc)/norm_c)
+                                plt.figtext(0.15, 0.81, r'$\frac{d\sigma}{dq_{T}d|y|}$ = '+'{:0.1f}'.format(norm_c)+', '+
+                                            '$\epsilon_{A}$ = '+'{:0.4f}'.format(acc)+
+                                            '$\pm$'+'{:0.4f}'.format(acc_err), color='white')
                                 plt.figtext(0.15, 0.76, r'$\frac{1}{\sigma}\frac{d\sigma}{d\Omega}$ = '+pdf_c, color='white')
                                 plt.xlabel('$\eta$', fontsize=20)
                                 plt.ylabel('$p_{T}$ (GeV)', fontsize=20)
@@ -602,7 +611,8 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
                          np_bins_template_qt_ext, 
                          np_bins_template_y_ext[(nbins_template_y/2):], 
                          np_coeff_ext, 
-                         np_bins_rebin_eta, np_bins_rebin_pt)
+                         np_bins_rebin_eta, np_bins_rebin_pt,
+                         mc_acceptances)
 
                 # for validation
                 print 'Content of file '+outname+'.npz'
