@@ -56,16 +56,24 @@ class TemplateFitter:
         for key,p in templates_files.items():             
             template_file = templates['arr_'+str(p)]
             print ('Adding file arr_'+str(p)+' with shape...'), template_file.shape, (' to self with key... '+key)
-            setattr(self, key,template_file)
             size = -1
             if key=='template':
                 size = template_file[0][0][0][0].size
-            elif 'bins' in key:
+                setattr(self, key,template_file)
+            elif key in ['bins_qt', 'bins_y']:
+                #size = template_file.size - 2
+                #setattr(self, key,template_file[:-1])
+                size = 1
+                setattr(self, key,template_file[:2])
+            elif key in ['bins_pt', 'bins_eta']:
                 size = template_file.size - 1
+                setattr(self, key,template_file)
             elif key=='coefficients':
                 size = template_file.size - 2
+                setattr(self, key,template_file[:-2])
             else:
                 size = template_file.size
+                setattr(self, key,template_file)
             setattr(self, key+'_size', size)
 
         self.mc_mass_index = np.where(self.masses==mc_mass)[0][0]
@@ -81,47 +89,11 @@ class TemplateFitter:
         #pickle.dump(self.fit_results, self.out_file_res)
         #self.out_file_res.close()
 
-        self.book_parameters()
-
-
-    def book_parameters(self):
-
-        self.gMinuit = ROOT.TMinuit(500)  
-        self.gMinuit.SetPrintLevel(1)
-        if not self.verbose:
-            self.gMinuit.SetPrintLevel(-1)
-        self.gMinuit.SetFCN( self.fcn ) 
-
-        self.arglist = array( 'd', 10*[0.] )
-        self.ierflg = ROOT.Long(0)
-        
-        # 0.5: chi2, 1.0: -2nll
-        self.arglist[0] = 1.0
-        self.gMinuit.mnexcm( "SET ERR", self.arglist, 1, self.ierflg )
-
+        self.dim_A = 0
+        self.dim_beta = 0
         self.n_param = 0
-        self.define_parameter( par_name='mass', start=self.mc_mass, step=0.020, par_range=(self.mc_mass-0.500,self.mc_mass+0.500) )
-        
-        for iy in range(self.bins_y_size-1):
-            y_bin = 'y{:03.2f}'.format(self.bins_y[iy])+'_'+'y{:03.2f}'.format(self.bins_y[iy+1])
-            for coeff in self.coefficients:
-                if 'A' not in coeff:
-                    continue
-                order = len(self.res_coeff[coeff+'_'+y_bin+'_fit'])-1
-                for o in range(order+1):
-                    if self.res_coeff[coeff+'_'+y_bin+'_fit'][o]!=0.:
-                        self.define_parameter( par_name=y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o), 
-                                               start=self.res_coeff[coeff+'_'+y_bin+'_fit'][o], 
-                                               step=0.01, 
-                                               par_range=(-2., +2.) )
-            for iqt in range(self.bins_qt_size-1):
-                qt_bin = 'qt{:03.1f}'.format(self.bins_qt[iqt])+'_'+'qt{:03.1f}'.format(self.bins_qt[iqt+1])
-                mc_norm = self.template[self.mc_mass_index][iqt][iy][-1].sum()/self.mc_acceptances[self.mc_mass_index][iqt][iy]
-                self.define_parameter( par_name=y_bin+'_'+qt_bin+'_norm', 
-                                       start=mc_norm, 
-                                       step=math.sqrt(mc_norm), 
-                                       par_range=(max(mc_norm-math.sqrt(mc_norm)*10., 0.), mc_norm+math.sqrt(mc_norm)*10.) )
-
+        self.book_parameters()
+        self.build_aux_matrices()
 
     def define_parameter( self, par_name='', start=0., step=0., par_range=() ):
         self.gMinuit.DefineParameter( self.n_param, par_name, start, step, par_range[0], par_range[1] )        
@@ -139,11 +111,132 @@ class TemplateFitter:
         self.n_param += 1
 
 
+    def book_parameters(self):
+
+        self.gMinuit = ROOT.TMinuit(500)  
+        self.gMinuit.SetPrintLevel(1)
+        if not self.verbose:
+            self.gMinuit.SetPrintLevel(-1)
+        self.gMinuit.SetFCN( self.fcn ) 
+
+        self.arglist = array( 'd', 10*[0.] )
+        self.ierflg = ROOT.Long(0)
+        
+        # 0.5: chi2, 1.0: -2nll
+        self.arglist[0] = 1.0
+        self.gMinuit.mnexcm( "SET ERR", self.arglist, 1, self.ierflg )
+
+        self.define_parameter( par_name='mass', start=self.mc_mass, step=0.020, par_range=(self.mc_mass-0.500,self.mc_mass+0.500) )
+        
+        for iy in range(self.bins_y_size):
+            y_bin = self.get_y_bin(iy)
+            for iqt in range(self.bins_qt_size):
+                qt_bin = self.get_qt_bin(iqt)
+                mc_norm = self.template[self.mc_mass_index][iqt][iy][-1].sum()/self.mc_acceptances[self.mc_mass_index][iqt][iy]
+                self.define_parameter( par_name=y_bin+'_'+qt_bin+'_norm', 
+                                       start=mc_norm, 
+                                       step=math.sqrt(mc_norm), 
+                                       par_range=(max(mc_norm-math.sqrt(mc_norm)*10., 0.), mc_norm+math.sqrt(mc_norm)*10.) )
+                for coeff in self.coefficients:
+                    self.dim_A += 1
+                    if iqt>0:
+                        continue
+                    (valid_orders, order) = self.get_orders(coeff, y_bin)
+                    for o in valid_orders:
+                        self.define_parameter( par_name=y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o), 
+                                               start=self.res_coeff[coeff+'_'+y_bin+'_fit'][o], 
+                                               step=0.01, 
+                                               par_range=(-2., +2.) )
+                        self.dim_beta += 1
+
+
+    def get_orders(self, coeff='', y_bin=''):               
+        valid_orders = []
+        order = len(self.res_coeff[coeff+'_'+y_bin+'_fit'])-1
+        for io,o in enumerate(self.res_coeff[coeff+'_'+y_bin+'_fit']):
+            if o!=0.:
+                valid_orders.append(io)
+        return (valid_orders, order)                
+
+    def get_y_bin(self, iy=-1):
+        return 'y{:03.2f}'.format(self.bins_y[iy])+'_'+'y{:03.2f}'.format(self.bins_y[iy+1])
+
+    def get_qt_bin(self, iqt=-1):
+        return 'qt{:03.1f}'.format(self.bins_qt[iqt])+'_'+'qt{:03.1f}'.format(self.bins_qt[iqt+1])
+
+    def get_y_qt_bin(self, iy=-1, iqt=-1):
+        return self.get_y_bin(iy)+'_'+self.get_qt_bin(iqt)
+
+    def build_aux_matrices(self):
+
+        self.n = self.data.flatten()
+        if self.n[self.n<10].size > 0:
+            print "Bins with less than 10 entries!"
+        self.Vinv = np.diag(1./self.n)
+ 
+        self.K = np.zeros( ( self.dim_A, self.dim_beta) )
+
+        # first loop
+        idx_A = 0
+        for iy1 in range(self.bins_y_size):
+            for iqt in range(self.bins_qt_size):
+                for coeff1 in self.coefficients:
+
+                    # second loop
+                    idx_beta = 0
+                    for iy2 in range(self.bins_y_size):                    
+                        y_bin2 = self.get_y_bin( iy2 )
+                        for coeff2 in self.coefficients:
+                            (valid_orders, order) = self.get_orders(coeff2, y_bin2)
+                            for o in valid_orders:
+                                if iy1==iy2 and coeff1==coeff2:
+                                    self.K[idx_A, idx_beta] += math.pow( 0.5*(self.bins_qt[iqt]+self.bins_qt[iqt+1]), o)
+                                idx_beta += 1
+                idx_A += 1
+
+        #np.set_printoptions(threshold=np.inf)
+        #print self.K[0]
+        #print self.K[1]
+
     def fcn(self, npar, gin, f, par, iflag ):
-        nll = math.pow((par[0]-self.mc_mass)/0.100, 2.0)
+        #nll = math.pow((par[0]-self.mc_mass)/0.100, 2.0)
+        nll = self.chi2(par=par)
+        print 'nll: ', nll/self.ndof
         f[0] = nll
         return
 
+    def chi2(self, par):
+        Am = np.zeros((self.data.size, self.dim_A))
+        bm = np.zeros(self.n.shape)
+
+        idx_A = 0
+        for iy in range(self.bins_y_size):
+            for iqt in range(self.bins_qt_size):
+                inorm = par[self.map_params[self.get_y_qt_bin(iy,iqt)+'_norm']]
+                tUL = copy.deepcopy(self.template[0][iqt][iy][-2])
+                bm += tUL.flatten()*inorm
+                print 'UL*',inorm
+                for icoeff,coeff in enumerate(self.coefficients):
+                    tjA = copy.deepcopy(self.template[0][iqt][iy][icoeff])
+                    tjA -= tUL
+                    print coeff+'*', inorm
+                    Am[:, idx_A] += tjA.flatten()*inorm
+                    idx_A += 1
+
+        np.set_printoptions(threshold=np.inf)
+        print Am
+        print bm
+
+        nprime = self.n - bm
+        aux1 =  np.linalg.multi_dot([self.K.T, Am.T, self.Vinv, Am, self.K])        
+        aux1_inv = np.linalg.inv(aux1)
+        aux2 = np.linalg.multi_dot( [ self.K.T, Am.T, self.Vinv, nprime ] )
+        beta = np.linalg.multi_dot( [aux1_inv, aux2 ] )        
+        res1 = (nprime - np.linalg.multi_dot( [Am, self.K, beta]) )
+        res2 = (beta_prior - beta)
+        chi2min = np.linalg.multi_dot( [res1.T, self.Vinv, res1 ] )
+        return chi2min
+    
 
     def run(self, n_points=500000, run_minos=False):
 
