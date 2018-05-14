@@ -25,15 +25,16 @@ import copy
 class TemplateFitter:
 
     def __init__(self, 
-                 DY='CC', 
+                 DY='CC_FxFx', 
                  charge='Wplus', 
                  var='WpreFSR', 
                  job_name='TEST', 
                  mc_mass=80.419, 
                  verbose=True, 
-                 fixed_parameters=[]):
+                 fixed_parameters=[],
+                 ):
 
-        self.in_dir  = os.environ['CMSSW_BASE']+'/src/Wmass/data/'
+        self.in_dir  = os.environ['CMSSW_BASE']+'/src/Wmass/test/plots/'
         self.out_dir = os.environ['CMSSW_BASE']+'/src/Wmass/test/'
         self.job_name = job_name
         self.verbose = verbose
@@ -41,11 +42,12 @@ class TemplateFitter:
         self.mc_mass = mc_mass
         self.map_params = {}
 
-        self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY+'_'+charge+'_all_A0-7.pkl', 'r'))        
+        self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced.pkl', 'r'))        
+        self.cov_coeff = np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_stat_plus_syst_all_A0-4_forced.npy', 'r'))        
 
         templates = np.load(self.in_dir+'template_'+charge+'_'+var+'_val.npz')
         templates_files = {'template': 0, 'masses': 1, 'bins_qt' : 2, 
-                           'bins_y'  : 3, 'coeff' : 4, 'bins_eta': 5, 
+                           'bins_y'  : 3, 'coefficients' : 4, 'bins_eta': 5, 
                            'bins_pt' : 6, 'mc_acceptances' : 7 }
 
         # for template, save the size of (pt,eta) plane 
@@ -60,15 +62,14 @@ class TemplateFitter:
                 size = template_file[0][0][0][0].size
             elif 'bins' in key:
                 size = template_file.size - 1
-            elif key=='coeff':
+            elif key=='coefficients':
                 size = template_file.size - 2
             else:
                 size = template_file.size
             setattr(self, key+'_size', size)
 
-        mc_mass_index = np.where(self.masses==mc_mass)[0][0]
-
-        self.mc = self.template.sum(axis=(1,2))[mc_mass_index,-1]
+        self.mc_mass_index = np.where(self.masses==mc_mass)[0][0]
+        self.mc = self.template.sum(axis=(1,2))[self.mc_mass_index,-1]
         self.save_template_snapshot(data=self.mc, title='MC', tag='mc')
 
         self.data = copy.deepcopy(self.mc)
@@ -100,12 +101,38 @@ class TemplateFitter:
 
         self.n_param = 0
         self.define_parameter( par_name='mass', start=self.mc_mass, step=0.020, par_range=(self.mc_mass-0.500,self.mc_mass+0.500) )
+        
+        for iy in range(self.bins_y_size-1):
+            y_bin = 'y{:03.2f}'.format(self.bins_y[iy])+'_'+'y{:03.2f}'.format(self.bins_y[iy+1])
+            for coeff in self.coefficients:
+                if 'A' not in coeff:
+                    continue
+                order = len(self.res_coeff[coeff+'_'+y_bin+'_fit'])-1
+                for o in range(order+1):
+                    if self.res_coeff[coeff+'_'+y_bin+'_fit'][o]!=0.:
+                        self.define_parameter( par_name=y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o), 
+                                               start=self.res_coeff[coeff+'_'+y_bin+'_fit'][o], 
+                                               step=0.01, 
+                                               par_range=(-2., +2.) )
+            for iqt in range(self.bins_qt_size-1):
+                qt_bin = 'qt{:03.1f}'.format(self.bins_qt[iqt])+'_'+'qt{:03.1f}'.format(self.bins_qt[iqt+1])
+                mc_norm = self.template[self.mc_mass_index][iqt][iy][-1].sum()/self.mc_acceptances[self.mc_mass_index][iqt][iy]
+                self.define_parameter( par_name=y_bin+'_'+qt_bin+'_norm', 
+                                       start=mc_norm, 
+                                       step=math.sqrt(mc_norm), 
+                                       par_range=(max(mc_norm-math.sqrt(mc_norm)*10., 0.), mc_norm+math.sqrt(mc_norm)*10.) )
 
 
     def define_parameter( self, par_name='', start=0., step=0., par_range=() ):
         self.gMinuit.DefineParameter( self.n_param, par_name, start, step, par_range[0], par_range[1] )        
         self.map_params[par_name] = self.n_param
-        if par_name in self.fixed_parameters:
+        match = False
+        for fix in self.fixed_parameters:
+            if fix in par_name:
+                match = True
+        if (par_name in self.fixed_parameters) or \
+                ('OF' in par_name) or \
+                match:
             self.gMinuit.FixParameter(self.n_param)
         else:
             self.ndof -= 1
