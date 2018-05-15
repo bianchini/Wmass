@@ -387,7 +387,13 @@ def cumulative_angular_pdf(bin_cos=(), bin_phi=(), coeff_vals=[], verbose=False)
     #return (b-a)*(d-c)/(4.*math.pi)
 
 # read coefficients from res
-def get_coeff_vals(res={}, coeff_eval='fit', bin_y='', qt=0.0, ps=(), coeff=['A0']):
+def get_coeff_vals(res={}, coeff_eval='fit', bin_y='', qt=0.0, coeff=['A0'], np_bins_template_qt_new=np.array([])):
+
+    if np_bins_template_qt_new.size==0:
+        np_bins_template_qt = np_bins_qt
+    else:
+        np_bins_template_qt = np_bins_template_qt_new
+
     coeff_vals = np.zeros(8)
     for ic,c in enumerate(coeff):
         coeff_val = 0.0
@@ -396,7 +402,7 @@ def get_coeff_vals(res={}, coeff_eval='fit', bin_y='', qt=0.0, ps=(), coeff=['A0
             for o in range(order):
                 coeff_val += math.pow(qt,o)*res[c+'_'+bin_y+'_fit'][o]
         elif coeff_eval == 'val':
-            iqt = np.where(np_bins_qt<=qt)[0][-1]
+            iqt = np.where(np_bins_template_qt<=qt)[0][-1]
             coeff_val = res[c+'_'+bin_y+'_val'][iqt]
         coeff_vals[ic] = coeff_val
     return coeff_vals

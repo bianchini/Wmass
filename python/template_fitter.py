@@ -32,6 +32,11 @@ class TemplateFitter:
                  mc_mass=80.419, 
                  verbose=True, 
                  fixed_parameters=[],
+                 use_prior=False,
+                 reduce_qt=-1,
+                 reduce_y=-1,
+                 debug=False,
+                 do_parametric=True
                  ):
 
         self.in_dir  = os.environ['CMSSW_BASE']+'/src/Wmass/test/plots/'
@@ -39,11 +44,13 @@ class TemplateFitter:
         self.job_name = job_name
         self.verbose = verbose
         self.fixed_parameters = fixed_parameters
+        self.use_prior = use_prior
+        self.debug = debug
         self.mc_mass = mc_mass
+        self.do_parametric = do_parametric
         self.map_params = {}
 
         self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced.pkl', 'r'))        
-        self.cov_coeff = np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_stat_plus_syst_all_A0-4_forced.npy', 'r'))        
 
         templates = np.load(self.in_dir+'template_'+charge+'_'+var+'_val.npz')
         templates_files = {'template': 0, 'masses': 1, 'bins_qt' : 2, 
@@ -60,11 +67,12 @@ class TemplateFitter:
             if key=='template':
                 size = template_file[0][0][0][0].size
                 setattr(self, key,template_file)
-            elif key in ['bins_qt', 'bins_y']:
-                #size = template_file.size - 2
-                #setattr(self, key,template_file[:-1])
-                size = 1
-                setattr(self, key,template_file[:2])
+            elif key=='bins_qt':
+                size = template_file.size - 1 + reduce_qt
+                setattr(self, key, template_file[:reduce_qt] if reduce_qt<0 else template_file)
+            elif key=='bins_y':
+                size = template_file.size - 1 + reduce_y
+                setattr(self, key, template_file[:reduce_y] if reduce_y<0 else template_file)
             elif key in ['bins_pt', 'bins_eta']:
                 size = template_file.size - 1
                 setattr(self, key,template_file)
@@ -80,6 +88,17 @@ class TemplateFitter:
         self.mc = self.template.sum(axis=(1,2))[self.mc_mass_index,-1]
         self.save_template_snapshot(data=self.mc, title='MC', tag='mc')
 
+        self.overflow_template = np.zeros( self.mc.shape )
+        for i in [1,2]:
+            if i==1:
+                for burn_y in range(reduce_y, 0):
+                    self.overflow_template += self.template.sum(axis=i)[self.mc_mass_index, burn_y, -1]
+            else:
+                for burn_qt in range(reduce_qt, 0):
+                    self.overflow_template += self.template.sum(axis=i)[self.mc_mass_index, burn_qt, -1]
+
+        self.save_template_snapshot(data=self.overflow_template, title='Overflow', tag='of')
+
         self.data = copy.deepcopy(self.mc)
         self.ndof = self.data.size
         self.save_template_snapshot(data=self.mc, title='Data', tag='data')
@@ -93,21 +112,104 @@ class TemplateFitter:
         self.dim_beta = 0
         self.n_param = 0
         self.book_parameters()
+
+        self.run_closure_tests()
+        self.data += self.mc_nonclosure.sum(axis=(0,1))
         self.build_aux_matrices()
 
-    def define_parameter( self, par_name='', start=0., step=0., par_range=() ):
-        self.gMinuit.DefineParameter( self.n_param, par_name, start, step, par_range[0], par_range[1] )        
-        self.map_params[par_name] = self.n_param
+        if self.use_prior:
+            self.reshape_covariance( np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_stat_plus_syst_all_A0-4_forced.npy', 'r')) )
+        
+
+    def run_closure_tests(self):
+
+        from tree_utils import get_coeff_vals
+        self.mc_nonclosure = np.zeros( (self.bins_qt_size, self.bins_y_size, self.bins_eta_size, self.bins_pt_size) )
+
+        for iy in range(self.bins_y_size):
+            for iqt in range(self.bins_qt_size):
+                inorm = self.template[self.mc_mass_index][iqt][iy][-1].sum()/self.mc_acceptances[self.mc_mass_index][iqt][iy]
+                tMC = copy.deepcopy(self.template[0][iqt][iy][-1])
+                coeff_vals = get_coeff_vals(res=self.res_coeff, 
+                                            coeff_eval=('fit' if self.do_parametric else 'val'), 
+                                            bin_y=self.get_y_bin(iy), qt=self.mid_point(iqt), coeff=self.coefficients,
+                                            np_bins_template_qt_new=self.bins_qt)
+                tUL = copy.deepcopy(self.template[0][iqt][iy][-2])
+                tjA = np.zeros(tUL.shape)
+                normUL = 1.0
+                for icoeff_val,coeff_val in enumerate(coeff_vals[:len(self.coefficients)]):
+                    normUL -= coeff_val
+                    tjA += copy.deepcopy(self.template[0][iqt][iy][icoeff_val])*coeff_val
+                
+                residual = (normUL*tUL+tjA)*inorm-tMC
+                self.mc_nonclosure[iqt,iy] += residual
+                #self.save_template_snapshot(data=residual, title='MC - sum of templates', tag=self.get_y_qt_bin(iy,iqt)+'_closure')
+                
+
+    def reshape_covariance(self, cov_coeff):
+
+        self.cov_coeff = np.zeros((self.dim_beta,self.dim_beta))
+        print 'Reshape covariance: make matrix with shape ', self.cov_coeff.shape
+
+        idx_A1 = 0
+        for coeffA1 in self.coefficients:
+            for iyA1 in range(self.bins_y_size):            
+                y_binA1 = self.get_y_bin( iyA1 )        
+                (valid_ordersA1, orderA1) = self.get_orders(coeffA1, y_binA1)
+                for oA1 in range(orderA1+1):
+
+                    idx_A2 = 0
+                    for coeffA2 in self.coefficients:
+                        for iyA2 in range(self.bins_y_size):                    
+                            y_binA2 = self.get_y_bin( iyA2 )        
+                            (valid_ordersA2, orderA2) = self.get_orders(coeffA2, y_binA2)
+                            for oA2 in range(orderA2+1):
+
+                                idx_B1 = 0
+                                for iyB1 in range(self.bins_y_size):                    
+                                    y_binB1 = self.get_y_bin( iyB1 )
+                                    for coeffB1 in self.coefficients:
+                                        (valid_ordersB1, orderB1) = self.get_orders(coeffB1, y_binB1)
+                                        for oB1 in valid_ordersB1:
+                                            idx_B2 = 0
+                                            for iyB2 in range(self.bins_y_size):                    
+                                                y_binB2 = self.get_y_bin( iyB2 )
+                                                for coeffB2 in self.coefficients:
+                                                    (valid_ordersB2, orderB2) = self.get_orders(coeffB2, y_binB2)
+                                                    for oB2 in valid_ordersB2:
+                                                        if iyA1==iyB1 and iyA2==iyB2 and coeffA1==coeffB1 and coeffA2==coeffB2 and oA1==oB1 and oA2==oB2:
+                                                            print '\tFill entry (', idx_B1, idx_B2, ')'
+                                                            self.cov_coeff[idx_B1,idx_B2] = cov_coeff[idx_A1,idx_A2]
+                                                        idx_B2 += 1
+                                            idx_B1 += 1
+
+                                idx_A2 += 1
+                    idx_A1 += 1
+
+        np.set_printoptions(threshold=np.inf)
+        print self.cov_coeff        
+        self.Vinv_prior =  np.linalg.inv(self.cov_coeff)
+        return
+    
+    def fix_parameter(self, par_name):
         match = False
         for fix in self.fixed_parameters:
             if fix in par_name:
                 match = True
-        if (par_name in self.fixed_parameters) or \
-                ('OF' in par_name) or \
-                match:
+        if (par_name in self.fixed_parameters) or match:
+            if ('pol' in par_name and self.do_parametric) or ('y' in par_name and 'qt' in par_name and 'A' in par_name and not self.do_parametric):
+                self.ndof -= 1
+            return True
+
+        self.ndof -= 1
+        return False
+        
+
+    def define_parameter( self, par_name='', start=0., step=0., par_range=() ):
+        self.gMinuit.DefineParameter( self.n_param, par_name, start, step, par_range[0], par_range[1] )        
+        self.map_params[par_name] = self.n_param
+        if self.fix_parameter(par_name):
             self.gMinuit.FixParameter(self.n_param)
-        else:
-            self.ndof -= 1
         self.n_param += 1
 
 
@@ -139,16 +241,20 @@ class TemplateFitter:
                                        par_range=(max(mc_norm-math.sqrt(mc_norm)*10., 0.), mc_norm+math.sqrt(mc_norm)*10.) )
                 for coeff in self.coefficients:
                     self.dim_A += 1
-                    if iqt>0:
-                        continue
-                    (valid_orders, order) = self.get_orders(coeff, y_bin)
-                    for o in valid_orders:
-                        self.define_parameter( par_name=y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o), 
-                                               start=self.res_coeff[coeff+'_'+y_bin+'_fit'][o], 
+                    if not self.do_parametric:
+                        self.define_parameter( par_name=y_bin+'_'+qt_bin+'_'+coeff, 
+                                               start=self.res_coeff[coeff+'_'+y_bin+'_val'][iqt], 
                                                step=0.01, 
-                                               par_range=(-2., +2.) )
-                        self.dim_beta += 1
-
+                                               par_range=(-2.,+2.) )
+                        
+                    elif self.do_parametric and iqt==0:
+                        (valid_orders, order) = self.get_orders(coeff, y_bin)
+                        for o in valid_orders:
+                            self.dim_beta += 1
+                            self.define_parameter( par_name=y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o), 
+                                                   start=self.res_coeff[coeff+'_'+y_bin+'_fit'][o], 
+                                                   step=0.01, 
+                                                   par_range=(-2., +2.) )
 
     def get_orders(self, coeff='', y_bin=''):               
         valid_orders = []
@@ -167,74 +273,88 @@ class TemplateFitter:
     def get_y_qt_bin(self, iy=-1, iqt=-1):
         return self.get_y_bin(iy)+'_'+self.get_qt_bin(iqt)
 
+    def mid_point(self, iqt=-1):
+         return 0.5*(self.bins_qt[iqt]+self.bins_qt[iqt+1])
+
     def build_aux_matrices(self):
 
-        self.n = self.data.flatten()
-        if self.n[self.n<10].size > 0:
-            print "Bins with less than 10 entries!"
-        self.Vinv = np.diag(1./self.n)
+        n = self.data.flatten()
+        self.Vinv = np.diag(1./n)
  
-        self.K = np.zeros( ( self.dim_A, self.dim_beta) )
+        self.nsub = n - self.overflow_template.flatten()
+        if self.nsub[self.nsub<10].size > 0:
+            print self.nsub[self.nsub<10].size, ' bins with less than 10 entries!'
 
-        # first loop
-        idx_A = 0
-        for iy1 in range(self.bins_y_size):
-            for iqt in range(self.bins_qt_size):
-                for coeff1 in self.coefficients:
+        if self.do_parametric:
+            self.K = np.zeros( ( self.dim_A, self.dim_beta) )
+            # first loop
+            idx_A = 0
+            for iy1 in range(self.bins_y_size):
+                for iqt in range(self.bins_qt_size):
+                    for coeff1 in self.coefficients:                        
+                        # second loop
+                        idx_beta = 0
+                        for iy2 in range(self.bins_y_size):                    
+                            y_bin2 = self.get_y_bin( iy2 )
+                            for coeff2 in self.coefficients:
+                                (valid_orders, order) = self.get_orders(coeff2, y_bin2)
+                                for o in valid_orders:
+                                    if iy1==iy2 and coeff1==coeff2:
+                                        self.K[idx_A, idx_beta] += math.pow( self.mid_point(iqt), o)
+                                    idx_beta += 1
+                        idx_A += 1
+                
+        else:
+            self.K = np.identity(self.dim_A)
 
-                    # second loop
-                    idx_beta = 0
-                    for iy2 in range(self.bins_y_size):                    
-                        y_bin2 = self.get_y_bin( iy2 )
-                        for coeff2 in self.coefficients:
-                            (valid_orders, order) = self.get_orders(coeff2, y_bin2)
-                            for o in valid_orders:
-                                if iy1==iy2 and coeff1==coeff2:
-                                    self.K[idx_A, idx_beta] += math.pow( 0.5*(self.bins_qt[iqt]+self.bins_qt[iqt+1]), o)
-                                idx_beta += 1
-                idx_A += 1
-
-        #np.set_printoptions(threshold=np.inf)
-        #print self.K[0]
-        #print self.K[1]
+        return 
 
     def fcn(self, npar, gin, f, par, iflag ):
         #nll = math.pow((par[0]-self.mc_mass)/0.100, 2.0)
         nll = self.chi2(par=par)
-        print 'nll: ', nll/self.ndof
+        print 'chi2: ', nll, '/', self.ndof, ' dof = ', nll/self.ndof
         f[0] = nll
         return
 
     def chi2(self, par):
-        Am = np.zeros((self.data.size, self.dim_A))
-        bm = np.zeros(self.n.shape)
 
+        Am = np.zeros((self.data.size, self.dim_A))
+        bm = np.zeros(self.nsub.shape)
         idx_A = 0
         for iy in range(self.bins_y_size):
             for iqt in range(self.bins_qt_size):
                 inorm = par[self.map_params[self.get_y_qt_bin(iy,iqt)+'_norm']]
                 tUL = copy.deepcopy(self.template[0][iqt][iy][-2])
                 bm += tUL.flatten()*inorm
-                print 'UL*',inorm
                 for icoeff,coeff in enumerate(self.coefficients):
                     tjA = copy.deepcopy(self.template[0][iqt][iy][icoeff])
                     tjA -= tUL
-                    print coeff+'*', inorm
                     Am[:, idx_A] += tjA.flatten()*inorm
                     idx_A += 1
 
-        np.set_printoptions(threshold=np.inf)
-        print Am
-        print bm
+        #np.set_printoptions(threshold=np.inf)
+        #print Am
+        #print bm
 
-        nprime = self.n - bm
+        nsub = (self.nsub - bm)
         aux1 =  np.linalg.multi_dot([self.K.T, Am.T, self.Vinv, Am, self.K])        
+        if self.use_prior:
+            aux1 += self.Vinv_prior
+
         aux1_inv = np.linalg.inv(aux1)
-        aux2 = np.linalg.multi_dot( [ self.K.T, Am.T, self.Vinv, nprime ] )
+        aux2 = np.linalg.multi_dot( [ self.K.T, Am.T, self.Vinv, nsub ] )
+        if self.use_prior:
+            aux2 +=  np.linalg.multi_dot( [ self.Vinv_prior, beta_prior ])
+
         beta = np.linalg.multi_dot( [aux1_inv, aux2 ] )        
-        res1 = (nprime - np.linalg.multi_dot( [Am, self.K, beta]) )
-        res2 = (beta_prior - beta)
+        res1 = (nsub - np.linalg.multi_dot( [Am, self.K, beta]) )
+
         chi2min = np.linalg.multi_dot( [res1.T, self.Vinv, res1 ] )
+
+        if self.use_prior:
+            res2 = (beta_prior -beta)
+            chi2min += np.linalg.multi_dot( [res2.T, self.Vinv_prior, res2] )
+
         return chi2min
     
 
@@ -244,18 +364,19 @@ class TemplateFitter:
         self.arglist[1] = 1.0
         print("Convergence at EDM %s" % (self.arglist[1]*0.001))
         
-        self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
-        self.arglist[0] = 1
-        self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
-        status = self.gMinuit.Migrad()
-        if status>0:
-            self.arglist[0] = 2
+        if not self.debug:
+            self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
+            self.arglist[0] = 1
             self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
             status = self.gMinuit.Migrad()
+            if status>0:
+                self.arglist[0] = 2
+                self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
+                status = self.gMinuit.Migrad()
 
-        if run_minos:
-            massL, massH =  ROOT.Double(0.), ROOT.Double(0.) 
-            self.gMinuit.mnmnot(1, 1, massH, massL)
+            if run_minos:
+                massL, massH =  ROOT.Double(0.), ROOT.Double(0.) 
+                self.gMinuit.mnmnot(1, 1, massH, massL)
 
         amin, edm, errdef    = ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.)
         nvpar, nparx, icstat = ROOT.Long(1983), ROOT.Long(1984), ROOT.Long(1985)
@@ -270,7 +391,10 @@ class TemplateFitter:
     def save_template_snapshot(self, data=np.array([]), title='', tag=''):
         xx,yy = np.meshgrid(self.bins_pt, self.bins_eta)        
         plt.pcolormesh(yy, xx, data)
-        plt.colorbar(format='%.0e')
+        if data[data<=0.].size > 0:
+            plt.colorbar()
+        else:
+            plt.colorbar(format='%.0e')
         plt.axis([self.bins_eta.min(), self.bins_eta.max(), self.bins_pt.min(), self.bins_pt.max()])
         plt.title(title)
         plt.show()
