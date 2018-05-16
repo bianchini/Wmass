@@ -261,8 +261,8 @@ class TemplateFitter:
                 mc_norm = self.template[self.mc_mass_index][iqt][iy][-1].sum()/self.mc_acceptances[self.mc_mass_index][iqt][iy]
                 self.define_parameter( par_name=y_bin+'_'+qt_bin+'_norm', 
                                        start=mc_norm, 
-                                       step=math.sqrt(mc_norm), 
-                                       par_range=(max(mc_norm-math.sqrt(mc_norm)*10., 0.), mc_norm+math.sqrt(mc_norm)*10.),
+                                       step=math.sqrt(mc_norm)*10., 
+                                       par_range=(mc_norm/1.5, mc_norm*1.5),
                                        true=mc_norm)
 
                 for coeff in self.coefficients:
@@ -272,7 +272,7 @@ class TemplateFitter:
                         self.dim_beta += 1
                         self.define_parameter( par_name=y_bin+'_'+qt_bin+'_'+coeff, 
                                                start=self.res_coeff[coeff+'_'+y_bin+'_val'][iqt], 
-                                               step=0.01, 
+                                               step=0.01,
                                                par_range=(-2.,+2.),
                                                true=self.res_coeff[coeff+'_'+y_bin+'_val'][iqt] )
                         
@@ -283,12 +283,14 @@ class TemplateFitter:
                             self.dim_beta += 1
                             self.define_parameter( par_name=y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o), 
                                                    start=self.res_coeff[coeff+'_'+y_bin+'_fit'][o], 
-                                                   step=0.01, 
-                                                   par_range=(-2., +2.),
+                                                   step=0.01*math.pow(10,-(o+1)), 
+                                                   par_range=(self.res_coeff[coeff+'_'+y_bin+'_fit'][o]-math.pow(10,-o), 
+                                                              self.res_coeff[coeff+'_'+y_bin+'_fit'][o]+math.pow(10,-o)),
                                                    true=self.res_coeff[coeff+'_'+y_bin+'_fit'][o])
 
         self.map_betas = self.map_betas[:self.dim_beta]
         self.beta = np.zeros(self.dim_beta) 
+        self.Vbeta = np.identity(self.dim_beta) 
 
 
     def get_orders(self, coeff='', y_bin=''):               
@@ -337,7 +339,7 @@ class TemplateFitter:
                                 for o in valid_orders:
                                     if iy1==iy2 and coeff1==coeff2:
                                         self.K[idx_A, idx_beta] += math.pow( self.mid_point(iqt), o)
-                                    self.map_betas[idx_beta] = self.map_params[y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o)]
+                                    self.map_betas[idx_beta] = self.map_params[y_bin2+'_'+coeff2+'_'+'pol'+str(order)+'_p'+str(o)]
                                     idx_beta += 1
                         idx_A += 1
                 
@@ -349,7 +351,7 @@ class TemplateFitter:
     def fcn(self, npar, gin, f, par, iflag ):
         #nll = math.pow((par[0]-self.mc_mass)/0.100, 2.0)
         nll = self.chi2(par=par)
-        print 'chi2: ', nll, '/', self.ndof, ' dof = ', nll/self.ndof
+        print 'chi2: ', '{:0.5f}'.format(nll), '/', self.ndof, ' dof = ', '{:0.3f}'.format(nll/self.ndof)
         f[0] = nll
         return
 
@@ -398,7 +400,9 @@ class TemplateFitter:
             res2 = (beta_prior-beta)
             chi2min += np.linalg.multi_dot( [res2.T, self.Vinv_prior, res2] )
 
-        self.beta = copy.deepcopy(beta)
+        self.beta = beta
+        self.Vbeta = aux1_inv
+
         return chi2min
     
 
@@ -421,14 +425,17 @@ class TemplateFitter:
             (massL, massH) =  (ROOT.Double(0.), ROOT.Double(0.) )
             self.gMinuit.mnmnot(1, 1, massH, massL)
 
-        if run_post_hesse:
-            for ib,b in enumerate(self.beta):
-                self.arglist[0] = self.map_betas[ib]+1
-                self.arglist[1] = b
-                self.gMinuit.mnexcm( "SET PAR", self.arglist, 2, self.ierflg )
-                #print 'Set beta[', ib, '] (param ',  self.map_betas[ib], ') to value ', b
+        # Set coefficients to their best fit value from chi2
+        for ib,b in enumerate(self.beta):
+            self.arglist[0] = self.map_betas[ib]+1
+            self.arglist[1] = b
+            self.gMinuit.mnexcm( "SET PAR", self.arglist, 2, self.ierflg )
+            if run_post_hesse:
                 self.gMinuit.Release( self.map_betas[ib] )
+
+        if run_post_hesse:
             self.release_for_hesse = True
+            self.arglist[0] = n_points
             self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
 
         (amin, edm, errdef)    = (ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.))
@@ -443,11 +450,33 @@ class TemplateFitter:
 
         (val,err,errL,errH)  = (ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.) )
 
+        # print results
+        print 'Normalisations:'
         for key,p in self.map_params.items():                        
+            if not '_norm' in key:
+                continue
             if '_true' in key:
                 continue
             self.gMinuit.GetParameter(p, val, err)                
-            print 'Param['+str(p)+']...'+key+' = ', '{:0.3f}'.format(val), '+/-', '{:0.3f}'.format(err), \
+            print key+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
+                ' true = ', '{:0.2E}'.format(self.map_params[key+'_true']), \
+                ' pull = ', '{:0.2f}'.format((val-self.map_params[key+'_true'])/err if err>0. else 0)
+
+        print 'Coefficients:'
+        for key,p in self.map_params.items():                        
+            if '_norm' in key:
+                continue
+            if '_true' in key:
+                continue
+            self.gMinuit.GetParameter(p, val, err)                
+            if not run_post_hesse:
+                idxb = -1
+                for ib,b in enumerate(self.map_betas):
+                    if b==p:              
+                        idxb = ib
+                err = ROOT.Double(math.sqrt(self.Vbeta[idxb,idxb]))
+            print key+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
+                ' true = ', '{:0.2E}'.format(self.map_params[key+'_true']), \
                 ' pull = ', '{:0.2f}'.format((val-self.map_params[key+'_true'])/err if err>0. else 0)
 
 
