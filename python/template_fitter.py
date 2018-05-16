@@ -64,7 +64,8 @@ class TemplateFitter:
         # for coeff, save len(coeff)-2, since coeff[-1] = MC and coeff[-2] = UL
         for key,p in templates_files.items():             
             template_file = templates['arr_'+str(p)]
-            print ('Adding file arr_'+str(p)+' with shape...'), template_file.shape, (' to self with key... '+key)
+            if verbose:
+                print ('Adding file arr_'+str(p)+' with shape...'), template_file.shape, (' to self with key... '+key)
             size = -1
             if key=='template':
                 size = template_file[0][0][0][0].size
@@ -111,8 +112,6 @@ class TemplateFitter:
         self.ndof = self.data.size
         self.save_template_snapshot(data=self.mc, title='Data', tag='data')
 
-        self.fit_results = {}
-        self.out_file_res = open(self.out_dir+'result_'+DY+'_'+charge+'_'+job_name+'.pkl','wb')
         #pickle.dump(self.fit_results, self.out_file_res)
         #self.out_file_res.close()
 
@@ -120,6 +119,17 @@ class TemplateFitter:
         self.dim_beta = 0
         self.n_param = 0
         self.book_parameters()
+
+        self.out_file = ROOT.TFile(self.out_dir+'result_'+DY+'_'+charge+'_'+job_name+'.root','RECREATE')
+        self.out_tree = ROOT.TTree('tree', 'tree')
+        self.fit_results = {}
+        for key,p in self.map_params.items():                        
+            if '_true' in key:
+                continue
+            self.fit_results[key] = array( 'f', 5*[ 0.0 ] ) 
+            self.out_tree.Branch(key, self.fit_results[key], key+'[5]/F')
+        self.fit_results['minuit'] = array( 'f', 6*[ 0.0 ] ) 
+        self.out_tree.Branch('minuit', self.fit_results['minuit'], 'minuit[6]/F')
 
         self.run_closure_tests()
         self.data += self.mc_nonclosure.sum(axis=(0,1))
@@ -250,7 +260,7 @@ class TemplateFitter:
         self.arglist[0] = 1.0
         self.gMinuit.mnexcm( "SET ERR", self.arglist, 1, self.ierflg )
 
-        self.map_betas = range(200)
+        map_betas = range(500)
 
         self.define_parameter( par_name='mass', start=self.mc_mass, step=0.020, par_range=(self.mc_mass-0.500,self.mc_mass+0.500), true=self.mc_mass )
         
@@ -268,7 +278,7 @@ class TemplateFitter:
                 for coeff in self.coefficients:
                     self.dim_A += 1
                     if not self.do_parametric:
-                        self.map_betas[self.dim_beta] = self.n_param
+                        map_betas[self.dim_beta] = self.n_param
                         self.dim_beta += 1
                         self.define_parameter( par_name=y_bin+'_'+qt_bin+'_'+coeff, 
                                                start=self.res_coeff[coeff+'_'+y_bin+'_val'][iqt], 
@@ -279,17 +289,20 @@ class TemplateFitter:
                     elif self.do_parametric and iqt==0:
                         (valid_orders, order) = self.get_orders(coeff, y_bin)
                         for o in valid_orders:
-                            self.map_betas[self.dim_beta] = self.n_param
+                            map_betas[self.dim_beta] = self.n_param
                             self.dim_beta += 1
                             self.define_parameter( par_name=y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o), 
                                                    start=self.res_coeff[coeff+'_'+y_bin+'_fit'][o], 
-                                                   step=0.01*math.pow(10,-(o+1)), 
+                                                   step=0.01*math.pow(10,-(o+2)), 
                                                    par_range=(self.res_coeff[coeff+'_'+y_bin+'_fit'][o]-math.pow(10,-o), 
                                                               self.res_coeff[coeff+'_'+y_bin+'_fit'][o]+math.pow(10,-o)),
                                                    true=self.res_coeff[coeff+'_'+y_bin+'_fit'][o])
 
-        self.map_betas = self.map_betas[:self.dim_beta]
+        self.map_betas = map_betas[:self.dim_beta]
+
+        # the coefficients
         self.beta = np.zeros(self.dim_beta) 
+        # approximate cov. matrix of beta
         self.Vbeta = np.identity(self.dim_beta) 
 
 
@@ -408,6 +421,8 @@ class TemplateFitter:
 
     def run(self, n_points=500000, run_minos=False, run_post_hesse=False):
 
+        clock = time.time()
+
         # Run HESSE --> MIGRAD --> MINOS
         self.arglist[0] = n_points
         self.arglist[1] = 1.0
@@ -425,6 +440,25 @@ class TemplateFitter:
             (massL, massH) =  (ROOT.Double(0.), ROOT.Double(0.) )
             self.gMinuit.mnmnot(1, 1, massH, massL)
 
+        # stop the clock
+        clock -= time.time()
+
+        (amin, edm, errdef)    = (ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.))
+        (nvpar, nparx, icstat) = (ROOT.Long(1983), ROOT.Long(1984), ROOT.Long(1985))
+        self.gMinuit.mnstat( amin, edm, errdef, nvpar, nparx, icstat )
+        if self.verbose:
+            self.gMinuit.mnprin( 3, amin )
+            
+        from scipy import stats
+        pvalue = 1-stats.chi2.cdf(float(amin), self.ndof)
+
+        self.fit_results['minuit'][0] = float(status)
+        self.fit_results['minuit'][1] = float(edm)
+        self.fit_results['minuit'][2] = float(amin)
+        self.fit_results['minuit'][3] = float(self.ndof)
+        self.fit_results['minuit'][4] = float(pvalue)
+        self.fit_results['minuit'][5] = -float(clock)
+
         # Set coefficients to their best fit value from chi2
         for ib,b in enumerate(self.beta):
             self.arglist[0] = self.map_betas[ib]+1
@@ -432,17 +466,15 @@ class TemplateFitter:
             self.gMinuit.mnexcm( "SET PAR", self.arglist, 2, self.ierflg )
             if run_post_hesse:
                 self.gMinuit.Release( self.map_betas[ib] )
+                #err_b_approx = math.sqrt(self.Vbeta[ib,ib])
+                #self.arglist[1] = b-5*err_b_approx
+                #self.arglist[2] = b+5*err_b_approx
+                #self.gMinuit.mnexcm( "SET LIM", self.arglist, 3, self.ierflg )
 
         if run_post_hesse:
             self.release_for_hesse = True
             self.arglist[0] = n_points
             self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
-
-        (amin, edm, errdef)    = (ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.))
-        (nvpar, nparx, icstat) = (ROOT.Long(1983), ROOT.Long(1984), ROOT.Long(1985))
-        self.gMinuit.mnstat( amin, edm, errdef, nvpar, nparx, icstat )
-        if self.verbose:
-            self.gMinuit.mnprin( 3, amin )
 
         self.cov = ROOT.TMatrixDSym(self.n_param)
         self.gMinuit.mnemat(self.cov.GetMatrixArray(), self.n_param)
@@ -453,31 +485,56 @@ class TemplateFitter:
         # print results
         print 'Normalisations:'
         for key,p in self.map_params.items():                        
-            if not '_norm' in key:
+            if not ('_norm' in key or key=='mass'):
                 continue
             if '_true' in key:
                 continue
-            self.gMinuit.GetParameter(p, val, err)                
+            self.gMinuit.GetParameter(p, val, err)
+            true = self.map_params[key+'_true']
+            pull = (val-true)/err if err>0. else 0.0
+            self.fit_results[key][0] = float(val)
+            self.fit_results[key][1] = -float(err)
+            self.fit_results[key][2] = float(err)
+            self.fit_results[key][3] = float(true)
+            self.fit_results[key][4] = float(pull)
+
             print key+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
-                ' true = ', '{:0.2E}'.format(self.map_params[key+'_true']), \
-                ' pull = ', '{:0.2f}'.format((val-self.map_params[key+'_true'])/err if err>0. else 0)
+                ' true = ', '{:0.2E}'.format(true), \
+                ' pull = ', '{:0.2f}'.format(pull)
 
         print 'Coefficients:'
         for key,p in self.map_params.items():                        
-            if '_norm' in key:
+            if '_norm' in key or key=='mass':
                 continue
             if '_true' in key:
                 continue
             self.gMinuit.GetParameter(p, val, err)                
+            true = self.map_params[key+'_true']
             if not run_post_hesse:
                 idxb = -1
                 for ib,b in enumerate(self.map_betas):
                     if b==p:              
                         idxb = ib
                 err = ROOT.Double(math.sqrt(self.Vbeta[idxb,idxb]))
+            pull = (val-true)/err if err>0. else 0.0
+            self.fit_results[key][0] = float(val)
+            self.fit_results[key][1] = -float(err)
+            self.fit_results[key][2] = float(err)
+            self.fit_results[key][3] = float(true)
+            self.fit_results[key][4] = float(pull)
             print key+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
-                ' true = ', '{:0.2E}'.format(self.map_params[key+'_true']), \
-                ' pull = ', '{:0.2f}'.format((val-self.map_params[key+'_true'])/err if err>0. else 0)
+                ' true = ', '{:0.2E}'.format(true), \
+                ' pull = ', '{:0.2f}'.format(pull)
+
+
+        print 'Bins: ', self.data.size, ', number of d.o.f.: ', self.ndof, \
+            ' chi2: '+'{:4.1f}'.format(float(amin)), ' (p-value: '+'{:4.3f}'.format(pvalue)+')'
+        print('Fit done in '+'{:4.1f}'.format(-clock)+' seconds')
+        self.out_tree.Fill()
+        self.out_tree.Scan('minuit')
+        self.out_file.cd()
+        self.out_tree.Write("tree", ROOT.TObject.kOverwrite)
+        self.out_file.Close()
 
 
     def save_template_snapshot(self, data=np.array([]), title='', tag=''):
