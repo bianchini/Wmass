@@ -337,7 +337,7 @@ def draw_qt_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, 
 
     fin.Close()
 
-# CHECK !!!
+
 def rebin(h=None, np_bins_template_qt=np.array([]), np_bins_template_y=np.array([]), verbose=False):
     
     np_bins_template_y_extL = np.insert(np_bins_template_y,   0, [h.GetXaxis().GetXmin()])

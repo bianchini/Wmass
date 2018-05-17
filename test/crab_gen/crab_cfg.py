@@ -7,6 +7,7 @@ config.General.transferLogs=True
 
 config.section_("JobType")
 config.JobType.pluginName = 'Analysis'
+config.JobType.maxMemoryMB = 3000 
 config.JobType.psetName = 'PSet.py'
 config.JobType.scriptExe = 'crab_script.sh'
 config.JobType.inputFiles = ['crab_script.py', 'FrameworkJobReport.xml', 'tree_utils.py', 'tree_producer.py', 'crabhelper.py']

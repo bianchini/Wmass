@@ -18,6 +18,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+from scipy import stats
+
 from array import array;
 import copy
 
@@ -30,23 +32,25 @@ class TemplateFitter:
                  var='WpreFSR', 
                  job_name='TEST', 
                  mc_mass=80.419, 
+                 num_events=-1,
                  verbose=True, 
                  fixed_parameters=[],
                  use_prior=False,
                  reduce_qt=-1,
                  reduce_y=-1,
-                 debug=False,
                  do_parametric=True,
-                 dataset='asymov'
+                 use_prefit=False,
+                 add_nonclosure=True
                  ):
 
         self.in_dir  = os.environ['CMSSW_BASE']+'/src/Wmass/test/plots/'
         self.out_dir = os.environ['CMSSW_BASE']+'/src/Wmass/test/'
         self.job_name = job_name
+        self.num_events = num_events 
+        
         self.verbose = verbose
         self.fixed_parameters = fixed_parameters
         self.use_prior = use_prior
-        self.debug = debug
         self.mc_mass = mc_mass
         self.do_parametric = do_parametric
         self.map_params = {}
@@ -87,37 +91,48 @@ class TemplateFitter:
                 setattr(self, key,template_file)
             setattr(self, key+'_size', size)
 
+        # remove UL from all templates
+        for icoeff,coeff in enumerate(self.coefficients):
+            self.template[:,:,:,icoeff] -= self.template[:,:,:,-2]
+
         self.mc_mass_index = np.where(self.masses==mc_mass)[0][0]
-        self.mc = self.template.sum(axis=(1,2))[self.mc_mass_index,-1]
+        self.mc = copy.deepcopy(self.template.sum(axis=(1,2))[self.mc_mass_index,-1])
+        self.ndof = self.mc.size        
+        if add_nonclosure:
+            print 'Removing non closure by adding Sum-of-templates-MC'
+            self.run_closure_tests()
+            self.mc += self.mc_nonclosure.sum(axis=(0,1))
+
+        if self.num_events>0:            
+            total_mc = self.mc.sum()
+            print 'Scale down MC by...', self.num_events/total_mc
+            self.mc *= (self.num_events/total_mc)
+            self.template[self.mc_mass_index,:,:,-1] *= (self.num_events/total_mc)
+
+        print 'Total MC in acceptance: ', self.mc.sum()
+
         self.save_template_snapshot(data=self.mc, title='MC', tag='mc')
 
+        # build template with all OF bins
         self.overflow_template = np.zeros( self.mc.shape )
         for burn_qt in range(reduce_qt, 0):
             for y in range(self.bins_y_size - reduce_y):
                 self.overflow_template += self.template[self.mc_mass_index, burn_qt, y, -1]
         for burn_y in range(reduce_y, 0):
             for qt in range(self.bins_qt_size):
-                self.overflow_template += self.template[self.mc_mass_index, qt, burn_y, -1]
-                
+                self.overflow_template += self.template[self.mc_mass_index, qt, burn_y, -1]                
         self.save_template_snapshot(data=self.overflow_template, title='Overflow', tag='of')
 
-        self.data = np.zeros( self.mc.shape )
-        if dataset=='asymov':
-            self.data += copy.deepcopy(self.mc)
-        elif dataset=='rnd':
-            self.data += np.random.poisson( self.mc )
-        else:
-            print 'Option not implemented'
-
-        self.ndof = self.data.size
-        self.save_template_snapshot(data=self.mc, title='Data', tag='data')
-
-        #pickle.dump(self.fit_results, self.out_file_res)
-        #self.out_file_res.close()
 
         self.dim_A = 0
         self.dim_beta = 0
         self.n_param = 0
+
+        if use_prefit and (os.path.isfile(self.in_dir+'prefit_beta.npy') and os.path.isfile(self.in_dir+'prefit_Vbeta.npy')):
+            print 'Using prefit covariance matrix/values for beta'            
+            self.Vbeta_prefit = np.load(self.in_dir+'prefit_Vbeta.npy') 
+            self.beta_prefit  = np.load(self.in_dir+'prefit_beta.npy') 
+
         self.book_parameters()
 
         self.out_file = ROOT.TFile(self.out_dir+'result_'+DY+'_'+charge+'_'+job_name+'.root','RECREATE')
@@ -131,8 +146,6 @@ class TemplateFitter:
         self.fit_results['minuit'] = array( 'f', 6*[ 0.0 ] ) 
         self.out_tree.Branch('minuit', self.fit_results['minuit'], 'minuit[6]/F')
 
-        self.run_closure_tests()
-        self.data += self.mc_nonclosure.sum(axis=(0,1))
         self.build_aux_matrices()
 
         if self.use_prior:
@@ -156,13 +169,13 @@ class TemplateFitter:
                 tjA = np.zeros(tUL.shape)
                 normUL = 1.0
                 for icoeff_val,coeff_val in enumerate(coeff_vals[:len(self.coefficients)]):
-                    normUL -= coeff_val
+                    #normUL -= coeff_val
                     tjA += copy.deepcopy(self.template[0][iqt][iy][icoeff_val])*coeff_val
                 
                 residual = (normUL*tUL+tjA)*inorm-tMC
                 self.mc_nonclosure[iqt,iy] += residual
-                self.save_template_snapshot(data=residual, title='MC - sum of templates', tag=self.get_y_qt_bin(iy,iqt)+'_closure')
-                self.save_template_snapshot(data=(normUL*tUL+tjA)*inorm, title='Sum of templates', tag=self.get_y_qt_bin(iy,iqt)+'_template')
+                #self.save_template_snapshot(data=residual, title='MC - sum of templates', tag=self.get_y_qt_bin(iy,iqt)+'_closure')
+                #self.save_template_snapshot(data=(normUL*tUL+tjA)*inorm, title='Sum of templates', tag=self.get_y_qt_bin(iy,iqt)+'_template')
                 
 
     def reshape_covariance(self, cov_coeff):
@@ -279,24 +292,27 @@ class TemplateFitter:
                     self.dim_A += 1
                     if not self.do_parametric:
                         map_betas[self.dim_beta] = self.n_param
-                        self.dim_beta += 1
+                        step_beta  = math.sqrt(self.Vbeta_prefit[self.dim_beta,self.dim_beta]) if hasattr(self, 'Vbeta_prefit') else 0.01
+                        start_beta = self.beta_prefit[self.dim_beta] if hasattr(self, 'beta_prefit') else self.res_coeff[coeff+'_'+y_bin+'_val'][iqt] 
                         self.define_parameter( par_name=y_bin+'_'+qt_bin+'_'+coeff, 
-                                               start=self.res_coeff[coeff+'_'+y_bin+'_val'][iqt], 
-                                               step=0.01,
+                                               start=start_beta,
+                                               step=step_beta,
                                                par_range=(-2.,+2.),
-                                               true=self.res_coeff[coeff+'_'+y_bin+'_val'][iqt] )
+                                               true=self.res_coeff[coeff+'_'+y_bin+'_val'][iqt])
+                        self.dim_beta += 1
                         
                     elif self.do_parametric and iqt==0:
                         (valid_orders, order) = self.get_orders(coeff, y_bin)
                         for o in valid_orders:
                             map_betas[self.dim_beta] = self.n_param
-                            self.dim_beta += 1
+                            step_beta  = math.sqrt(self.Vbeta_prefit[self.dim_beta,self.dim_beta]) if hasattr(self, 'Vbeta_prefit') else 0.1*math.pow(10,-(o+2))
+                            start_beta = self.beta_prefit[self.dim_beta] if hasattr(self, 'beta_prefit') else self.res_coeff[coeff+'_'+y_bin+'_fit'][o]
                             self.define_parameter( par_name=y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o), 
-                                                   start=self.res_coeff[coeff+'_'+y_bin+'_fit'][o], 
-                                                   step=0.01*math.pow(10,-(o+2)), 
-                                                   par_range=(self.res_coeff[coeff+'_'+y_bin+'_fit'][o]-math.pow(10,-o), 
-                                                              self.res_coeff[coeff+'_'+y_bin+'_fit'][o]+math.pow(10,-o)),
+                                                   start=start_beta,
+                                                   step=step_beta,
+                                                   par_range=(start_beta-5*step_beta, start_beta+5*step_beta),
                                                    true=self.res_coeff[coeff+'_'+y_bin+'_fit'][o])
+                            self.dim_beta += 1                            
 
         self.map_betas = map_betas[:self.dim_beta]
 
@@ -328,14 +344,6 @@ class TemplateFitter:
 
     def build_aux_matrices(self):
 
-        n = self.data.flatten()
-        if n[n<10].size > 0:
-            print n[n<10].size, ' bins with less than 10 entries!'
-
-        self.Vinv = np.diag(1./n)
-        self.nsub = n - self.overflow_template.flatten()
-        self.save_template_snapshot(data=self.nsub.reshape(self.mc.shape), title='Data-overflow', tag='data_sub')
-
         if self.do_parametric:
             self.K = np.zeros( ( self.dim_A, self.dim_beta) )
             # first loop
@@ -362,9 +370,8 @@ class TemplateFitter:
         return 
 
     def fcn(self, npar, gin, f, par, iflag ):
-        #nll = math.pow((par[0]-self.mc_mass)/0.100, 2.0)
         nll = self.chi2(par=par)
-        print 'chi2: ', '{:0.5f}'.format(nll), '/', self.ndof, ' dof = ', '{:0.3f}'.format(nll/self.ndof)
+        print 'Chi2: ', '{:0.6f}'.format(nll), '/', self.ndof, ' dof = ', '{:0.4f}'.format(nll/self.ndof)
         f[0] = nll
         return
 
@@ -381,7 +388,7 @@ class TemplateFitter:
                 bm += tUL.flatten()*inorm
                 for icoeff,coeff in enumerate(self.coefficients):
                     tjA = copy.deepcopy(self.template[0][iqt][iy][icoeff])
-                    tjA -= tUL
+                    #tjA -= tUL
                     Am[:, idx_A] += tjA.flatten()*inorm
                     idx_A += 1
         
@@ -418,6 +425,25 @@ class TemplateFitter:
 
         return chi2min
     
+    
+    def load_data(self, dataset='asymov',  postfix=''):
+        
+        self.data = np.zeros( self.mc.shape )
+        if dataset=='asymov':
+            self.data += copy.deepcopy(self.mc)
+        elif dataset=='rnd':
+            self.data += np.random.poisson( self.mc )
+        else:
+            print 'Option not implemented'
+        self.save_template_snapshot(data=self.data, title='Data', tag='data'+postfix)
+
+        n = self.data.flatten()
+        if n[n<10].size > 0:
+            print n[n<10].size, ' bins with less than 10 entries!'
+        self.Vinv = np.diag(1./n)
+        self.nsub = n - self.overflow_template.flatten()
+        self.save_template_snapshot(data=self.nsub.reshape(self.mc.shape), title='Data-overflow', tag='data_sub'+postfix)
+
 
     def run(self, n_points=500000, run_minos=False, run_post_hesse=False):
 
@@ -427,16 +453,26 @@ class TemplateFitter:
         self.arglist[0] = n_points
         self.arglist[1] = 1.0
         print("Convergence at EDM %s" % (self.arglist[1]*0.001))        
+
+        self.release_for_hesse = False
+
+        print 'Running HESSE...'
         self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
         self.arglist[0] = 1
         self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
+        print 'Running MIGRAD with status=1...'
         status = self.gMinuit.Migrad()
         if status>0:
             self.arglist[0] = 2
             self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
+            print 'Running MIGRAD with status=2...'
             status = self.gMinuit.Migrad()
 
+        np.save(self.in_dir+'prefit_Vbeta.npy', self.Vbeta)
+        np.save(self.in_dir+'prefit_beta.npy', self.beta)
+
         if run_minos:
+            print 'Running MINOS on parameter...mass'
             (massL, massH) =  (ROOT.Double(0.), ROOT.Double(0.) )
             self.gMinuit.mnmnot(1, 1, massH, massL)
 
@@ -446,11 +482,12 @@ class TemplateFitter:
         (amin, edm, errdef)    = (ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.))
         (nvpar, nparx, icstat) = (ROOT.Long(1983), ROOT.Long(1984), ROOT.Long(1985))
         self.gMinuit.mnstat( amin, edm, errdef, nvpar, nparx, icstat )
-        if self.verbose:
-            self.gMinuit.mnprin( 3, amin )
-            
-        from scipy import stats
+        self.gMinuit.mnprin( 3, amin )            
         pvalue = 1-stats.chi2.cdf(float(amin), self.ndof)
+
+        print 'Bins: ', self.data.size, ', number of d.o.f.: ', self.ndof, \
+            ' chi2: '+'{:4.1f}'.format(float(amin)), ' (p-value: '+'{:4.3f}'.format(pvalue)+')'
+        print('Fit done in '+'{:4.1f}'.format(-clock)+' seconds')
 
         self.fit_results['minuit'][0] = float(status)
         self.fit_results['minuit'][1] = float(edm)
@@ -465,7 +502,7 @@ class TemplateFitter:
             self.arglist[1] = b
             self.gMinuit.mnexcm( "SET PAR", self.arglist, 2, self.ierflg )
             if run_post_hesse:
-                self.gMinuit.Release( self.map_betas[ib] )
+                self.gMinuit.Release( self.map_betas[ib] )                
                 #err_b_approx = math.sqrt(self.Vbeta[ib,ib])
                 #self.arglist[1] = b-5*err_b_approx
                 #self.arglist[2] = b+5*err_b_approx
@@ -480,9 +517,12 @@ class TemplateFitter:
         self.gMinuit.mnemat(self.cov.GetMatrixArray(), self.n_param)
         self.plot_cov_matrix()
 
+
+
+    def update_results(self):
+
         (val,err,errL,errH)  = (ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.) )
 
-        # print results
         print 'Normalisations:'
         for key,p in self.map_params.items():                        
             if not ('_norm' in key or key=='mass'):
@@ -497,7 +537,6 @@ class TemplateFitter:
             self.fit_results[key][2] = float(err)
             self.fit_results[key][3] = float(true)
             self.fit_results[key][4] = float(pull)
-
             print key+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
                 ' true = ', '{:0.2E}'.format(true), \
                 ' pull = ', '{:0.2f}'.format(pull)
@@ -510,7 +549,7 @@ class TemplateFitter:
                 continue
             self.gMinuit.GetParameter(p, val, err)                
             true = self.map_params[key+'_true']
-            if not run_post_hesse:
+            if not self.release_for_hesse:
                 idxb = -1
                 for ib,b in enumerate(self.map_betas):
                     if b==p:              
@@ -525,17 +564,22 @@ class TemplateFitter:
             print key+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
                 ' true = ', '{:0.2E}'.format(true), \
                 ' pull = ', '{:0.2f}'.format(pull)
-
-
-        print 'Bins: ', self.data.size, ', number of d.o.f.: ', self.ndof, \
-            ' chi2: '+'{:4.1f}'.format(float(amin)), ' (p-value: '+'{:4.3f}'.format(pvalue)+')'
-        print('Fit done in '+'{:4.1f}'.format(-clock)+' seconds')
         self.out_tree.Fill()
-        self.out_tree.Scan('minuit')
+
+        # reset parameters
+        for key,p in self.map_params.items():                        
+            if '_true' in key:
+                continue
+            self.arglist[0] = p+1
+            self.arglist[1] = self.map_params[key+'_true']  
+            self.gMinuit.mnexcm( "SET PAR", self.arglist, 2, self.ierflg )
+
+    # save the TTree and close
+    def close(self):
+        self.out_tree.Scan('minuit', '', '', 1)
         self.out_file.cd()
         self.out_tree.Write("tree", ROOT.TObject.kOverwrite)
         self.out_file.Close()
-
 
     def save_template_snapshot(self, data=np.array([]), title='', tag=''):
         xx,yy = np.meshgrid(self.bins_pt, self.bins_eta)        
