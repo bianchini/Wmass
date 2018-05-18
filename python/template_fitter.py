@@ -58,7 +58,7 @@ class TemplateFitter:
 
         self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced.pkl', 'r'))        
 
-        templates = np.load(self.in_dir+'template_'+charge+'_'+var+'_val.npz')
+        templates = np.load(self.in_dir+'template_'+charge+'_'+var+'_val_masses.npz')
         templates_files = {'template': 0, 'masses': 1, 'bins_qt' : 2, 
                            'bins_y'  : 3, 'coefficients' : 4, 'bins_eta': 5, 
                            'bins_pt' : 6, 'mc_acceptances' : 7 }
@@ -91,11 +91,16 @@ class TemplateFitter:
                 setattr(self, key,template_file)
             setattr(self, key+'_size', size)
 
+        print 'Fitting these bins:'
+        print '\ty :', self.bins_y
+        print '\tqt:', self.bins_qt
+
         # remove UL from all templates
         for icoeff,coeff in enumerate(self.coefficients):
             self.template[:,:,:,icoeff] -= self.template[:,:,:,-2]
 
         self.mc_mass_index = np.where(self.masses==mc_mass)[0][0]
+        print 'MC mass at index...', self.mc_mass_index
         self.mc = copy.deepcopy(self.template.sum(axis=(1,2))[self.mc_mass_index,-1])
         self.ndof = self.mc.size        
         if add_nonclosure:
@@ -107,7 +112,7 @@ class TemplateFitter:
             total_mc = self.mc.sum()
             print 'Scale down MC by...', self.num_events/total_mc
             self.mc *= (self.num_events/total_mc)
-            self.template[self.mc_mass_index,:,:,-1] *= (self.num_events/total_mc)
+            self.template[:,:,:,-1] *= (self.num_events/total_mc)
 
         print 'Total MC in acceptance: ', self.mc.sum()
 
@@ -160,17 +165,16 @@ class TemplateFitter:
         for iy in range(self.bins_y_size):
             for iqt in range(self.bins_qt_size):
                 inorm = self.template[self.mc_mass_index][iqt][iy][-1].sum()/self.mc_acceptances[self.mc_mass_index][iqt][iy]
-                tMC = copy.deepcopy(self.template[0][iqt][iy][-1])
+                tMC = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-1])
                 coeff_vals = get_coeff_vals(res=self.res_coeff, 
                                             coeff_eval=('fit' if self.do_parametric else 'val'), 
                                             bin_y=self.get_y_bin(iy), qt=self.mid_point(iqt), coeff=self.coefficients,
                                             np_bins_template_qt_new=self.bins_qt)
-                tUL = copy.deepcopy(self.template[0][iqt][iy][-2])
+                tUL = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-2])
                 tjA = np.zeros(tUL.shape)
                 normUL = 1.0
                 for icoeff_val,coeff_val in enumerate(coeff_vals[:len(self.coefficients)]):
-                    #normUL -= coeff_val
-                    tjA += copy.deepcopy(self.template[0][iqt][iy][icoeff_val])*coeff_val
+                    tjA += copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][icoeff_val])*coeff_val
                 
                 residual = (normUL*tUL+tjA)*inorm-tMC
                 self.mc_nonclosure[iqt,iy] += residual
@@ -384,11 +388,10 @@ class TemplateFitter:
         for iy in range(self.bins_y_size):
             for iqt in range(self.bins_qt_size):
                 inorm = par[self.map_params[self.get_y_qt_bin(iy,iqt)+'_norm']]
-                tUL = copy.deepcopy(self.template[0][iqt][iy][-2])
+                tUL = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-2])
                 bm += tUL.flatten()*inorm
                 for icoeff,coeff in enumerate(self.coefficients):
-                    tjA = copy.deepcopy(self.template[0][iqt][iy][icoeff])
-                    #tjA -= tUL
+                    tjA = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][icoeff])
                     Am[:, idx_A] += tjA.flatten()*inorm
                     idx_A += 1
         
@@ -420,7 +423,8 @@ class TemplateFitter:
             res2 = (beta_prior-beta)
             chi2min += np.linalg.multi_dot( [res2.T, self.Vinv_prior, res2] )
 
-        self.beta = beta
+        # save the intermediate values of beta and Vbeta
+        self.beta  = beta
         self.Vbeta = aux1_inv
 
         return chi2min
@@ -431,7 +435,7 @@ class TemplateFitter:
         self.data = np.zeros( self.mc.shape )
         if dataset=='asymov':
             self.data += copy.deepcopy(self.mc)
-        elif dataset=='rnd':
+        elif dataset=='random':
             self.data += np.random.poisson( self.mc )
         else:
             print 'Option not implemented'
@@ -502,6 +506,7 @@ class TemplateFitter:
             self.arglist[1] = b
             self.gMinuit.mnexcm( "SET PAR", self.arglist, 2, self.ierflg )
             if run_post_hesse:
+                continue
                 self.gMinuit.Release( self.map_betas[ib] )                
                 #err_b_approx = math.sqrt(self.Vbeta[ib,ib])
                 #self.arglist[1] = b-5*err_b_approx
@@ -514,8 +519,8 @@ class TemplateFitter:
             self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
 
         self.cov = ROOT.TMatrixDSym(self.n_param)
-        self.gMinuit.mnemat(self.cov.GetMatrixArray(), self.n_param)
-        self.plot_cov_matrix()
+        #self.gMinuit.mnemat(self.cov.GetMatrixArray(), self.n_param)
+        #self.plot_cov_matrix()
 
 
 

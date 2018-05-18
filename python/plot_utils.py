@@ -478,7 +478,8 @@ def plot_closure_test(charge='Wplus', DY='CC', var='Wdress', coeff_eval='val',
     print 'Done!'
 
 def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], masses=[80.419], coeff=['A0'], 
-                    np_bins_template_qt=np.array([]), np_bins_template_y=np.array([]), rebin=()):
+                    np_bins_template_qt=np.array([]), np_bins_template_y=np.array([]), rebin=(),
+                    postfix=''):
 
     from tree_utils import np_bins_y, np_bins_qt, np_bins_eta, np_bins_pt, angular_pdf_string
 
@@ -506,7 +507,7 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
     np_coeff_ext = np.chararray(len(coeff_ext), itemsize=2, unicode=True)
     np_coeff_ext[:] = coeff_ext
 
-    fin = ROOT.TFile('../root/tree_histos3_CC_FxFx.root', 'READ')
+    fin = ROOT.TFile('../root/tree_histos3_CC_FxFx_masses.root', 'READ')
 
     # create TH2D
     for q in charges:
@@ -604,7 +605,7 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
                                 plt.close('all')
                                 #return
 
-                outname = 'plots/template_'+q+'_'+v+'_'+ceval
+                outname = 'plots/template_'+q+'_'+v+'_'+ceval+postfix
                 np.savez(outname,
                          template, 
                          np.array(masses), 
