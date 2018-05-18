@@ -38,6 +38,7 @@ class TemplateFitter:
                  use_prior=False,
                  reduce_qt=-1,
                  reduce_y=-1,
+                 reduce_pt=0,
                  do_parametric=True,
                  use_prefit=False,
                  add_nonclosure=True
@@ -50,10 +51,13 @@ class TemplateFitter:
         
         self.verbose = verbose
         self.fixed_parameters = fixed_parameters
+        self.interpolate_mass = ('mass' not in fixed_parameters)
+
         self.use_prior = use_prior
         self.mc_mass = mc_mass
         self.do_parametric = do_parametric
         self.map_params = {}
+        self.map_params_free = {}
         self.release_for_hesse = False
 
         self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced.pkl', 'r'))        
@@ -72,15 +76,18 @@ class TemplateFitter:
                 print ('Adding file arr_'+str(p)+' with shape...'), template_file.shape, (' to self with key... '+key)
             size = -1
             if key=='template':
-                size = template_file[0][0][0][0].size
-                setattr(self, key,template_file)
+                size = template_file[0,0,0,0].size
+                setattr(self, key,template_file[:,:,:,:,:,0:reduce_pt] if reduce_pt<0 else template_file)
             elif key=='bins_qt':
                 size = template_file.size - 1 + reduce_qt
                 setattr(self, key, template_file[:reduce_qt] if reduce_qt<0 else template_file)
             elif key=='bins_y':
                 size = template_file.size - 1 + reduce_y
                 setattr(self, key, template_file[:reduce_y] if reduce_y<0 else template_file)
-            elif key in ['bins_pt', 'bins_eta']:
+            elif key=='bins_pt':
+                size = template_file.size - 1 + reduce_pt
+                setattr(self, key,template_file[0:reduce_pt] if reduce_pt<0 else template_file)
+            elif key=='bins_eta':
                 size = template_file.size - 1
                 setattr(self, key,template_file)
             elif key=='coefficients':
@@ -132,6 +139,7 @@ class TemplateFitter:
         self.dim_A = 0
         self.dim_beta = 0
         self.n_param = 0
+        self.n_param_free = 0
 
         if use_prefit and (os.path.isfile(self.in_dir+'prefit_beta.npy') and os.path.isfile(self.in_dir+'prefit_Vbeta.npy')):
             print 'Using prefit covariance matrix/values for beta'            
@@ -258,6 +266,9 @@ class TemplateFitter:
         self.map_params[par_name] = self.n_param
         if self.fix_parameter(par_name):
             self.gMinuit.FixParameter(self.n_param)
+        else:
+            self.map_params_free[par_name] = self.n_param_free
+            self.n_param_free += 1
         self.map_params[par_name+'_true'] = true
         self.n_param += 1
 
@@ -279,7 +290,7 @@ class TemplateFitter:
 
         map_betas = range(500)
 
-        self.define_parameter( par_name='mass', start=self.mc_mass, step=0.020, par_range=(self.mc_mass-0.500,self.mc_mass+0.500), true=self.mc_mass )
+        self.define_parameter( par_name='mass', start=self.mc_mass, step=0.100, par_range=(self.mc_mass-0.499,self.mc_mass+0.499), true=self.mc_mass )
         
         for iy in range(self.bins_y_size):
             y_bin = self.get_y_bin(iy)
@@ -328,6 +339,7 @@ class TemplateFitter:
 
     def get_orders(self, coeff='', y_bin=''):               
         valid_orders = []
+        #return ([0,1,2], 2) if coeff=='A4' else  ([1,2], 2)
         order = len(self.res_coeff[coeff+'_'+y_bin+'_fit'])-1
         for io,o in enumerate(self.res_coeff[coeff+'_'+y_bin+'_fit']):
             if o!=0.:
@@ -373,9 +385,18 @@ class TemplateFitter:
 
         return 
 
+
+    def interpolate(self, mass, iqt, iy, icoeff):
+        if not self.interpolate_mass:
+            return (self.template[self.mc_mass_index, iqt, iy, icoeff])
+        (im_low,im_high)  = (np.where(self.masses<=mass)[0][-1],  np.where(self.masses>mass)[0][0])
+        r = (mass-self.masses[im_low])/(self.masses[im_high]-self.masses[im_low])
+        #print 'par[0]=', mass, '=>', self.masses[im_low], '<',mass,'<',self.masses[im_high], ' => r = ', r 
+        return (1-r)*self.template[im_low, iqt, iy, icoeff] + r*self.template[im_high, iqt, iy, icoeff]
+
     def fcn(self, npar, gin, f, par, iflag ):
         nll = self.chi2(par=par)
-        print 'Chi2: ', '{:0.6f}'.format(nll), '/', self.ndof, ' dof = ', '{:0.4f}'.format(nll/self.ndof)
+        print 'Chi2: ', '{:0.7f}'.format(nll), '/', self.ndof, ' dof = ', '{:0.5f}'.format(nll/self.ndof)
         f[0] = nll
         return
 
@@ -388,10 +409,12 @@ class TemplateFitter:
         for iy in range(self.bins_y_size):
             for iqt in range(self.bins_qt_size):
                 inorm = par[self.map_params[self.get_y_qt_bin(iy,iqt)+'_norm']]
-                tUL = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-2])
+                #tUL = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-2])
+                tUL = self.interpolate(mass=par[0], iqt=iqt, iy=iy, icoeff=-2) 
                 bm += tUL.flatten()*inorm
                 for icoeff,coeff in enumerate(self.coefficients):
-                    tjA = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][icoeff])
+                    #tjA = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][icoeff])
+                    tjA = self.interpolate(mass=par[0], iqt=iqt, iy=iy, icoeff=icoeff) 
                     Am[:, idx_A] += tjA.flatten()*inorm
                     idx_A += 1
         
@@ -430,10 +453,10 @@ class TemplateFitter:
         return chi2min
     
     
-    def load_data(self, dataset='asymov',  postfix=''):
+    def load_data(self, dataset='asimov',  postfix=''):
         
         self.data = np.zeros( self.mc.shape )
-        if dataset=='asymov':
+        if dataset=='asimov':
             self.data += copy.deepcopy(self.mc)
         elif dataset=='random':
             self.data += np.random.poisson( self.mc )
@@ -518,19 +541,33 @@ class TemplateFitter:
             self.arglist[0] = n_points
             self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
 
-        self.cov = ROOT.TMatrixDSym(self.n_param)
-        #self.gMinuit.mnemat(self.cov.GetMatrixArray(), self.n_param)
-        #self.plot_cov_matrix()
+        self.TMatrix = ROOT.TMatrixDSym(self.n_param)
+        self.gMinuit.mnemat(self.TMatrix.GetMatrixArray(), self.n_param)
+        self.plot_cov_matrix()
 
-
+    #def get_covariance_with_toys(self):
+        
 
     def update_results(self):
 
         (val,err,errL,errH)  = (ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.) )
 
+        print 'Mass:'
+        self.gMinuit.GetParameter(self.map_params['mass'], val, err)
+        true = self.map_params['mass'+'_true']
+        pull = (val-true)/err if err>0. else 0.0
+        self.fit_results['mass'][0] = float(val)
+        self.fit_results['mass'][1] = -float(err)
+        self.fit_results['mass'][2] = float(err)
+        self.fit_results['mass'][3] = float(true)
+        self.fit_results['mass'][4] = float(pull)
+        print 'mass'+' = ', '{:0.3f}'.format(val), '+/-', '{:0.3f}'.format(err), \
+            ' true = ', '{:0.3f}'.format(true), \
+            ' pull = ', '{:0.2f}'.format(pull)
+
         print 'Normalisations:'
         for key,p in self.map_params.items():                        
-            if not ('_norm' in key or key=='mass'):
+            if not '_norm' in key :
                 continue
             if '_true' in key:
                 continue
@@ -606,7 +643,7 @@ class TemplateFitter:
         h2.SetStats(0) 
         for i in range(n_free):
             for j in range(n_free):
-                rho_ij = self.cov(i,j)/math.sqrt(self.cov(i,i)*self.cov(j,j)) if self.cov(i,i)>0.0 and self.cov(j,j)>0.0 else 0.0
+                rho_ij = self.TMatrix(i,j)/math.sqrt(self.TMatrix(i,i)*self.TMatrix(j,j)) if self.TMatrix(i,i)>0.0 and self.TMatrix(j,j)>0.0 else 0.0
                 h2.SetBinContent(i+1, j+1, rho_ij )
         h2.Draw("COLZ")
         c.SaveAs(self.out_dir+'covariance_'+self.job_name+'.png')
