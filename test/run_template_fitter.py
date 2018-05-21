@@ -14,12 +14,12 @@ ntoys = 1
 templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job_name='TEST', mc_mass=80.419, 
                                 num_events=1.5e+06,
                                 verbose=False, 
-                                fixed_parameters=['pol', 'A'], 
+                                fixed_parameters=['pol', 'A', 'norm'], 
                                 use_prior=False, 
                                 reduce_qt=-1, 
                                 reduce_y=-3,
-                                reduce_pt=-5,
-                                do_parametric=True,
+                                reduce_pt=0,
+                                fit_mode='parametric',
                                 use_prefit=False,
                                 add_nonclosure=True
                                 )

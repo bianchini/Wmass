@@ -39,7 +39,7 @@ class TemplateFitter:
                  reduce_qt=-1,
                  reduce_y=-1,
                  reduce_pt=0,
-                 do_parametric=True,
+                 fit_mode='parametric',
                  use_prefit=False,
                  add_nonclosure=True
                  ):
@@ -55,9 +55,8 @@ class TemplateFitter:
 
         self.use_prior = use_prior
         self.mc_mass = mc_mass
-        self.do_parametric = do_parametric
+        self.fit_mode = fit_mode
         self.map_params = {}
-        self.map_params_free = {}
         self.release_for_hesse = False
 
         self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced.pkl', 'r'))        
@@ -102,12 +101,14 @@ class TemplateFitter:
         print '\ty :', self.bins_y
         print '\tqt:', self.bins_qt
 
+        self.mc_mass_index = np.where(self.masses==mc_mass)[0][0]
+        print 'MC mass at index...', self.mc_mass_index
+
         # remove UL from all templates
         for icoeff,coeff in enumerate(self.coefficients):
             self.template[:,:,:,icoeff] -= self.template[:,:,:,-2]
+            #self.save_template_snapshot(data=self.template[self.mc_mass_index,0,0,icoeff] , title=coeff, tag=coeff)
 
-        self.mc_mass_index = np.where(self.masses==mc_mass)[0][0]
-        print 'MC mass at index...', self.mc_mass_index
         self.mc = copy.deepcopy(self.template.sum(axis=(1,2))[self.mc_mass_index,-1])
         self.ndof = self.mc.size        
         if add_nonclosure:
@@ -137,9 +138,9 @@ class TemplateFitter:
 
 
         self.dim_A = 0
+        self.dim_alpha = 0
         self.dim_beta = 0
         self.n_param = 0
-        self.n_param_free = 0
 
         if use_prefit and (os.path.isfile(self.in_dir+'prefit_beta.npy') and os.path.isfile(self.in_dir+'prefit_Vbeta.npy')):
             print 'Using prefit covariance matrix/values for beta'            
@@ -175,7 +176,7 @@ class TemplateFitter:
                 inorm = self.template[self.mc_mass_index][iqt][iy][-1].sum()/self.mc_acceptances[self.mc_mass_index][iqt][iy]
                 tMC = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-1])
                 coeff_vals = get_coeff_vals(res=self.res_coeff, 
-                                            coeff_eval=('fit' if self.do_parametric else 'val'), 
+                                            coeff_eval=('fit' if self.fit_mode=='parametric' else 'val'), 
                                             bin_y=self.get_y_bin(iy), qt=self.mid_point(iqt), coeff=self.coefficients,
                                             np_bins_template_qt_new=self.bins_qt)
                 tUL = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-2])
@@ -240,8 +241,8 @@ class TemplateFitter:
 
         # condition for reducing by one the n.d.o.f.:
         # <=> a parameter may be fixed in the minimisation, but still count as --dof
-        subtract_dof = (self.do_parametric and 'pol' in par_name) or \
-            (not self.do_parametric and ('y' in par_name and 'qt' in par_name and 'A' in par_name) )
+        subtract_dof = (self.fit_mode=='parametric' and 'pol' in par_name) or \
+            (self.fit_mode=='binned' and ('y' in par_name and 'qt' in par_name and 'A' in par_name) )
 
         # check for a regexpr matching
         for fix in self.fixed_parameters:
@@ -261,14 +262,20 @@ class TemplateFitter:
         return False
         
 
-    def define_parameter( self, par_name='', start=0., step=0., par_range=(), true=0. ):
+    def define_parameter( self, par_name='', start=0., step=0., par_range=(), true=0., par_type='' ):
         self.gMinuit.DefineParameter( self.n_param, par_name, start, step, par_range[0], par_range[1] )        
         self.map_params[par_name] = self.n_param
+        
+        if par_type=='beta':
+            self.map_betas[self.dim_beta] = self.n_param
+            self.dim_beta += 1
+        elif par_type=='alpha':
+             self.map_alphas[self.dim_alpha] = self.n_param
+             self.dim_alpha += 1
+
         if self.fix_parameter(par_name):
             self.gMinuit.FixParameter(self.n_param)
-        else:
-            self.map_params_free[par_name] = self.n_param_free
-            self.n_param_free += 1
+
         self.map_params[par_name+'_true'] = true
         self.n_param += 1
 
@@ -288,48 +295,58 @@ class TemplateFitter:
         self.arglist[0] = 1.0
         self.gMinuit.mnexcm( "SET ERR", self.arglist, 1, self.ierflg )
 
-        map_betas = range(500)
+        self.map_alphas = range(500)
+        self.map_betas  = range(500)
 
-        self.define_parameter( par_name='mass', start=self.mc_mass, step=0.100, par_range=(self.mc_mass-0.499,self.mc_mass+0.499), true=self.mc_mass )
-        
+        # mass
+        self.define_parameter( par_name='mass', start=self.mc_mass, step=0.100, 
+                               par_range=(self.mc_mass-0.499,self.mc_mass+0.499), 
+                               true=self.mc_mass, 
+                               par_type='alpha' )
+
+        # qt/y bins and coefficients
         for iy in range(self.bins_y_size):
             y_bin = self.get_y_bin(iy)
             for iqt in range(self.bins_qt_size):
                 qt_bin = self.get_qt_bin(iqt)
                 mc_norm = self.template[self.mc_mass_index][iqt][iy][-1].sum()/self.mc_acceptances[self.mc_mass_index][iqt][iy]
+
                 self.define_parameter( par_name=y_bin+'_'+qt_bin+'_norm', 
                                        start=mc_norm, 
                                        step=math.sqrt(mc_norm)*10., 
                                        par_range=(mc_norm/1.5, mc_norm*1.5),
-                                       true=mc_norm)
+                                       true=mc_norm,
+                                       par_type='alpha')
 
                 for coeff in self.coefficients:
                     self.dim_A += 1
-                    if not self.do_parametric:
-                        map_betas[self.dim_beta] = self.n_param
+
+                    if self.fit_mode=='binned':
                         step_beta  = math.sqrt(self.Vbeta_prefit[self.dim_beta,self.dim_beta]) if hasattr(self, 'Vbeta_prefit') else 0.01
                         start_beta = self.beta_prefit[self.dim_beta] if hasattr(self, 'beta_prefit') else self.res_coeff[coeff+'_'+y_bin+'_val'][iqt] 
                         self.define_parameter( par_name=y_bin+'_'+qt_bin+'_'+coeff, 
                                                start=start_beta,
                                                step=step_beta,
                                                par_range=(-2.,+2.),
-                                               true=self.res_coeff[coeff+'_'+y_bin+'_val'][iqt])
-                        self.dim_beta += 1
+                                               true=self.res_coeff[coeff+'_'+y_bin+'_val'][iqt],
+                                               par_type='beta')
                         
-                    elif self.do_parametric and iqt==0:
+                    elif self.fit_mode=='parametric':
+                        if iqt>0:
+                            continue
                         (valid_orders, order) = self.get_orders(coeff, y_bin)
                         for o in valid_orders:
-                            map_betas[self.dim_beta] = self.n_param
                             step_beta  = math.sqrt(self.Vbeta_prefit[self.dim_beta,self.dim_beta]) if hasattr(self, 'Vbeta_prefit') else 0.1*math.pow(10,-(o+2))
                             start_beta = self.beta_prefit[self.dim_beta] if hasattr(self, 'beta_prefit') else self.res_coeff[coeff+'_'+y_bin+'_fit'][o]
                             self.define_parameter( par_name=y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o), 
                                                    start=start_beta,
                                                    step=step_beta,
                                                    par_range=(start_beta-5*step_beta, start_beta+5*step_beta),
-                                                   true=self.res_coeff[coeff+'_'+y_bin+'_fit'][o])
-                            self.dim_beta += 1                            
+                                                   true=self.res_coeff[coeff+'_'+y_bin+'_fit'][o],
+                                                   par_type='beta')
 
-        self.map_betas = map_betas[:self.dim_beta]
+        self.map_alphas = self.map_alphas[:self.dim_alpha]
+        self.map_betas  = self.map_betas[:self.dim_beta]
 
         # the coefficients
         self.beta = np.zeros(self.dim_beta) 
@@ -339,11 +356,21 @@ class TemplateFitter:
 
     def get_orders(self, coeff='', y_bin=''):               
         valid_orders = []
-        #return ([0,1,2], 2) if coeff=='A4' else  ([1,2], 2)
         order = len(self.res_coeff[coeff+'_'+y_bin+'_fit'])-1
         for io,o in enumerate(self.res_coeff[coeff+'_'+y_bin+'_fit']):
             if o!=0.:
                 valid_orders.append(io)
+        
+        if coeff in ['A0', 'A2']:
+            return ([2,3], 3)
+            #return ([], 0)
+        elif coeff in ['A1', 'A3']:
+            return ([1,2,3], 3)
+            #return ([], 0)
+        #elif coeff in ['A4']:
+        #    return ([0,1,2,3,4], 4)                            
+            #return ([0,1,2], 2)   
+
         return (valid_orders, order)                
 
     def get_y_bin(self, iy=-1):
@@ -360,7 +387,7 @@ class TemplateFitter:
 
     def build_aux_matrices(self):
 
-        if self.do_parametric:
+        if self.fit_mode=='parametric':
             self.K = np.zeros( ( self.dim_A, self.dim_beta) )
             # first loop
             idx_A = 0
@@ -376,12 +403,14 @@ class TemplateFitter:
                                 for o in valid_orders:
                                     if iy1==iy2 and coeff1==coeff2:
                                         self.K[idx_A, idx_beta] += math.pow( self.mid_point(iqt), o)
-                                    self.map_betas[idx_beta] = self.map_params[y_bin2+'_'+coeff2+'_'+'pol'+str(order)+'_p'+str(o)]
+                                    #self.map_betas[idx_beta] = self.map_params[y_bin2+'_'+coeff2+'_'+'pol'+str(order)+'_p'+str(o)]
                                     idx_beta += 1
                         idx_A += 1
                 
-        else:
+        elif self.fit_mode=='binned':
             self.K = np.identity(self.dim_A)
+        else:
+            print self.fit_mode+' not supported'
 
         return 
 
@@ -409,11 +438,9 @@ class TemplateFitter:
         for iy in range(self.bins_y_size):
             for iqt in range(self.bins_qt_size):
                 inorm = par[self.map_params[self.get_y_qt_bin(iy,iqt)+'_norm']]
-                #tUL = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-2])
                 tUL = self.interpolate(mass=par[0], iqt=iqt, iy=iy, icoeff=-2) 
                 bm += tUL.flatten()*inorm
                 for icoeff,coeff in enumerate(self.coefficients):
-                    #tjA = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][icoeff])
                     tjA = self.interpolate(mass=par[0], iqt=iqt, iy=iy, icoeff=icoeff) 
                     Am[:, idx_A] += tjA.flatten()*inorm
                     idx_A += 1
@@ -487,12 +514,12 @@ class TemplateFitter:
         self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
         self.arglist[0] = 1
         self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
-        print 'Running MIGRAD with status=1...'
+        print 'Running MIGRAD with strategy 1...'
         status = self.gMinuit.Migrad()
         if status>0:
             self.arglist[0] = 2
             self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
-            print 'Running MIGRAD with status=2...'
+            print 'Running MIGRAD with strategy 2...'
             status = self.gMinuit.Migrad()
 
         np.save(self.in_dir+'prefit_Vbeta.npy', self.Vbeta)
@@ -545,8 +572,8 @@ class TemplateFitter:
         self.gMinuit.mnemat(self.TMatrix.GetMatrixArray(), self.n_param)
         self.plot_cov_matrix()
 
+    # TO BE DONE
     #def get_covariance_with_toys(self):
-        
 
     def update_results(self):
 
@@ -608,6 +635,13 @@ class TemplateFitter:
                 ' pull = ', '{:0.2f}'.format(pull)
         self.out_tree.Fill()
 
+        rnd_As = self.plot_results_y_qt_coeff_prop(var='resolution', input_toys=None)
+        self.plot_results_y_qt_coeff_prop(var='value', input_toys=rnd_As)
+
+        for var in ['resolution', 'pull']:
+            self.plot_results_y_qt(var=var)        
+            self.plot_results_y_coeff(var=var)        
+
         # reset parameters
         for key,p in self.map_params.items():                        
             if '_true' in key:
@@ -636,14 +670,121 @@ class TemplateFitter:
         plt.savefig(self.out_dir+'snapshot_'+tag+'_'+self.job_name+'.png')
         plt.close('all')
 
+    def plot_results_y_qt(self, var='resolution'):
+        c = ROOT.TCanvas("canvas", "canvas", 600, 600) 
+        c.SetRightMargin(0.15)
+        h2 = ROOT.TH2F('crosssection_'+var, var+';|y|;q_{T} (GeV)',  
+                       self.bins_y_size, array('f',self.bins_y), 
+                       self.bins_qt_size, array('f',self.bins_qt) )
+        h2.SetStats(0)         
+        for iy in range(self.bins_y_size):
+            y_bin = self.get_y_bin(iy)
+            for iqt in range(self.bins_qt_size):
+                qt_bin = self.get_qt_bin(iqt)
+                fit_res = self.fit_results[y_bin+'_'+qt_bin+'_norm']
+                val = 0.0
+                if var=='resolution':
+                    val = fit_res[2]/fit_res[3] if fit_res[3]>0. else 0.
+                elif var=='pull':
+                    val =  fit_res[4]
+                h2.SetBinContent(iy+1,iqt+1, val)
+        h2.Draw("TEXT")
+        c.SaveAs(self.out_dir+'cross_section_'+var+'_'+self.job_name+'.png')
+        c.IsA().Destructor( c )                
+
+    def plot_results_y_coeff(self, var='resolution'):
+        max_order = 5
+        histos = {}
+        for icoeff,coeff in enumerate(self.coefficients):
+            histos[coeff] = ROOT.TH2F('coeff_'+coeff+'_'+var, coeff+' '+var+';|y|;p_{n} (GeV^{-n})',  
+                                      self.bins_y_size, array('f',self.bins_y), 
+                                      max_order+1, array('f', range(max_order+2) ) )
+            histos[coeff].SetStats(0)         
+
+        c = ROOT.TCanvas("canvas", "canvas", 900, 600) 
+        c.Divide(3,2)
+        for icoeff,coeff in enumerate(self.coefficients):
+            h2 = histos[coeff] 
+            for iy in range(self.bins_y_size):
+                y_bin = self.get_y_bin(iy)
+                (valid_orders, order) = self.get_orders(coeff, y_bin)
+                for o in range(order+1):
+                    if o not in valid_orders:
+                        continue                                                   
+                    fit_res = self.fit_results[y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o)]
+                    val = 0.
+                    if var=='resolution':
+                        val = fit_res[2]/abs(fit_res[3]) if abs(fit_res[3])>0. else 0.
+                    elif var=='pull':
+                        val =  fit_res[4]
+                    h2.SetBinContent(iy+1,o+1, val)
+            c.cd(icoeff+1)
+            c.SetRightMargin(0.15)
+            h2.Draw("COLZ")            
+        
+        c.cd()
+        c.SaveAs(self.out_dir+'coeff_'+var+'_'+self.job_name+'.png')
+        
+
+    def plot_results_y_qt_coeff_prop(self, var='resolution', input_toys=None):
+        histos = {}
+        for icoeff,coeff in enumerate(self.coefficients):
+            histos[coeff] = ROOT.TH2F('coeff_'+coeff+'_prop_'+var, coeff+' '+var+';|y|;p_{n} (GeV^{-n})',  
+                                      self.bins_y_size,  array('f',self.bins_y), 
+                                      self.bins_qt_size, array('f',self.bins_qt), )
+            histos[coeff].SetStats(0)         
+
+        c = ROOT.TCanvas("canvas", "canvas", 1200, 800) 
+        c.Divide(3,2)
+        ROOT.gStyle.SetPaintTextFormat('4.2f')
+
+        if input_toys!=None:
+            rnd_As = copy.deepcopy(input_toys)
+        else:
+            rnd_As = np.zeros( (self.dim_A, 500) )
+            print 'Generating 500 toys...'
+            for itoy in range(500):
+                rnd_betas = np.random.multivariate_normal(self.beta, self.Vbeta) 
+                rnd_A = np.linalg.multi_dot([self.K, rnd_betas])
+                rnd_As[:, itoy] = rnd_A
+
+        cov_A = np.cov(rnd_As)
+        mean_A = rnd_As.mean(axis=1)
+        #mean_A = np.linalg.multi_dot([self.K, self.beta])
+
+        idx_A = 0
+        for iy in range(self.bins_y_size):
+            y_bin = self.get_y_bin(iy)
+            for iqt in range(self.bins_qt_size):
+                qt_bin = self.get_qt_bin(iqt)                               
+                for icoeff,coeff in enumerate(self.coefficients):
+                    val = 0.
+                    if var=='resolution':
+                        val = math.sqrt(cov_A[idx_A,idx_A])
+                    elif var=='value':
+                        val = mean_A[idx_A]
+                    histos[coeff].SetBinContent(iy+1,iqt+1, val  )
+                    idx_A += 1
+
+        for icoeff,coeff in enumerate(self.coefficients):
+            c.cd(icoeff+1)
+            c.SetRightMargin(0.15)
+            histos[coeff].Draw('COLZ' if var=='value' else 'TEXT')            
+        
+        c.cd()
+        c.SaveAs(self.out_dir+'coeff_prop_'+var+'_'+self.job_name+'.png')
+        return rnd_As
+
+                
     def plot_cov_matrix(self):
         c = ROOT.TCanvas("canvas", "canvas", 600, 600) 
         n_free = self.gMinuit.GetNumFreePars()
-        h2 = ROOT.TH2D('cov', '', n_free, 0, n_free, n_free, 0, n_free)
+        h2 = ROOT.TH2F('cov', '', n_free, 0, n_free, n_free, 0, n_free)
         h2.SetStats(0) 
         for i in range(n_free):
             for j in range(n_free):
-                rho_ij = self.TMatrix(i,j)/math.sqrt(self.TMatrix(i,i)*self.TMatrix(j,j)) if self.TMatrix(i,i)>0.0 and self.TMatrix(j,j)>0.0 else 0.0
+                rho_ij = self.TMatrix(i,j)/math.sqrt(self.TMatrix(i,i)*self.TMatrix(j,j)) \
+                    if self.TMatrix(i,i)>0.0 and self.TMatrix(j,j)>0.0 else 0.0
                 h2.SetBinContent(i+1, j+1, rho_ij )
         h2.Draw("COLZ")
         c.SaveAs(self.out_dir+'covariance_'+self.job_name+'.png')
