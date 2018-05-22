@@ -414,16 +414,21 @@ class TemplateFitter:
         r = (mass-self.masses[im_low])/(self.masses[im_high]-self.masses[im_low])
         #print 'par[0]=', mass, '=>', self.masses[im_low], '<',mass,'<',self.masses[im_high], ' => r = ', r 
         return (1-r)*self.template[im_low, iqt, iy, icoeff] + r*self.template[im_high, iqt, iy, icoeff]
+    
 
     def fcn(self, npar, gin, f, par, iflag ):
         nll = self.chi2(par=par)
-        #if self.print_evals:
-        #    print 'Chi2: ', '{:0.7f}'.format(nll), '/', self.ndof, \
-        #        ' dof = ', '{:0.5f}'.format(nll/self.ndof)
         f[0] = nll
+        #gin[0] = 0.*(par[0]-self.mc_mass)/0.1/0.1 #self.grad(par=par) 
         return
 
+    #def grad(self, par):
+    #    der = [0.]*self.n_param #[(par[0]-self.mc_mass)/0.1/0.1]*self.n_param
+    #    return der
+
     def chi2(self, par):
+
+        #return math.pow((par[0]-self.mc_mass)/0.1,2.0)
 
         # construction of Am and Bm matrices
         (Am, bm) = (np.zeros((self.data.size, self.dim_A)), np.zeros(self.nsub.shape))
@@ -449,7 +454,12 @@ class TemplateFitter:
             chi2min = np.linalg.multi_dot( [(nsub-aux).T, self.Vinv, (nsub-aux)] )
             if self.use_prior:
                 res2 = (self.beta_prior-beta)
-                chi2min += np.linalg.multi_dot( [res2.T, self.Vinv_prior, res2] )
+                chi2_prior = np.linalg.multi_dot( [res2.T, self.Vinv_prior, res2] )
+                chi2min += chi2_prior
+            if self.print_evals:
+                print 'Chi2: ', '{:0.5f}'.format(chi2min), \
+                    (' = '+'{:0.5f}'.format(chi2min-chi2_prior)+' (stat.) + '+'{:0.5f}'.format(chi2_prior)+' (prior)' if self.use_prior else ''), \
+                    '/', self.ndof, ' dof = ', '{:0.5f}'.format(chi2min/self.ndof)
             return chi2min
 
         # construction of chi2
@@ -514,6 +524,10 @@ class TemplateFitter:
         print("Convergence at EDM %s" % (self.arglist[1]*0.001))        
 
         self.release_for_hesse = False
+
+        #self.arglist[0] = 1
+        #self.gMinuit.mnexcm( "SET GRA", self.arglist, 1, self.ierflg)
+        self.gMinuit.mnexcm( "SET NOG", self.arglist, 0, self.ierflg)
 
         print 'Running HESSE...'
         self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
@@ -757,7 +771,7 @@ class TemplateFitter:
                 elif var=='pull':
                     val =  fit_res[4]
                 h2.SetBinContent(iy+1,iqt+1, val)
-        h2.Draw("TEXT")
+        h2.Draw('COLZ')
         c.SaveAs(self.out_dir+'norm_'+var+'_'+self.job_name+'.png')
         c.IsA().Destructor( c )                
 
@@ -837,7 +851,7 @@ class TemplateFitter:
         for icoeff,coeff in enumerate(self.coefficients):
             c.cd(icoeff+1)
             c.SetRightMargin(0.15)
-            histos[coeff].Draw('COLZ' if var=='value' else 'TEXT')            
+            histos[coeff].Draw('COLZ' if var=='value' else 'COLZ')            
         
         c.cd()
         c.SaveAs(self.out_dir+'coeff_'+var+'_'+self.job_name+'.png')
