@@ -41,15 +41,19 @@ class TemplateFitter:
                  reduce_pt=0,
                  fit_mode='parametric',
                  use_prefit=False,
-                 add_nonclosure=True
+                 add_nonclosure=True,
+                 save_plots=['mc', 'of'],
+                 print_evals=True
                  ):
 
-        self.in_dir  = os.environ['CMSSW_BASE']+'/src/Wmass/test/plots/'
+        self.in_dir  = os.environ['CMSSW_BASE']+'/src/Wmass/data/'
         self.out_dir = os.environ['CMSSW_BASE']+'/src/Wmass/test/'
         self.job_name = job_name
         self.num_events = num_events 
         
         self.verbose = verbose
+        self.print_evals = print_evals
+
         self.fixed_parameters = fixed_parameters
         self.interpolate_mass = ('mass' not in fixed_parameters)
 
@@ -57,9 +61,12 @@ class TemplateFitter:
         self.mc_mass = mc_mass
         self.fit_mode = fit_mode
         self.map_params = {}
+        self.map_params_minuit = {}
         self.release_for_hesse = False
 
-        self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced.pkl', 'r'))        
+        self.update=True
+
+        self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced_v2.pkl', 'r'))        
 
         templates = np.load(self.in_dir+'template_'+charge+'_'+var+'_val_masses.npz')
         templates_files = {'template': 0, 'masses': 1, 'bins_qt' : 2, 
@@ -107,13 +114,12 @@ class TemplateFitter:
         # remove UL from all templates
         for icoeff,coeff in enumerate(self.coefficients):
             self.template[:,:,:,icoeff] -= self.template[:,:,:,-2]
-            #self.save_template_snapshot(data=self.template[self.mc_mass_index,0,0,icoeff] , title=coeff, tag=coeff)
 
         self.mc = copy.deepcopy(self.template.sum(axis=(1,2))[self.mc_mass_index,-1])
         self.ndof = self.mc.size        
         if add_nonclosure:
             print 'Removing non closure by adding Sum-of-templates-MC'
-            self.run_closure_tests()
+            self.run_closure_tests(save_plots=[])
             self.mc += self.mc_nonclosure.sum(axis=(0,1))
 
         if self.num_events>0:            
@@ -124,7 +130,8 @@ class TemplateFitter:
 
         print 'Total MC in acceptance: ', self.mc.sum()
 
-        self.save_template_snapshot(data=self.mc, title='MC', tag='mc')
+        if 'mc' in save_plots:
+            self.save_template_snapshot(data=self.mc, title='MC', tag='mc')
 
         # build template with all OF bins
         self.overflow_template = np.zeros( self.mc.shape )
@@ -134,13 +141,15 @@ class TemplateFitter:
         for burn_y in range(reduce_y, 0):
             for qt in range(self.bins_qt_size):
                 self.overflow_template += self.template[self.mc_mass_index, qt, burn_y, -1]                
-        self.save_template_snapshot(data=self.overflow_template, title='Overflow', tag='of')
+        if 'of' in save_plots:
+            self.save_template_snapshot(data=self.overflow_template, title='Overflow', tag='of')
 
 
         self.dim_A = 0
         self.dim_alpha = 0
         self.dim_beta = 0
         self.n_param = 0
+        self.n_param_minuit = 0
 
         if use_prefit and (os.path.isfile(self.in_dir+'prefit_beta.npy') and os.path.isfile(self.in_dir+'prefit_Vbeta.npy')):
             print 'Using prefit covariance matrix/values for beta'            
@@ -163,10 +172,33 @@ class TemplateFitter:
         self.build_aux_matrices()
 
         if self.use_prior:
-            self.reshape_covariance( np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_stat_plus_syst_all_A0-4_forced.npy', 'r')) )
+            self.reshape_covariance( cov=np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_stat_plus_syst_all_A0-4_forced_v2.npy', 'r')), 
+                                     dictionary=pickle.load(open(self.in_dir+'covariance_dict_'+DY+'_'+charge+'_'+var+'_stat_plus_syst_all_A0-4_forced_v2.pkl', 'r')) )
         
 
-    def run_closure_tests(self):
+    def reshape_covariance(self, cov=np.array([]), dictionary={}):
+        V_prior = np.zeros((self.dim_beta,self.dim_beta))
+        self.beta_prior =  np.zeros(self.dim_beta)
+        for ib1,b1 in enumerate(self.map_betas):
+            par_name1 = ''
+            for key1,p1 in self.map_params.items():                        
+                if p1==b1:
+                    par_name1 = key1
+            self.beta_prior[ib1] = self.map_params[par_name1+'_true']
+            idx1 = dictionary[par_name1]
+            for ib2,b2 in enumerate(self.map_betas):
+                par_name2 = ''
+                for key2,p2 in self.map_params.items():                        
+                    if p2==b2:
+                        par_name2 = key2
+                idx2 = dictionary[par_name2]
+                V_prior[ib1,ib2] = cov[idx1,idx2]
+                #if ib1==ib2:
+                #    print par_name1, '=' , self.beta_prior[ib1], '+/-', math.sqrt(self.Vbeta_prior[ib1,ib1])
+        self.Vinv_prior = np.linalg.inv(V_prior)
+
+
+    def run_closure_tests(self, save_plots=['mc-sum', 'sum']):
 
         from tree_utils import get_coeff_vals
         self.mc_nonclosure = np.zeros( (self.bins_qt_size, self.bins_y_size, self.bins_eta_size, self.bins_pt_size) )
@@ -187,55 +219,12 @@ class TemplateFitter:
                 
                 residual = (normUL*tUL+tjA)*inorm-tMC
                 self.mc_nonclosure[iqt,iy] += residual
-                #self.save_template_snapshot(data=residual, title='MC - sum of templates', tag=self.get_y_qt_bin(iy,iqt)+'_closure')
-                #self.save_template_snapshot(data=(normUL*tUL+tjA)*inorm, title='Sum of templates', tag=self.get_y_qt_bin(iy,iqt)+'_template')
+                if 'mc-sum' in save_plots:
+                    self.save_template_snapshot(data=residual, title='MC - sum of templates', tag=self.get_y_qt_bin(iy,iqt)+'_closure')
+                if 'sum' in save_plots:
+                    self.save_template_snapshot(data=(normUL*tUL+tjA)*inorm, title='Sum of templates', tag=self.get_y_qt_bin(iy,iqt)+'_template')
                 
 
-    def reshape_covariance(self, cov_coeff):
-
-        self.cov_coeff = np.zeros((self.dim_beta,self.dim_beta))
-        print 'Reshape covariance: make matrix with shape ', self.cov_coeff.shape
-
-        idx_A1 = 0
-        for coeffA1 in self.coefficients:
-            for iyA1 in range(self.bins_y_size):            
-                y_binA1 = self.get_y_bin( iyA1 )        
-                (valid_ordersA1, orderA1) = self.get_orders(coeffA1, y_binA1)
-                for oA1 in range(orderA1+1):
-
-                    idx_A2 = 0
-                    for coeffA2 in self.coefficients:
-                        for iyA2 in range(self.bins_y_size):                    
-                            y_binA2 = self.get_y_bin( iyA2 )        
-                            (valid_ordersA2, orderA2) = self.get_orders(coeffA2, y_binA2)
-                            for oA2 in range(orderA2+1):
-
-                                idx_B1 = 0
-                                for iyB1 in range(self.bins_y_size):                    
-                                    y_binB1 = self.get_y_bin( iyB1 )
-                                    for coeffB1 in self.coefficients:
-                                        (valid_ordersB1, orderB1) = self.get_orders(coeffB1, y_binB1)
-                                        for oB1 in valid_ordersB1:
-                                            idx_B2 = 0
-                                            for iyB2 in range(self.bins_y_size):                    
-                                                y_binB2 = self.get_y_bin( iyB2 )
-                                                for coeffB2 in self.coefficients:
-                                                    (valid_ordersB2, orderB2) = self.get_orders(coeffB2, y_binB2)
-                                                    for oB2 in valid_ordersB2:
-                                                        if iyA1==iyB1 and iyA2==iyB2 and coeffA1==coeffB1 and coeffA2==coeffB2 and oA1==oB1 and oA2==oB2:
-                                                            print '\tFill entry (', idx_B1, idx_B2, ')'
-                                                            self.cov_coeff[idx_B1,idx_B2] = cov_coeff[idx_A1,idx_A2]
-                                                        idx_B2 += 1
-                                            idx_B1 += 1
-
-                                idx_A2 += 1
-                    idx_A1 += 1
-
-        np.set_printoptions(threshold=np.inf)
-        print self.cov_coeff        
-        self.Vinv_prior =  np.linalg.inv(self.cov_coeff)
-        return
-    
     # tell Minuit to fix a parameter
     def fix_parameter(self, par_name):
 
@@ -275,6 +264,9 @@ class TemplateFitter:
 
         if self.fix_parameter(par_name):
             self.gMinuit.FixParameter(self.n_param)
+        else:
+            self.map_params_minuit[par_name] = self.n_param_minuit
+            self.n_param_minuit += 1
 
         self.map_params[par_name+'_true'] = true
         self.n_param += 1
@@ -313,8 +305,8 @@ class TemplateFitter:
 
                 self.define_parameter( par_name=y_bin+'_'+qt_bin+'_norm', 
                                        start=mc_norm, 
-                                       step=math.sqrt(mc_norm)*10., 
-                                       par_range=(mc_norm/1.5, mc_norm*1.5),
+                                       step=mc_norm*0.1, 
+                                       par_range=(mc_norm/1.6, mc_norm*1.6),
                                        true=mc_norm,
                                        par_type='alpha')
 
@@ -361,11 +353,11 @@ class TemplateFitter:
             if o!=0.:
                 valid_orders.append(io)
         
-        if coeff in ['A0', 'A2']:
-            return ([2,3], 3)
+        #if coeff in ['A0', 'A2']:
+        #    return ([2,3], 3)
             #return ([], 0)
-        elif coeff in ['A1', 'A3']:
-            return ([1,2,3], 3)
+        #if coeff in ['A1', 'A3']:
+        #    return ([1,2,3], 3)
             #return ([], 0)
         #elif coeff in ['A4']:
         #    return ([0,1,2,3,4], 4)                            
@@ -425,7 +417,9 @@ class TemplateFitter:
 
     def fcn(self, npar, gin, f, par, iflag ):
         nll = self.chi2(par=par)
-        print 'Chi2: ', '{:0.7f}'.format(nll), '/', self.ndof, ' dof = ', '{:0.5f}'.format(nll/self.ndof)
+        #if self.print_evals:
+        #    print 'Chi2: ', '{:0.7f}'.format(nll), '/', self.ndof, \
+        #        ' dof = ', '{:0.5f}'.format(nll/self.ndof)
         f[0] = nll
         return
 
@@ -454,7 +448,7 @@ class TemplateFitter:
             aux = np.linalg.multi_dot([Am, self.K, beta])
             chi2min = np.linalg.multi_dot( [(nsub-aux).T, self.Vinv, (nsub-aux)] )
             if self.use_prior:
-                res2 = (beta_prior-beta)
+                res2 = (self.beta_prior-beta)
                 chi2min += np.linalg.multi_dot( [res2.T, self.Vinv_prior, res2] )
             return chi2min
 
@@ -465,14 +459,21 @@ class TemplateFitter:
         aux1_inv = np.linalg.inv(aux1)
         aux2 = np.linalg.multi_dot( [ self.K.T, Am.T, self.Vinv, nsub ] )
         if self.use_prior:
-            aux2 +=  np.linalg.multi_dot( [ self.Vinv_prior, beta_prior ])
+            aux2 +=  np.linalg.multi_dot( [ self.Vinv_prior, self.beta_prior ])
         beta = np.linalg.multi_dot( [aux1_inv, aux2 ] )        
         res1 = (nsub - np.linalg.multi_dot( [Am, self.K, beta]) )
         chi2min = np.linalg.multi_dot( [res1.T, self.Vinv, res1 ] )
-        if self.use_prior:
-            res2 = (beta_prior-beta)
-            chi2min += np.linalg.multi_dot( [res2.T, self.Vinv_prior, res2] )
 
+        if self.use_prior:
+            res2 = (self.beta_prior-beta)
+            chi2_prior = np.linalg.multi_dot( [res2.T, self.Vinv_prior, res2] )
+            chi2min += chi2_prior
+
+        if self.print_evals:
+            print 'Chi2: ', '{:0.5f}'.format(chi2min), \
+                (' = '+'{:0.5f}'.format(chi2min-chi2_prior)+' (stat.) + '+'{:0.5f}'.format(chi2_prior)+' (prior)' if self.use_prior else ''), \
+                '/', self.ndof, ' dof = ', '{:0.5f}'.format(chi2min/self.ndof)
+            
         # save the intermediate values of beta and Vbeta
         self.beta  = beta
         self.Vbeta = aux1_inv
@@ -480,7 +481,7 @@ class TemplateFitter:
         return chi2min
     
     
-    def load_data(self, dataset='asimov',  postfix=''):
+    def load_data(self, dataset='asimov',  save_plots=['data', 'data-overflow'], postfix=''):
         
         self.data = np.zeros( self.mc.shape )
         if dataset=='asimov':
@@ -489,14 +490,18 @@ class TemplateFitter:
             self.data += np.random.poisson( self.mc )
         else:
             print 'Option not implemented'
-        self.save_template_snapshot(data=self.data, title='Data', tag='data'+postfix)
+        if 'data' in save_plots:
+            self.save_template_snapshot(data=self.data, title='Data', tag='data'+postfix)
 
         n = self.data.flatten()
         if n[n<10].size > 0:
             print n[n<10].size, ' bins with less than 10 entries!'
         self.Vinv = np.diag(1./n)
         self.nsub = n - self.overflow_template.flatten()
-        self.save_template_snapshot(data=self.nsub.reshape(self.mc.shape), title='Data-overflow', tag='data_sub'+postfix)
+        if 'data-overflow' in save_plots:
+            self.save_template_snapshot(data=self.nsub.reshape(self.mc.shape), title='Data-overflow', tag='data_sub'+postfix)
+
+        return
 
 
     def run(self, n_points=500000, run_minos=False, run_post_hesse=False):
@@ -514,16 +519,20 @@ class TemplateFitter:
         self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
         self.arglist[0] = 1
         self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
-        print 'Running MIGRAD with strategy 1...'
+        print 'Running MIGRAD with strategy', int(self.arglist[0]), '...'
         status = self.gMinuit.Migrad()
         if status>0:
+            return 1
             self.arglist[0] = 2
             self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
-            print 'Running MIGRAD with strategy 2...'
+            print 'Running MIGRAD with strategy', int(self.arglist[0]), '...'
             status = self.gMinuit.Migrad()
 
-        np.save(self.in_dir+'prefit_Vbeta.npy', self.Vbeta)
-        np.save(self.in_dir+'prefit_beta.npy', self.beta)
+        self.Vbeta_min = copy.deepcopy(self.Vbeta)
+        self.beta_min = copy.deepcopy(self.beta)
+
+        np.save(self.in_dir+'prefit_Vbeta.npy', self.Vbeta_min)
+        np.save(self.in_dir+'prefit_beta.npy', self.beta_min)
 
         if run_minos:
             print 'Running MINOS on parameter...mass'
@@ -551,35 +560,40 @@ class TemplateFitter:
         self.fit_results['minuit'][5] = -float(clock)
 
         # Set coefficients to their best fit value from chi2
-        for ib,b in enumerate(self.beta):
+        for ib,b in enumerate(self.beta_min):
             self.arglist[0] = self.map_betas[ib]+1
             self.arglist[1] = b
             self.gMinuit.mnexcm( "SET PAR", self.arglist, 2, self.ierflg )
             if run_post_hesse:
                 continue
                 self.gMinuit.Release( self.map_betas[ib] )                
-                #err_b_approx = math.sqrt(self.Vbeta[ib,ib])
-                #self.arglist[1] = b-5*err_b_approx
-                #self.arglist[2] = b+5*err_b_approx
-                #self.gMinuit.mnexcm( "SET LIM", self.arglist, 3, self.ierflg )
 
         if run_post_hesse:
             self.release_for_hesse = True
             self.arglist[0] = n_points
             self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
 
-        self.TMatrix = ROOT.TMatrixDSym(self.n_param)
-        self.gMinuit.mnemat(self.TMatrix.GetMatrixArray(), self.n_param)
-        self.plot_cov_matrix()
+        self.TMatrix = ROOT.TMatrixDSym(self.n_param_minuit)
+        self.gMinuit.mnemat(self.TMatrix.GetMatrixArray(), self.n_param_minuit)
 
-    # TO BE DONE
-    #def get_covariance_with_toys(self):
+        return 0
 
-    def update_results(self):
+    def update_results(self, print_results=True, save_plots=['coeff', 'polynom', 'norm', 'cov'], run_postfit_toys=False):
+
+        if 'cov' in save_plots:
+            self.plot_cov_matrix()
 
         (val,err,errL,errH)  = (ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.) )
 
-        print 'Mass:'
+        self.alpha = np.zeros(self.dim_alpha)
+        for ia,a in enumerate(self.map_alphas):
+            par_name = ''
+            for key,p in self.map_params.items():
+                if p==a:
+                    par_name = key
+            self.gMinuit.GetParameter(self.map_params[par_name], val, err)
+            self.alpha[ia] = val        
+
         self.gMinuit.GetParameter(self.map_params['mass'], val, err)
         true = self.map_params['mass'+'_true']
         pull = (val-true)/err if err>0. else 0.0
@@ -588,11 +602,14 @@ class TemplateFitter:
         self.fit_results['mass'][2] = float(err)
         self.fit_results['mass'][3] = float(true)
         self.fit_results['mass'][4] = float(pull)
-        print 'mass'+' = ', '{:0.3f}'.format(val), '+/-', '{:0.3f}'.format(err), \
-            ' true = ', '{:0.3f}'.format(true), \
-            ' pull = ', '{:0.2f}'.format(pull)
+        if print_results:
+            print 'Mass:'
+            print 'mass'+' = ', '{:0.3f}'.format(val), '+/-', '{:0.3f}'.format(err), \
+                ' true = ', '{:0.3f}'.format(true), \
+                ' pull = ', '{:0.2f}'.format(pull)
 
-        print 'Normalisations:'
+        if print_results:
+            print 'Normalisations:'
         for key,p in self.map_params.items():                        
             if not '_norm' in key :
                 continue
@@ -606,11 +623,13 @@ class TemplateFitter:
             self.fit_results[key][2] = float(err)
             self.fit_results[key][3] = float(true)
             self.fit_results[key][4] = float(pull)
-            print key+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
-                ' true = ', '{:0.2E}'.format(true), \
-                ' pull = ', '{:0.2f}'.format(pull)
+            if print_results:
+                print key+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
+                    ' true = ', '{:0.2E}'.format(true), \
+                    ' pull = ', '{:0.2f}'.format(pull)
 
-        print 'Coefficients:'
+        if print_results:
+            print 'Coefficients:'
         for key,p in self.map_params.items():                        
             if '_norm' in key or key=='mass':
                 continue
@@ -630,25 +649,75 @@ class TemplateFitter:
             self.fit_results[key][2] = float(err)
             self.fit_results[key][3] = float(true)
             self.fit_results[key][4] = float(pull)
-            print key+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
-                ' true = ', '{:0.2E}'.format(true), \
-                ' pull = ', '{:0.2f}'.format(pull)
+            if print_results:
+                print key+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
+                    ' true = ', '{:0.2E}'.format(true), \
+                    ' pull = ', '{:0.2f}'.format(pull)
         self.out_tree.Fill()
 
-        rnd_As = self.plot_results_y_qt_coeff_prop(var='resolution', input_toys=None)
-        self.plot_results_y_qt_coeff_prop(var='value', input_toys=rnd_As)
+        if run_postfit_toys:
+            self.get_covariance_with_toys()
 
-        for var in ['resolution', 'pull']:
-            self.plot_results_y_qt(var=var)        
-            self.plot_results_y_coeff(var=var)        
+        if 'polynom' in save_plots:
+            if self.fit_mode=='parametric':
+                self.plot_results_y_polynom(var='resolution')        
+                self.plot_results_y_polynom(var='value')        
+
+        if 'coeff' in save_plots:
+            if self.fit_mode=='parametric':
+                rnd_As = self.plot_results_y_qt_coeff(var='resolution', input_toys=np.array([]))
+                self.plot_results_y_qt_coeff(var='value', input_toys=rnd_As)
+
+        if 'norm' in save_plots:
+            self.plot_results_y_qt(var='resolution')        
+            self.plot_results_y_qt(var='pull')        
 
         # reset parameters
+        print 'Reset parameters to their initial values'
         for key,p in self.map_params.items():                        
             if '_true' in key:
                 continue
             self.arglist[0] = p+1
             self.arglist[1] = self.map_params[key+'_true']  
             self.gMinuit.mnexcm( "SET PAR", self.arglist, 2, self.ierflg )
+
+        return
+
+
+    def get_covariance_with_toys(self, ntoys=500):
+        self.Valpha = np.zeros((self.dim_alpha,self.dim_alpha))        
+        for ia1,a1 in enumerate(self.map_alphas):
+            par_name1 = ''
+            for key1,p1 in self.map_params.items():
+                if p1==a1:
+                    par_name1 = key1            
+            aa1 = self.map_params_minuit[par_name1] if self.map_params_minuit.has_key(par_name1) else -1
+            for ia2,a2 in enumerate(self.map_alphas):
+                par_name2 = ''
+                for key2,p2 in self.map_params.items():
+                    if p2==a2:
+                        par_name2 = key2
+                aa2 = self.map_params_minuit[par_name2] if self.map_params_minuit.has_key(par_name2) else -1
+                self.Valpha[ia1,ia2] = self.TMatrix(aa1,aa2) if aa1>=0 and aa2>=0 else 0.
+        
+        rnd_betas = np.zeros( (self.dim_beta, ntoys) )
+
+        self.print_evals = False
+        for itoy in range(ntoys):
+            rnd_alpha = np.random.multivariate_normal(self.alpha,self.Valpha)
+            rnd_par = [0.]*self.n_param
+            for ia,a in enumerate(self.map_alphas):
+                par_name = ''
+                for key,p in self.map_params.items():
+                    if p==a:
+                        rnd_par[p] = rnd_alpha[ia]
+            self.chi2(par=rnd_par)
+            rnd_betas[:, itoy] = self.beta
+
+        self.print_evals = True
+        cov_betas = np.cov(rnd_betas)
+        self.Vbeta_min += cov_betas
+
 
     # save the TTree and close
     def close(self):
@@ -673,7 +742,7 @@ class TemplateFitter:
     def plot_results_y_qt(self, var='resolution'):
         c = ROOT.TCanvas("canvas", "canvas", 600, 600) 
         c.SetRightMargin(0.15)
-        h2 = ROOT.TH2F('crosssection_'+var, var+';|y|;q_{T} (GeV)',  
+        h2 = ROOT.TH2F('norm_'+var, var+';|y|;q_{T} (GeV)',  
                        self.bins_y_size, array('f',self.bins_y), 
                        self.bins_qt_size, array('f',self.bins_qt) )
         h2.SetStats(0)         
@@ -689,14 +758,14 @@ class TemplateFitter:
                     val =  fit_res[4]
                 h2.SetBinContent(iy+1,iqt+1, val)
         h2.Draw("TEXT")
-        c.SaveAs(self.out_dir+'cross_section_'+var+'_'+self.job_name+'.png')
+        c.SaveAs(self.out_dir+'norm_'+var+'_'+self.job_name+'.png')
         c.IsA().Destructor( c )                
 
-    def plot_results_y_coeff(self, var='resolution'):
+    def plot_results_y_polynom(self, var='resolution'):
         max_order = 5
         histos = {}
         for icoeff,coeff in enumerate(self.coefficients):
-            histos[coeff] = ROOT.TH2F('coeff_'+coeff+'_'+var, coeff+' '+var+';|y|;p_{n} (GeV^{-n})',  
+            histos[coeff] = ROOT.TH2F('polynom_'+coeff+'_'+var, coeff+' '+var+';|y|;p_{n} (GeV^{-n})',  
                                       self.bins_y_size, array('f',self.bins_y), 
                                       max_order+1, array('f', range(max_order+2) ) )
             histos[coeff].SetStats(0)         
@@ -714,7 +783,7 @@ class TemplateFitter:
                     fit_res = self.fit_results[y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o)]
                     val = 0.
                     if var=='resolution':
-                        val = fit_res[2]/abs(fit_res[3]) if abs(fit_res[3])>0. else 0.
+                        val = fit_res[2]
                     elif var=='pull':
                         val =  fit_res[4]
                     h2.SetBinContent(iy+1,o+1, val)
@@ -723,34 +792,33 @@ class TemplateFitter:
             h2.Draw("COLZ")            
         
         c.cd()
-        c.SaveAs(self.out_dir+'coeff_'+var+'_'+self.job_name+'.png')
+        c.SaveAs(self.out_dir+'polynom_'+var+'_'+self.job_name+'.png')
         
 
-    def plot_results_y_qt_coeff_prop(self, var='resolution', input_toys=None):
+    def plot_results_y_qt_coeff(self, var='resolution', input_toys=np.array([])):
         histos = {}
         for icoeff,coeff in enumerate(self.coefficients):
-            histos[coeff] = ROOT.TH2F('coeff_'+coeff+'_prop_'+var, coeff+' '+var+';|y|;p_{n} (GeV^{-n})',  
+            histos[coeff] = ROOT.TH2F('coeff_'+coeff+var, coeff+' '+var+';|y|;p_{n} (GeV^{-n})',  
                                       self.bins_y_size,  array('f',self.bins_y), 
                                       self.bins_qt_size, array('f',self.bins_qt), )
             histos[coeff].SetStats(0)         
 
         c = ROOT.TCanvas("canvas", "canvas", 1200, 800) 
         c.Divide(3,2)
-        ROOT.gStyle.SetPaintTextFormat('4.2f')
+        ROOT.gStyle.SetPaintTextFormat('4.3f')
 
-        if input_toys!=None:
+        if input_toys.size>0:
             rnd_As = copy.deepcopy(input_toys)
         else:
             rnd_As = np.zeros( (self.dim_A, 500) )
             print 'Generating 500 toys...'
             for itoy in range(500):
-                rnd_betas = np.random.multivariate_normal(self.beta, self.Vbeta) 
+                rnd_betas = np.random.multivariate_normal(self.beta_min, self.Vbeta_min) 
                 rnd_A = np.linalg.multi_dot([self.K, rnd_betas])
                 rnd_As[:, itoy] = rnd_A
 
         cov_A = np.cov(rnd_As)
         mean_A = rnd_As.mean(axis=1)
-        #mean_A = np.linalg.multi_dot([self.K, self.beta])
 
         idx_A = 0
         for iy in range(self.bins_y_size):
@@ -772,7 +840,7 @@ class TemplateFitter:
             histos[coeff].Draw('COLZ' if var=='value' else 'TEXT')            
         
         c.cd()
-        c.SaveAs(self.out_dir+'coeff_prop_'+var+'_'+self.job_name+'.png')
+        c.SaveAs(self.out_dir+'coeff_'+var+'_'+self.job_name+'.png')
         return rnd_As
 
                 
@@ -788,7 +856,7 @@ class TemplateFitter:
                 h2.SetBinContent(i+1, j+1, rho_ij )
         h2.Draw("COLZ")
         c.SaveAs(self.out_dir+'covariance_'+self.job_name+'.png')
-        c.SaveAs(self.out_dir+'covariance_'+self.job_name+'.C')
+        #c.SaveAs(self.out_dir+'covariance_'+self.job_name+'.C')
         c.IsA().Destructor( c )
 
 

@@ -1,4 +1,4 @@
-B0;95;cimport sys
+import sys
 sys.path.append('./')
 sys.path.append('../python/')
 from sys import argv
@@ -40,12 +40,13 @@ elif argv[1]=='cov-all':
             for var in ['WpreFSR']:
                 get_covariance(fname='../root/tree_histos1_'+DY+'.root', DY=DY, var=var, q=q, weights=weights, 
                                coefficients=['A0','A1','A2','A3','A4'], 
-                               fix_to_zero={'A0': [0], 'A1': [0], 'A2': [0], 'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]},
+                               fix_to_zero={'A0': [0,1], 'A1': [0], 'A2': [0,1], 'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]},
                                forced_orders={'A0': 3, 'A1': 4, 'A2': 3, 'A3': 4, 'A4': 4, 'A5': 0, 'A6':0, 'A7':0},
-                               add_stat_uncert=True, postfix='all_A0-4_forced',
+                               add_stat_uncert=True, postfix='all_A0-4_forced_v2',
                                save_corr=True, save_coeff=True, save_tree=True, save_pkl=True,
                                np_bins_template_qt = np.array([   0.,  4., 8.,  12.,  16.,  20.,  24.,  32.,   40.,   60. ]),
-                               np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2, -0.8, -0.4,  0. ,  0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5])                                   
+                               np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2, -0.8, -0.4,  0. , 
+                                                                0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5])                                   
                                )
             
 elif argv[1]=='cov':
@@ -55,15 +56,18 @@ elif argv[1]=='cov':
     for DY in ['CC_FxFx']:
         for q in ['Wplus']:
             for var in ['WpreFSR']:
-                for coeff in ['A0','A1','A2','A3','A4']: 
+                for coeff in ['A0', 'A1','A2','A3','A4'
+                              ]: 
                     get_covariance(fname='../root/tree_histos1_'+DY+'.root', DY=DY, var=var, q=q, weights=weights, 
                                    coefficients=[coeff], 
-                                   fix_to_zero={'A0': [0], 'A1': [0], 'A2': [0], 'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]},
+                                   fix_to_zero={'A0': [0,1], 'A1': [0], 'A2': [0,1], 'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]},
                                    forced_orders={'A0': 3, 'A1': 4, 'A2': 3, 'A3': 4, 'A4': 4, 'A5': 0, 'A6':0, 'A7':0},
-                                   add_stat_uncert=True, postfix=coeff,
+                                   #forced_orders={},
+                                   add_stat_uncert=True, postfix=coeff+'_TEST',
                                    save_corr=True, save_coeff=True, save_tree=True, save_pkl=True,
                                    np_bins_template_qt = np.array([   0.,  4., 8.,  12.,  16.,  20.,  24.,  32.,   40.,   60. ]),
-                                   np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2, -0.8, -0.4,  0. ,  0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5])                                   
+                                   np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2, -0.8, -0.4,  0. ,  
+                                                                    0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5])                                   
                                    #np_bins_template_y  = np.array([ -0.4,  0. , 0.4])
                                    )
 
@@ -131,10 +135,11 @@ elif argv[1]=='templates':
     #np_bins_template_qt = np.array([   0., 4.])
     #np_bins_template_y  = np.array([-0.20, 0.0, 0.20])
     merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], 
-                    masses=[80.419], coeff=['A0', 'A1', 'A2', 'A3', 'A4'], 
+                    masses=[79.919, 80.419, 80.919], coeff=['A0', 'A1', 'A2', 'A3', 'A4'], 
                     np_bins_template_qt=np_bins_template_qt, 
                     np_bins_template_y=np_bins_template_y,
-                    rebin=(2,4)
+                    rebin=(2,4),
+                    postfix='_masses'
                     )
 
     #merge_templates(charges=['Wminus'], var=['WpreFSR'], coeff_eval=['val'], 

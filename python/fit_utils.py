@@ -94,21 +94,27 @@ def Fisher_test(h=None, coeff='A0', fix_to_zero={}, fit_range=[0.0,50.0], force_
 
         pval = f.cdf(this_r.Chi2()/chi2*(ndof)/(ndof-1) , ndof, ndof-1)
         if pval<threshold:
-            print '\tOrder', order, 'chi2=', this_r.Chi2(), '/', ndof,  ' [p =', this_chi2_prob, ']',  ': pval=', pval, ' small, continue' 
+            print '\tOrder', order, 'chi2=', this_r.Chi2(), '/', ndof,  \
+                ' [p =', '{:0.3f}'.format(this_chi2_prob), ']',  ': pval=', '{:0.3f}'.format(pval), \
+                ' small, continue' 
             order += 1         
             r = this_r
             fit = this_fit
             chi2 = this_r.Chi2()        
             chi2_prob = this_chi2_prob            
         else:
-            print '\tOrder', order, 'chi2=', this_r.Chi2(), '/', ndof, ' [p =', this_chi2_prob, ']', ': pval=', pval, '>=', threshold, ', stop!'        
+            print '\tOrder', order, 'chi2=', '{:0.2f}'.format(this_r.Chi2()), '/', ndof, \
+                ' [p =', '{:0.3f}'.format(this_chi2_prob), ']', ': pval=', '{:0.3f}'.format(pval), '>=', threshold, \
+                ', stop!'        
 
     if force_order<0:
         # go back by one order: the match was at the order before!
         order -= 1
-        print '\tP-value threshold at order', order, 'with chi2=', r.Chi2(), '/', r.Ndf()
+        print '\tP-value threshold at order', order, \
+            'with chi2=', '{:0.2f}'.format(r.Chi2()), '/', r.Ndf()
     else:
-        print '\tFit performed at order ', force_order, 'with chi2=', r.Chi2(), '/', r.Ndf() 
+        print '\tFit performed at order ', force_order, \
+            'with chi2=', '{:0.2f}'.format(r.Chi2()), '/', r.Ndf() 
 
     # nice formatting of results
     res = ''
@@ -383,7 +389,8 @@ def rebin(h=None, np_bins_template_qt=np.array([]), np_bins_template_y=np.array(
     
 
 
-def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress', coefficients=['A0'], weights={}, add_stat_uncert=False, postfix='',
+def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress', 
+                   coefficients=['A0'], weights={}, add_stat_uncert=False, postfix='',
                    fix_to_zero={}, fit_range=[0.0, 50.0], threshold_chi2=0.02, verbose=False, 
                    save_corr=True, save_coeff=True, save_tree=True, save_pkl=True,
                    forced_orders={},
@@ -408,6 +415,7 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress', coeffi
 
     # map between coeff_bin_y and order of polynomial
     orders = {}
+    pvalues = {}
 
     # input file
     fin = ROOT.TFile.Open(fname,'READ')
@@ -460,6 +468,7 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress', coeffi
                     (r,order,fit,res,chi2_prob) = Fisher_test(h=hslice, coeff=coeff, fix_to_zero=fix_to_zero, fit_range=fit_range, threshold_chi2=1e-04)
 
             orders[coeff+'_'+y_bin] = order
+            pvalues[coeff+'_'+y_bin] = chi2_prob
             # protection against fit with zero parameters (cov = ())
             fit_covariances[coeff+'_'+y_bin] = r.GetCovarianceMatrix() if r.NFreeParameters()>0 else ROOT.TMatrixDSym(1)
 
@@ -544,6 +553,7 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress', coeffi
     # covariance matrix for n_vars patrameters
     print 'Making the covariance matrix...'
     cov_map = {}
+    dict_cov_map = {}
     for syst in ['pdf', 'scale', 'stat']:
         # statistical one is formed from 
         # the cov matrix of the fit
@@ -556,6 +566,8 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress', coeffi
                     y_bin1 = 'y{:03.2f}'.format(np_bins_y[y1-1])+'_'+'y{:03.2f}'.format(np_bins_y[y1])
                     for o1 in range(orders[coeff1+'_'+y_bin1]+1):
                         nuis_name1 = coeff1+'_'+y_bin1
+                        if not dict_cov_map.has_key(y_bin1+'_'+coeff1+'_'+'pol'+str(orders[coeff1+'_'+y_bin1])+'_p'+str(o1)):
+                            dict_cov_map[y_bin1+'_'+coeff1+'_'+'pol'+str(orders[coeff1+'_'+y_bin1])+'_p'+str(o1)] = vars_count1
                         vars_count2 = 0 
                         for coeff2 in coefficients:
                             for y2 in range(nbins_y/2+1, nbins_y+1):
@@ -608,6 +620,7 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress', coeffi
             y_bin = 'y{:03.2f}'.format(np_bins_y[y-1])+'_'+'y{:03.2f}'.format(np_bins_y[y])
             bin_name = coeff+'_'+y_bin
             order = orders[bin_name]
+            pvalue = pvalues[bin_name]
             print 'Taking sub-matrix: [', bin_count, ',' , bin_count+order , ']' 
             y     = results[bin_name+'_val']
             y_err = results[bin_name+'_val_err']
@@ -636,7 +649,7 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress', coeffi
                 p_rnd_pdf = np.random.multivariate_normal(p, cov_map['pdf'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] )
                 ax.plot(x, polynomial(x=x, coeff=p_rnd_pdf, order=order), 'g-', label=('PDF (replicas)' if itoy==0 else None) )
 
-            ax.plot(x, polynomial(x=x, coeff=p, order=order), 'r--', label=r'Fit ($\mathrm{pol}_{'+str(order)+'}$)', linewidth=3.0)
+            ax.plot(x, polynomial(x=x, coeff=p, order=order), 'r--', label=r'Fit ($\mathrm{pol}_{'+str(order)+'}$), $p$-value: '+'{:0.2f}'.format(pvalue), linewidth=3.0)
             ax.errorbar(np_bins_qt_mid[0:last_bin], y[0:last_bin], xerr=np_bins_qt_width[0:last_bin]/2, yerr=y_err[0:last_bin], fmt='o', color='black', label='$'+coeff[0]+'_{'+coeff[1]+'}$')
             
             plt.axis( [0.0, np_bins_qt[last_bin]] + ranges_for_coeff_zoom(q=q)[coeff] )
@@ -654,6 +667,7 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress', coeffi
     # save cov matric as np array
     cov_label = (DY+'_'+q+'_'+var+'_stat_plus_syst')+'_'+postfix
     np.save('plots/covariance_'+cov_label, cov_map['sum'])
+    pickle.dump(dict_cov_map, open('plots/covariance_dict_'+cov_label,'wb') )
 
     # save output tree
     fout.cd()

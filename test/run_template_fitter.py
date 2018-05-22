@@ -14,19 +14,23 @@ ntoys = 1
 templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job_name='TEST', mc_mass=80.419, 
                                 num_events=1.5e+06,
                                 verbose=False, 
-                                fixed_parameters=['pol', 'A', 'norm'], 
-                                use_prior=False, 
+                                fixed_parameters=['pol', 'A'], 
+                                use_prior=True, 
                                 reduce_qt=-1, 
-                                reduce_y=-3,
+                                reduce_y=-7,
                                 reduce_pt=0,
                                 fit_mode='parametric',
                                 use_prefit=False,
-                                add_nonclosure=True
+                                add_nonclosure=True,
+                                save_plots=[],
+                                print_evals=True
                                 )
 
 for i in range(ntoys):
-    templateFitter.load_data( dataset='asimov', postfix='_'+str(i) )
-    templateFitter.run(n_points=100000, run_minos=False, run_post_hesse=False)
-    templateFitter.update_results()
+    templateFitter.load_data( dataset='asimov', save_plots=[], postfix='_'+str(i) )
+    status = templateFitter.run(n_points=100000, run_minos=False, run_post_hesse=False)
+    if status>0:
+        continue
+    templateFitter.update_results(print_results=True, save_plots=['coeff'], run_postfit_toys=False)
 
 templateFitter.close()
