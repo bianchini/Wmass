@@ -394,7 +394,8 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
                    fix_to_zero={}, fit_range=[0.0, 50.0], threshold_chi2=0.02, verbose=False, 
                    save_corr=True, save_coeff=True, save_tree=True, save_pkl=True,
                    forced_orders={},
-                   np_bins_template_qt=np.array([]), np_bins_template_y=np.array([])):
+                   np_bins_template_qt=np.array([]), np_bins_template_y=np.array([]),
+                   plot_updown=False):
 
     # bins used for the (y,qt) plots
     if np_bins_template_qt.size==0 or np_bins_template_y.size==0:
@@ -643,6 +644,8 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
                 p_rnd_sum = np.random.multivariate_normal(p, cov_map['sum'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] )
                 ax.plot(x, polynomial(x=x, coeff=p_rnd_sum, order=order), 'y-', label=('PDF $\otimes$ scale $\otimes$ stats.'  if itoy==0 else None) )
             for itoy in range(ntoys):
+                if plot_updown:
+                    continue
                 p_rnd_scale = np.random.multivariate_normal(p, cov_map['scale'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] )
                 ax.plot(x, polynomial(x=x, coeff=p_rnd_scale, order=order), 'b-', label=('Scale ($\mu_R$, $\mu_F$)' if itoy==0 else None) )
             for itoy in range(ntoys):
@@ -650,8 +653,16 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
                 ax.plot(x, polynomial(x=x, coeff=p_rnd_pdf, order=order), 'g-', label=('PDF (replicas)' if itoy==0 else None) )
 
             ax.plot(x, polynomial(x=x, coeff=p, order=order), 'r--', label=r'Fit ($\mathrm{pol}_{'+str(order)+'}$), $p$-value: '+'{:0.2f}'.format(pvalue), linewidth=3.0)
-            ax.errorbar(np_bins_qt_mid[0:last_bin], y[0:last_bin], xerr=np_bins_qt_width[0:last_bin]/2, yerr=y_err[0:last_bin], fmt='o', color='black', label='$'+coeff[0]+'_{'+coeff[1]+'}$')
-            
+            ax.errorbar(np_bins_qt_mid[0:last_bin], y[0:last_bin], xerr=np_bins_qt_width[0:last_bin]/2, yerr=y_err[0:last_bin], fmt='o', color='black', label='$'+coeff[0]+'_{'+coeff[1]+'}$')            
+            if plot_updown:
+                scale_up   = data['scale'][bin_count:(bin_count+order+1), 0]
+                scale_down = data['scale'][bin_count:(bin_count+order+1), 1]            
+                ax.fill_between(x,  polynomial(x=x, coeff=scale_down, order=order), polynomial(x=x, coeff=scale_up, order=order))
+                print '********************************************'
+                for iscale,scale in enumerate(weights['scale']):  
+                    print  scale, '=>', polynomial(x=x[1:6], coeff=data['scale'][bin_count:(bin_count+order+1), iscale] , order=order)/ \
+                        polynomial(x=x[1:6], coeff=p, order=order)
+
             plt.axis( [0.0, np_bins_qt[last_bin]] + ranges_for_coeff_zoom(q=q)[coeff] )
             plt.grid(True)
 
@@ -667,7 +678,7 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
     # save cov matric as np array
     cov_label = (DY+'_'+q+'_'+var+'_stat_plus_syst')+'_'+postfix
     np.save('plots/covariance_'+cov_label, cov_map['sum'])
-    pickle.dump(dict_cov_map, open('plots/covariance_dict_'+cov_label,'wb') )
+    pickle.dump(dict_cov_map, open('plots/covariance_dict_'+cov_label+'.pkl','wb') )
 
     # save output tree
     fout.cd()

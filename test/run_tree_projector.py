@@ -53,11 +53,12 @@ elif argv[1]=='cov':
     weights = {}
     weights['scale'] = ([0] + [1,2,3,4,6,8])
     weights['pdf'] = range(9,109)
+    #weights['scale'] = ([1,2])
+    #weights['pdf'] = range(9,12)
     for DY in ['CC_FxFx']:
         for q in ['Wplus']:
             for var in ['WpreFSR']:
-                for coeff in ['A0', 'A1','A2','A3','A4'
-                              ]: 
+                for coeff in ['A0', 'A1','A2','A3','A4']: 
                     get_covariance(fname='../root/tree_histos1_'+DY+'.root', DY=DY, var=var, q=q, weights=weights, 
                                    coefficients=[coeff], 
                                    fix_to_zero={'A0': [0,1], 'A1': [0], 'A2': [0,1], 'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]},
@@ -67,8 +68,10 @@ elif argv[1]=='cov':
                                    save_corr=True, save_coeff=True, save_tree=True, save_pkl=True,
                                    np_bins_template_qt = np.array([   0.,  4., 8.,  12.,  16.,  20.,  24.,  32.,   40.,   60. ]),
                                    np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2, -0.8, -0.4,  0. ,  
-                                                                    0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5])                                   
+                                                                    0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5]),
+
                                    #np_bins_template_y  = np.array([ -0.4,  0. , 0.4])
+                                   plot_updown=False
                                    )
 
 elif argv[1]=='closure':

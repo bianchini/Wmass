@@ -52,6 +52,7 @@ class TemplateFitter:
         self.num_events = num_events 
         
         self.verbose = verbose
+        self.setup_norm_ranges = 'hardcoded'
         self.print_evals = print_evals
 
         self.fixed_parameters = fixed_parameters
@@ -271,6 +272,18 @@ class TemplateFitter:
         self.map_params[par_name+'_true'] = true
         self.n_param += 1
 
+    # return (scale, scale_range_low, scale_range_high)
+    def norm_ranges(self, par_name='', bin=()):
+
+        out = (0.1, 1., 1.)
+        if self.setup_norm_ranges=='hardcoded':
+            rel_err = max(self.mid_point(bin[1])*0.01, 0.1)
+            out = (rel_err, 1./(1.+rel_err*4), (1.+rel_err*4))
+                
+        print par_name, '=> set step at ', '{:0.2f}'.format(out[0])+'*NORM and range at ['+ \
+            '{:0.2f}'.format(out[1])+', '+'{:0.2f}'.format(out[2])+']*NORM'
+        return out
+
 
     def book_parameters(self):
 
@@ -301,12 +314,16 @@ class TemplateFitter:
             y_bin = self.get_y_bin(iy)
             for iqt in range(self.bins_qt_size):
                 qt_bin = self.get_qt_bin(iqt)
-                mc_norm = self.template[self.mc_mass_index][iqt][iy][-1].sum()/self.mc_acceptances[self.mc_mass_index][iqt][iy]
+                mc_norm = self.template[self.mc_mass_index][iqt][iy][-1].sum()/ \
+                    self.mc_acceptances[self.mc_mass_index][iqt][iy]
 
+                norm_range = self.norm_ranges(par_name=y_bin+'_'+qt_bin+'_norm', bin=(iy,iqt))
                 self.define_parameter( par_name=y_bin+'_'+qt_bin+'_norm', 
                                        start=mc_norm, 
-                                       step=mc_norm*0.1, 
-                                       par_range=(mc_norm/1.6, mc_norm*1.6),
+                                       #step=mc_norm*0.1, 
+                                       step=mc_norm*norm_range[0], 
+                                       #par_range=(mc_norm/1.6, mc_norm*1.6),
+                                       par_range=(mc_norm*norm_range[1], mc_norm*norm_range[2]),
                                        true=mc_norm,
                                        par_type='alpha')
 
@@ -412,7 +429,8 @@ class TemplateFitter:
             return (self.template[self.mc_mass_index, iqt, iy, icoeff])
         (im_low,im_high)  = (np.where(self.masses<=mass)[0][-1],  np.where(self.masses>mass)[0][0])
         r = (mass-self.masses[im_low])/(self.masses[im_high]-self.masses[im_low])
-        #print 'par[0]=', mass, '=>', self.masses[im_low], '<',mass,'<',self.masses[im_high], ' => r = ', r 
+        #if self.print_evals:
+        #    print 'par[0]=', mass, '=>', self.masses[im_low], '<',mass,'<',self.masses[im_high], ' => r = ', r 
         return (1-r)*self.template[im_low, iqt, iy, icoeff] + r*self.template[im_high, iqt, iy, icoeff]
     
 
@@ -599,14 +617,8 @@ class TemplateFitter:
 
         (val,err,errL,errH)  = (ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.) )
 
-        self.alpha = np.zeros(self.dim_alpha)
-        for ia,a in enumerate(self.map_alphas):
-            par_name = ''
-            for key,p in self.map_params.items():
-                if p==a:
-                    par_name = key
-            self.gMinuit.GetParameter(self.map_params[par_name], val, err)
-            self.alpha[ia] = val        
+        if run_postfit_toys:
+            self.get_covariance_with_toys()
 
         self.gMinuit.GetParameter(self.map_params['mass'], val, err)
         true = self.map_params['mass'+'_true']
@@ -656,7 +668,7 @@ class TemplateFitter:
                 for ib,b in enumerate(self.map_betas):
                     if b==p:              
                         idxb = ib
-                err = ROOT.Double(math.sqrt(self.Vbeta[idxb,idxb]))
+                err = ROOT.Double(math.sqrt(self.Vbeta_min[idxb,idxb]))
             pull = (val-true)/err if err>0. else 0.0
             self.fit_results[key][0] = float(val)
             self.fit_results[key][1] = -float(err)
@@ -668,9 +680,6 @@ class TemplateFitter:
                     ' true = ', '{:0.2E}'.format(true), \
                     ' pull = ', '{:0.2f}'.format(pull)
         self.out_tree.Fill()
-
-        if run_postfit_toys:
-            self.get_covariance_with_toys()
 
         if 'polynom' in save_plots:
             if self.fit_mode=='parametric':
@@ -698,7 +707,21 @@ class TemplateFitter:
         return
 
 
-    def get_covariance_with_toys(self, ntoys=500):
+    def get_covariance_with_toys(self, ntoys=400):
+
+        print "Running post-fit toys on alpha's to propagate error on beta's..."
+
+        (val,err)  = ( ROOT.Double(0.), ROOT.Double(0.) )
+
+        self.alpha = np.zeros(self.dim_alpha)
+        for ia,a in enumerate(self.map_alphas):
+            par_name = ''
+            for key,p in self.map_params.items():
+                if p==a:
+                    par_name = key
+            self.gMinuit.GetParameter(self.map_params[par_name], val, err)
+            self.alpha[ia] = val        
+
         self.Valpha = np.zeros((self.dim_alpha,self.dim_alpha))        
         for ia1,a1 in enumerate(self.map_alphas):
             par_name1 = ''
@@ -718,7 +741,11 @@ class TemplateFitter:
 
         self.print_evals = False
         for itoy in range(ntoys):
+            if itoy%10==0:
+                print '\tToy ',itoy
             rnd_alpha = np.random.multivariate_normal(self.alpha,self.Valpha)
+            if rnd_alpha[0]<self.mc_mass-0.499 or rnd_alpha[0]>self.mc_mass+0.499:
+                continue
             rnd_par = [0.]*self.n_param
             for ia,a in enumerate(self.map_alphas):
                 par_name = ''
