@@ -17,7 +17,7 @@ def polynomial(x, coeff, order):
     for p in range(order+1):
         val +=  coeff[p]*np.power(x,p)
     return val
-    
+
 # Perform Fisher-test based on chi2 of fit to pol_order: [0] + [1]*x + [2]*x*x + ... 
 # Stop when p-value of chi2>0.05
 # If force_order>=0, force order; fix_to_zero requires [0] := 0.0
@@ -640,20 +640,40 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
             fig, ax = plt.subplots()
             ntoys = 100
             x = np_bins_qt_mid_from_zero[0:last_bin+1]
+
+            y_rnd = np.zeros( (x.size, ntoys) )
+
+            # 1sigma CL from STAT+PDF+SCALE
             for itoy in range(ntoys):
                 p_rnd_sum = np.random.multivariate_normal(p, cov_map['sum'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] )
-                ax.plot(x, polynomial(x=x, coeff=p_rnd_sum, order=order), 'y-', label=('PDF $\otimes$ scale $\otimes$ stats.'  if itoy==0 else None) )
-            for itoy in range(ntoys):
-                if plot_updown:
-                    continue
-                p_rnd_scale = np.random.multivariate_normal(p, cov_map['scale'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] )
-                ax.plot(x, polynomial(x=x, coeff=p_rnd_scale, order=order), 'b-', label=('Scale ($\mu_R$, $\mu_F$)' if itoy==0 else None) )
+                y_rnd[:, itoy] = polynomial(x=x, coeff=p_rnd_sum, order=order)
+            ax.fill_between(x,  polynomial(x=x, coeff=p, order=order)-np.std(y_rnd, axis=1), polynomial(x=x, coeff=p, order=order)+np.std(y_rnd, axis=1), 
+                            color='y', linestyle='-', label=r'PDF $\oplus$ scale $\oplus$ stats.')
+
+            # 1sigma CL from scale
+            if not plot_updown:
+                for itoy in range(ntoys):
+                    p_rnd_scale = np.random.multivariate_normal(p, cov_map['scale'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] )
+                    y_rnd[:, itoy] = polynomial(x=x, coeff=p_rnd_scale, order=order)
+                ax.fill_between(x,  polynomial(x=x, coeff=p, order=order)-np.std(y_rnd, axis=1), polynomial(x=x, coeff=p, order=order)+np.std(y_rnd, axis=1), 
+                                color='b', linestyle='-', label=r'Scale ($\mu_R$, $\mu_F$)' )
+
+            # 1sigma CL from PDF
             for itoy in range(ntoys):
                 p_rnd_pdf = np.random.multivariate_normal(p, cov_map['pdf'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] )
-                ax.plot(x, polynomial(x=x, coeff=p_rnd_pdf, order=order), 'g-', label=('PDF (replicas)' if itoy==0 else None) )
+                y_rnd[:, itoy] = polynomial(x=x, coeff=p_rnd_pdf, order=order)
+            ax.fill_between(x,  polynomial(x=x, coeff=p, order=order)-np.std(y_rnd, axis=1), polynomial(x=x, coeff=p, order=order)+np.std(y_rnd, axis=1), 
+                            color='g', linestyle='-', label=r'PDF (replicas)')
 
-            ax.plot(x, polynomial(x=x, coeff=p, order=order), 'r--', label=r'Fit ($\mathrm{pol}_{'+str(order)+'}$), $p$-value: '+'{:0.2f}'.format(pvalue), linewidth=3.0)
-            ax.errorbar(np_bins_qt_mid[0:last_bin], y[0:last_bin], xerr=np_bins_qt_width[0:last_bin]/2, yerr=y_err[0:last_bin], fmt='o', color='black', label='$'+coeff[0]+'_{'+coeff[1]+'}$')            
+            # central fit
+            ax.plot(x, polynomial(x=x, coeff=p, order=order), 'r--', 
+                    label=r'Fit ($\mathrm{pol}_{'+str(order)+'}$), $p$-value: '+'{:0.2f}'.format(pvalue), linewidth=3.0)
+
+            # histogram
+            ax.errorbar(np_bins_qt_mid[0:last_bin], y[0:last_bin], 
+                        xerr=np_bins_qt_width[0:last_bin]/2, 
+                        yerr=y_err[0:last_bin], fmt='o', color='black', label='$'+coeff[0]+'_{'+coeff[1]+'}$')            
+
             if plot_updown:
                 scale_up   = data['scale'][bin_count:(bin_count+order+1), 0]
                 scale_down = data['scale'][bin_count:(bin_count+order+1), 1]            
@@ -676,9 +696,11 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
             bin_count += (order+1)
 
     # save cov matric as np array
-    cov_label = (DY+'_'+q+'_'+var+'_stat_plus_syst')+'_'+postfix
-    np.save('plots/covariance_'+cov_label, cov_map['sum'])
-    pickle.dump(dict_cov_map, open('plots/covariance_dict_'+cov_label+'.pkl','wb') )
+    for key,p in cov_map.items():
+        print 'Save covariance matrix for', key
+        cov_label = (DY+'_'+q+'_'+var+'_'+key)+'_'+postfix
+        np.save('plots/covariance_'+cov_label, p)
+    pickle.dump(dict_cov_map, open('plots/covariance_dict_'+(DY+'_'+q+'_'+var)+'_'+postfix+'.pkl','wb') )
 
     # save output tree
     fout.cd()

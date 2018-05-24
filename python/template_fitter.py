@@ -36,10 +36,12 @@ class TemplateFitter:
                  verbose=True, 
                  fixed_parameters=[],
                  use_prior=False,
+                 prior_options='sum',
                  reduce_qt=-1,
                  reduce_y=-1,
                  reduce_pt=0,
                  fit_mode='parametric',
+                 interpolation='linear',
                  use_prefit=False,
                  add_nonclosure=True,
                  save_plots=['mc', 'of'],
@@ -57,8 +59,10 @@ class TemplateFitter:
 
         self.fixed_parameters = fixed_parameters
         self.interpolate_mass = ('mass' not in fixed_parameters)
+        self.interpolation = interpolation
 
         self.use_prior = use_prior
+        self.prior_options = prior_options
         self.mc_mass = mc_mass
         self.fit_mode = fit_mode
         self.map_params = {}
@@ -67,7 +71,7 @@ class TemplateFitter:
 
         self.update=True
 
-        self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced_v2.pkl', 'r'))        
+        self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced_v3.pkl', 'r'))        
 
         templates = np.load(self.in_dir+'template_'+charge+'_'+var+'_val_masses.npz')
         templates_files = {'template': 0, 'masses': 1, 'bins_qt' : 2, 
@@ -111,6 +115,13 @@ class TemplateFitter:
 
         self.mc_mass_index = np.where(self.masses==mc_mass)[0][0]
         print 'MC mass at index...', self.mc_mass_index
+
+        if self.interpolation=='quadratic':
+            M = np.zeros((self.masses_size,self.masses_size))
+            for im1,m1 in enumerate(self.masses):
+                for im2,m2 in enumerate(self.masses):
+                    M[im1,im2]= math.pow(m1,im2)
+            self.Minv = np.linalg.inv(M)
 
         # remove UL from all templates
         for icoeff,coeff in enumerate(self.coefficients):
@@ -167,14 +178,22 @@ class TemplateFitter:
                 continue
             self.fit_results[key] = array( 'f', 5*[ 0.0 ] ) 
             self.out_tree.Branch(key, self.fit_results[key], key+'[5]/F')
+            # add the bin-by-bin coefficients
+            if self.fit_mode=='parametric' and '_norm' in key:
+                for coeff in self.coefficients:
+                    name = key[:-5]+'_'+coeff
+                    self.fit_results[name] = array( 'f', 5*[ 0.0 ] )
+                    self.out_tree.Branch(name, self.fit_results[name], name+'[5]/F')
+
         self.fit_results['minuit'] = array( 'f', 6*[ 0.0 ] ) 
         self.out_tree.Branch('minuit', self.fit_results['minuit'], 'minuit[6]/F')
 
         self.build_aux_matrices()
 
         if self.use_prior:
-            self.reshape_covariance( cov=np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_stat_plus_syst_all_A0-4_forced_v2.npy', 'r')), 
-                                     dictionary=pickle.load(open(self.in_dir+'covariance_dict_'+DY+'_'+charge+'_'+var+'_stat_plus_syst_all_A0-4_forced_v2.pkl', 'r')) )
+            print 'Use prior...'+self.prior_options
+            self.reshape_covariance( cov=np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_'+self.prior_options+'_all_A0-4_forced_v3.npy', 'r')), 
+                                     dictionary=pickle.load(open(self.in_dir+'covariance_dict_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced_v3.pkl', 'r')) )
         
 
     def reshape_covariance(self, cov=np.array([]), dictionary={}):
@@ -197,6 +216,9 @@ class TemplateFitter:
                 #if ib1==ib2:
                 #    print par_name1, '=' , self.beta_prior[ib1], '+/-', math.sqrt(self.Vbeta_prior[ib1,ib1])
         self.Vinv_prior = np.linalg.inv(V_prior)
+        if 'uncorrelated' in self.prior_options:
+            print 'Removing correlations...'
+            self.Vinv_prior = np.linalg.inv(np.diag(np.diag(V_prior)))
 
 
     def run_closure_tests(self, save_plots=['mc-sum', 'sum']):
@@ -305,7 +327,7 @@ class TemplateFitter:
 
         # mass
         self.define_parameter( par_name='mass', start=self.mc_mass, step=0.100, 
-                               par_range=(self.mc_mass-0.499,self.mc_mass+0.499), 
+                               par_range=(self.mc_mass-1.0,self.mc_mass+1.0), 
                                true=self.mc_mass, 
                                par_type='alpha' )
 
@@ -370,15 +392,15 @@ class TemplateFitter:
             if o!=0.:
                 valid_orders.append(io)
         
-        #if coeff in ['A0', 'A2']:
-        #    return ([2,3], 3)
+        #if coeff in ['A0','A1','A2','A3','A4']:
+        #    return ([0,1,2], 2)
             #return ([], 0)
         #if coeff in ['A1', 'A3']:
         #    return ([1,2,3], 3)
             #return ([], 0)
-        #elif coeff in ['A4']:
-        #    return ([0,1,2,3,4], 4)                            
-            #return ([0,1,2], 2)   
+        #if coeff in ['A4']:
+        #    return ([0], 0)                            
+        #    return ([0,1], 1)   
 
         return (valid_orders, order)                
 
@@ -412,7 +434,6 @@ class TemplateFitter:
                                 for o in valid_orders:
                                     if iy1==iy2 and coeff1==coeff2:
                                         self.K[idx_A, idx_beta] += math.pow( self.mid_point(iqt), o)
-                                    #self.map_betas[idx_beta] = self.map_params[y_bin2+'_'+coeff2+'_'+'pol'+str(order)+'_p'+str(o)]
                                     idx_beta += 1
                         idx_A += 1
                 
@@ -427,12 +448,14 @@ class TemplateFitter:
     def interpolate(self, mass, iqt, iy, icoeff):
         if not self.interpolate_mass:
             return (self.template[self.mc_mass_index, iqt, iy, icoeff])
-        (im_low,im_high)  = (np.where(self.masses<=mass)[0][-1],  np.where(self.masses>mass)[0][0])
-        r = (mass-self.masses[im_low])/(self.masses[im_high]-self.masses[im_low])
-        #if self.print_evals:
-        #    print 'par[0]=', mass, '=>', self.masses[im_low], '<',mass,'<',self.masses[im_high], ' => r = ', r 
-        return (1-r)*self.template[im_low, iqt, iy, icoeff] + r*self.template[im_high, iqt, iy, icoeff]
-    
+        if self.interpolation=='linear':
+            (im_low,im_high)  = (np.where(self.masses<=mass)[0][-1],  np.where(self.masses>mass)[0][0])
+            r = (mass-self.masses[im_low])/(self.masses[im_high]-self.masses[im_low])
+            return (1-r)*self.template[im_low, iqt, iy, icoeff] + r*self.template[im_high, iqt, iy, icoeff]
+        elif self.interpolation=='quadratic':
+            theta = np.einsum('ij,jkl->ikl', self.Minv, self.template[:, iqt, iy, icoeff, :, :])
+            return np.einsum('ikl,i', theta, np.array([1.0, mass, mass*mass]))
+
 
     def fcn(self, npar, gin, f, par, iflag ):
         nll = self.chi2(par=par)
@@ -679,21 +702,23 @@ class TemplateFitter:
                 print key+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
                     ' true = ', '{:0.2E}'.format(true), \
                     ' pull = ', '{:0.2f}'.format(pull)
-        self.out_tree.Fill()
 
         if 'polynom' in save_plots:
             if self.fit_mode=='parametric':
                 self.plot_results_y_polynom(var='resolution')        
-                self.plot_results_y_polynom(var='value')        
+                #self.plot_results_y_polynom(var='value')        
 
         if 'coeff' in save_plots:
             if self.fit_mode=='parametric':
                 rnd_As = self.plot_results_y_qt_coeff(var='resolution', input_toys=np.array([]))
-                self.plot_results_y_qt_coeff(var='value', input_toys=rnd_As)
+                #self.plot_results_y_qt_coeff(var='value', input_toys=rnd_As)
 
         if 'norm' in save_plots:
             self.plot_results_y_qt(var='resolution')        
-            self.plot_results_y_qt(var='pull')        
+            #self.plot_results_y_qt(var='pull')        
+
+        # fill the tree
+        self.out_tree.Fill()
 
         # reset parameters
         print 'Reset parameters to their initial values'
@@ -707,7 +732,7 @@ class TemplateFitter:
         return
 
 
-    def get_covariance_with_toys(self, ntoys=400):
+    def get_covariance_with_toys(self, ntoys=200):
 
         print "Running post-fit toys on alpha's to propagate error on beta's..."
 
@@ -741,8 +766,8 @@ class TemplateFitter:
 
         self.print_evals = False
         for itoy in range(ntoys):
-            if itoy%10==0:
-                print '\tToy ',itoy
+            if itoy%50==0:
+                print '\tToy ',itoy, '/', ntoys
             rnd_alpha = np.random.multivariate_normal(self.alpha,self.Valpha)
             if rnd_alpha[0]<self.mc_mass-0.499 or rnd_alpha[0]>self.mc_mass+0.499:
                 continue
@@ -867,6 +892,12 @@ class TemplateFitter:
             for iqt in range(self.bins_qt_size):
                 qt_bin = self.get_qt_bin(iqt)                               
                 for icoeff,coeff in enumerate(self.coefficients):
+                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][0] = mean_A[idx_A] 
+                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][1] = -math.sqrt(cov_A[idx_A,idx_A])
+                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][2] = +math.sqrt(cov_A[idx_A,idx_A])
+                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][3] = self.res_coeff[coeff+'_'+y_bin+'_val'][iqt]
+                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][4] = \
+                        (mean_A[idx_A]-self.res_coeff[coeff+'_'+y_bin+'_val'][iqt])/math.sqrt(cov_A[idx_A,idx_A])
                     val = 0.
                     if var=='resolution':
                         val = math.sqrt(cov_A[idx_A,idx_A])
@@ -877,6 +908,10 @@ class TemplateFitter:
 
         for icoeff,coeff in enumerate(self.coefficients):
             c.cd(icoeff+1)
+            if var=='resolution':
+                ROOT.gPad.SetLogz()
+                histos[coeff].SetMinimum(1e-03)
+                histos[coeff].SetMaximum(5.)
             c.SetRightMargin(0.15)
             histos[coeff].Draw('COLZ' if var=='value' else 'COLZ')            
         
