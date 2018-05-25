@@ -7,15 +7,21 @@ from sys import argv
  
 from template_fitter import TemplateFitter
 
-#np.random.seed(0)
+np.random.seed(0)
 
-ntoys = 200
+ntoys = 1
 
-templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job_name='TEST_1', mc_mass=80.419, 
+prior_options = {'prior'  : 'sum', 
+                 'select' : ['A2', 'A3'], 
+                 'inflate': 1e+03, 
+                 'uncorrelate' : False}
+# prior_options = {}
+
+templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job_name='TEST_p', mc_mass=80.419, 
                                 num_events=1.5e+06,
                                 verbose=False, 
                                 fixed_parameters=['pol', 'A'], 
-                                prior_options=[],
+                                prior_options=prior_options,
                                 reduce_qt=-1, 
                                 reduce_y=-8,
                                 reduce_pt=0,
@@ -24,14 +30,14 @@ templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job
                                 use_prefit=False,
                                 add_nonclosure=True,
                                 save_plots=[],
-                                print_evals=False
+                                print_evals=True
                                 )
 
 for i in range(ntoys):
-    templateFitter.load_data( dataset='random', save_plots=[], postfix='_'+str(i) )
+    templateFitter.load_data( dataset='asimov', save_plots=[], postfix='_'+str(i) )
     status = templateFitter.run(n_points=100000, run_minos=False, run_post_hesse=False)
     if status>0:
         continue
-    templateFitter.update_results(print_results=False, save_plots=[], propagate_covariance=True)
+    templateFitter.update_results(print_results=False, save_plots=[], propagate_covariance=False)
 
 templateFitter.close()

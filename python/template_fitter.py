@@ -191,8 +191,8 @@ class TemplateFitter:
         self.build_aux_matrices()
 
         if self.use_prior:
-            print 'Use prior...'+self.prior_options[0]
-            self.reshape_covariance( cov=np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_'+self.prior_options[0]+'_all_A0-4_forced_v3.npy', 'r')), 
+            print 'Use prior...'+self.prior_options['prior']
+            self.reshape_covariance( cov=np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_'+self.prior_options['prior']+'_all_A0-4_forced_v3.npy', 'r')), 
                                      dictionary=pickle.load(open(self.in_dir+'covariance_dict_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced_v3.pkl', 'r')) )
         
 
@@ -205,26 +205,39 @@ class TemplateFitter:
                 if p1==b1:
                     par_name1 = key1
             self.beta_prior[ib1] = self.map_params[par_name1+'_true']
+
+            match1 = any([sel in par_name1 for sel in self.prior_options['select']]) or self.prior_options['select']==[]
+
             idx1 = dictionary[par_name1]
             for ib2,b2 in enumerate(self.map_betas):
                 par_name2 = ''
                 for key2,p2 in self.map_params.items():                        
                     if p2==b2:
                         par_name2 = key2
+
+                match2 = any([sel in par_name2 for sel in self.prior_options['select']]) or self.prior_options['select']==[]
+
                 idx2 = dictionary[par_name2]
                 V_prior[ib1,ib2] = cov[idx1,idx2]
 
                 #if ('A4' in par_name1 or 'A4' in par_name2):
                 #    V_prior[ib1,ib2] *= (1e+06 if 'A4' in par_name1 and 'A4' in par_name2 else 1e+03)
 
+                if not match1:
+                    inflate = math.pow(self.prior_options['inflate'], 2.0 if not match2 else 1.0)
+                    if self.verbose:
+                        print 'Inflate V_prior['+par_name1+', '+par_name2+'] by... ', inflate
+                    V_prior[ib1,ib2] *= inflate
+
                 #if ib1==ib2:
                 #    print par_name1, '=' , self.beta_prior[ib1], '+/-', math.sqrt(self.Vbeta_prior[ib1,ib1])
 
-        self.plot_cov_matrix(n_free=V_prior.shape[0], cov=V_prior, name='prior_'+self.prior_options[0])
-        self.Vinv_prior = np.linalg.inv(V_prior)
-        if 'uncorrelated' in self.prior_options:
+        self.plot_cov_matrix(n_free=V_prior.shape[0], cov=V_prior, name='prior_'+self.prior_options['prior'])
+        if self.prior_options['uncorrelate']:
             print 'Removing correlations...'
             self.Vinv_prior = np.linalg.inv(np.diag(np.diag(V_prior)))
+        else:
+            self.Vinv_prior = np.linalg.inv(V_prior)
 
 
     def run_closure_tests(self, save_plots=['mc-sum', 'sum']):
@@ -596,8 +609,8 @@ class TemplateFitter:
 
         if run_minos:
             print 'Running MINOS on parameter...mass'
-            (massL, massH) =  (ROOT.Double(0.), ROOT.Double(0.) )
-            self.gMinuit.mnmnot(1, 1, massH, massL)
+            (self.massL, self.massH) =  (ROOT.Double(0.), ROOT.Double(0.) )
+            self.gMinuit.mnmnot(1, 1, self.massH, self.massL)
 
         # stop the clock
         clock -= time.time()
@@ -652,8 +665,8 @@ class TemplateFitter:
         true = self.map_params['mass'+'_true']
         pull = (val-true)/err if err>0. else 0.0
         self.fit_results['mass'][0] = float(val)
-        self.fit_results['mass'][1] = -float(err)
-        self.fit_results['mass'][2] = float(err)
+        self.fit_results['mass'][1] = -float(err) if not hasattr(self, 'massL') else self.massL-val
+        self.fit_results['mass'][2] = float(err)  if not hasattr(self, 'massH') else self.massH-val
         self.fit_results['mass'][3] = float(true)
         self.fit_results['mass'][4] = float(pull)
         if print_results:
