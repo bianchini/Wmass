@@ -35,8 +35,7 @@ class TemplateFitter:
                  num_events=-1,
                  verbose=True, 
                  fixed_parameters=[],
-                 use_prior=False,
-                 prior_options='sum',
+                 prior_options=['sum'],
                  reduce_qt=-1,
                  reduce_y=-1,
                  reduce_pt=0,
@@ -61,8 +60,9 @@ class TemplateFitter:
         self.interpolate_mass = ('mass' not in fixed_parameters)
         self.interpolation = interpolation
 
-        self.use_prior = use_prior
         self.prior_options = prior_options
+        self.use_prior = len(prior_options)>0
+
         self.mc_mass = mc_mass
         self.fit_mode = fit_mode
         self.map_params = {}
@@ -191,8 +191,8 @@ class TemplateFitter:
         self.build_aux_matrices()
 
         if self.use_prior:
-            print 'Use prior...'+self.prior_options
-            self.reshape_covariance( cov=np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_'+self.prior_options+'_all_A0-4_forced_v3.npy', 'r')), 
+            print 'Use prior...'+self.prior_options[0]
+            self.reshape_covariance( cov=np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_'+self.prior_options[0]+'_all_A0-4_forced_v3.npy', 'r')), 
                                      dictionary=pickle.load(open(self.in_dir+'covariance_dict_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced_v3.pkl', 'r')) )
         
 
@@ -213,8 +213,14 @@ class TemplateFitter:
                         par_name2 = key2
                 idx2 = dictionary[par_name2]
                 V_prior[ib1,ib2] = cov[idx1,idx2]
+
+                #if ('A4' in par_name1 or 'A4' in par_name2):
+                #    V_prior[ib1,ib2] *= (1e+06 if 'A4' in par_name1 and 'A4' in par_name2 else 1e+03)
+
                 #if ib1==ib2:
                 #    print par_name1, '=' , self.beta_prior[ib1], '+/-', math.sqrt(self.Vbeta_prior[ib1,ib1])
+
+        self.plot_cov_matrix(n_free=V_prior.shape[0], cov=V_prior, name='prior_'+self.prior_options[0])
         self.Vinv_prior = np.linalg.inv(V_prior)
         if 'uncorrelated' in self.prior_options:
             print 'Removing correlations...'
@@ -300,7 +306,7 @@ class TemplateFitter:
         out = (0.1, 1., 1.)
         if self.setup_norm_ranges=='hardcoded':
             rel_err = max(self.mid_point(bin[1])*0.01, 0.1)
-            out = (rel_err, 1./(1.+rel_err*4), (1.+rel_err*4))
+            out = (rel_err, (1-rel_err*4), (1+rel_err*4))
                 
         print par_name, '=> set step at ', '{:0.2f}'.format(out[0])+'*NORM and range at ['+ \
             '{:0.2f}'.format(out[1])+', '+'{:0.2f}'.format(out[2])+']*NORM'
@@ -342,9 +348,7 @@ class TemplateFitter:
                 norm_range = self.norm_ranges(par_name=y_bin+'_'+qt_bin+'_norm', bin=(iy,iqt))
                 self.define_parameter( par_name=y_bin+'_'+qt_bin+'_norm', 
                                        start=mc_norm, 
-                                       #step=mc_norm*0.1, 
                                        step=mc_norm*norm_range[0], 
-                                       #par_range=(mc_norm/1.6, mc_norm*1.6),
                                        par_range=(mc_norm*norm_range[1], mc_norm*norm_range[2]),
                                        true=mc_norm,
                                        par_type='alpha')
@@ -534,6 +538,7 @@ class TemplateFitter:
     
     def load_data(self, dataset='asimov',  save_plots=['data', 'data-overflow'], postfix=''):
         
+        self.dataset_type=dataset
         self.data = np.zeros( self.mc.shape )
         if dataset=='asimov':
             self.data += copy.deepcopy(self.mc)
@@ -633,15 +638,15 @@ class TemplateFitter:
 
         return 0
 
-    def update_results(self, print_results=True, save_plots=['coeff', 'polynom', 'norm', 'cov'], run_postfit_toys=False):
+    def update_results(self, print_results=True, save_plots=['coeff', 'polynom', 'norm', 'cov'], propagate_covariance=False):
 
         if 'cov' in save_plots:
-            self.plot_cov_matrix()
+            self.plot_cov_matrix(n_free=self.gMinuit.GetNumFreePars(), cov=self.TMatrix, name='fit')
 
         (val,err,errL,errH)  = (ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.), ROOT.Double(0.) )
 
-        if run_postfit_toys:
-            self.get_covariance_with_toys()
+        if propagate_covariance:
+            self.propagate_covariance()
 
         self.gMinuit.GetParameter(self.map_params['mass'], val, err)
         true = self.map_params['mass'+'_true']
@@ -703,19 +708,45 @@ class TemplateFitter:
                     ' true = ', '{:0.2E}'.format(true), \
                     ' pull = ', '{:0.2f}'.format(pull)
 
+
+        print 'Propagate errors to Ai'
+        rnd_As = np.zeros( (self.dim_A, 500) )
+        for itoy in range(500):
+            rnd_betas = np.random.multivariate_normal(self.beta_min, self.Vbeta_min) 
+            rnd_A = np.linalg.multi_dot([self.K, rnd_betas])
+            rnd_As[:, itoy] = rnd_A
+        (cov_A, mean_A) = (np.cov(rnd_As), rnd_As.mean(axis=1))
+        idx_A = 0
+        for iy in range(self.bins_y_size):
+            y_bin = self.get_y_bin(iy)
+            for iqt in range(self.bins_qt_size):
+                qt_bin = self.get_qt_bin(iqt)                               
+                for icoeff,coeff in enumerate(self.coefficients):
+                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][0] = mean_A[idx_A] 
+                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][1] = -math.sqrt(cov_A[idx_A,idx_A])
+                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][2] = +math.sqrt(cov_A[idx_A,idx_A])
+                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][3] = self.res_coeff[coeff+'_'+y_bin+'_val'][iqt]
+                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][4] = \
+                        (mean_A[idx_A]-self.res_coeff[coeff+'_'+y_bin+'_val'][iqt])/math.sqrt(cov_A[idx_A,idx_A])
+                    if print_results:
+                        print y_bin+'_'+qt_bin+'_'+coeff+' = ', '{:0.2E}'.format(self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][0]), '+/-', \
+                            '{:0.2E}'.format(self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][2]), \
+                            ' true = ', '{:0.2E}'.format(self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][3]), \
+                            ' pull = ', '{:0.2f}'.format(self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][4] )
+                    idx_A += 1
+
+
         if 'polynom' in save_plots:
             if self.fit_mode=='parametric':
                 self.plot_results_y_polynom(var='resolution')        
-                #self.plot_results_y_polynom(var='value')        
 
         if 'coeff' in save_plots:
             if self.fit_mode=='parametric':
-                rnd_As = self.plot_results_y_qt_coeff(var='resolution', input_toys=np.array([]))
-                #self.plot_results_y_qt_coeff(var='value', input_toys=rnd_As)
+                self.plot_results_y_qt_coeff(var='resolution')
+                self.plot_results_coeff_vs_qt()
 
         if 'norm' in save_plots:
-            self.plot_results_y_qt(var='resolution')        
-            #self.plot_results_y_qt(var='pull')        
+            self.plot_results_y_qt_norm(var='resolution')        
 
         # fill the tree
         self.out_tree.Fill()
@@ -732,7 +763,7 @@ class TemplateFitter:
         return
 
 
-    def get_covariance_with_toys(self, ntoys=200):
+    def propagate_covariance(self, ntoys=200):
 
         print "Running post-fit toys on alpha's to propagate error on beta's..."
 
@@ -780,7 +811,7 @@ class TemplateFitter:
             self.chi2(par=rnd_par)
             rnd_betas[:, itoy] = self.beta
 
-        self.print_evals = True
+        self.print_evals = False
         cov_betas = np.cov(rnd_betas)
         self.Vbeta_min += cov_betas
 
@@ -805,7 +836,7 @@ class TemplateFitter:
         plt.savefig(self.out_dir+'snapshot_'+tag+'_'+self.job_name+'.png')
         plt.close('all')
 
-    def plot_results_y_qt(self, var='resolution'):
+    def plot_results_y_qt_norm(self, var='resolution'):
         c = ROOT.TCanvas("canvas", "canvas", 600, 600) 
         c.SetRightMargin(0.15)
         h2 = ROOT.TH2F('norm_'+var, var+';|y|;q_{T} (GeV)',  
@@ -858,10 +889,9 @@ class TemplateFitter:
             h2.Draw("COLZ")            
         
         c.cd()
-        c.SaveAs(self.out_dir+'polynom_'+var+'_'+self.job_name+'.png')
-        
+        c.SaveAs(self.out_dir+'polynom_'+var+'_'+self.job_name+'.png')            
 
-    def plot_results_y_qt_coeff(self, var='resolution', input_toys=np.array([])):
+    def plot_results_y_qt_coeff(self, var='resolution'):
         histos = {}
         for icoeff,coeff in enumerate(self.coefficients):
             histos[coeff] = ROOT.TH2F('coeff_'+coeff+var, coeff+' '+var+';|y|;p_{n} (GeV^{-n})',  
@@ -873,38 +903,17 @@ class TemplateFitter:
         c.Divide(3,2)
         ROOT.gStyle.SetPaintTextFormat('4.3f')
 
-        if input_toys.size>0:
-            rnd_As = copy.deepcopy(input_toys)
-        else:
-            rnd_As = np.zeros( (self.dim_A, 500) )
-            print 'Generating 500 toys...'
-            for itoy in range(500):
-                rnd_betas = np.random.multivariate_normal(self.beta_min, self.Vbeta_min) 
-                rnd_A = np.linalg.multi_dot([self.K, rnd_betas])
-                rnd_As[:, itoy] = rnd_A
-
-        cov_A = np.cov(rnd_As)
-        mean_A = rnd_As.mean(axis=1)
-
-        idx_A = 0
         for iy in range(self.bins_y_size):
             y_bin = self.get_y_bin(iy)
             for iqt in range(self.bins_qt_size):
                 qt_bin = self.get_qt_bin(iqt)                               
                 for icoeff,coeff in enumerate(self.coefficients):
-                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][0] = mean_A[idx_A] 
-                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][1] = -math.sqrt(cov_A[idx_A,idx_A])
-                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][2] = +math.sqrt(cov_A[idx_A,idx_A])
-                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][3] = self.res_coeff[coeff+'_'+y_bin+'_val'][iqt]
-                    self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][4] = \
-                        (mean_A[idx_A]-self.res_coeff[coeff+'_'+y_bin+'_val'][iqt])/math.sqrt(cov_A[idx_A,idx_A])
                     val = 0.
                     if var=='resolution':
-                        val = math.sqrt(cov_A[idx_A,idx_A])
+                        val = self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][2]
                     elif var=='value':
-                        val = mean_A[idx_A]
+                        val = self.fit_results[y_bin+'_'+qt_bin+'_'+coeff][0]
                     histos[coeff].SetBinContent(iy+1,iqt+1, val  )
-                    idx_A += 1
 
         for icoeff,coeff in enumerate(self.coefficients):
             c.cd(icoeff+1)
@@ -917,22 +926,84 @@ class TemplateFitter:
         
         c.cd()
         c.SaveAs(self.out_dir+'coeff_'+var+'_'+self.job_name+'.png')
-        return rnd_As
+
+
+    def plot_results_coeff_vs_qt(self):
+        from fit_utils import polynomial
+
+        idx_beta = 0
+        for iy in range(self.bins_y_size):
+            y_bin = self.get_y_bin(iy)
+            for icoeff,coeff in enumerate(self.coefficients):
+
+                plt.figure()
+                fig, ax = plt.subplots()
+
+                #x = self.bins_qt
+                x = np.array( [0.] + [ (self.bins_qt[iqt]+self.bins_qt[iqt+1])*0.5 for iqt in range(self.bins_qt_size)] + [self.bins_qt[-1]] )
+                
+                (valid_orders, order) = self.get_orders(coeff, y_bin)
+                p = np.zeros(order+1)
+                cov = np.zeros((order+1,order+1))
+                idx_o1 = 0
+                for o1 in range(order+1):
+                    if o1 not in valid_orders:
+                        continue         
+                    idx_o2 = 0
+                    for o2 in range(order+1):
+                        if o2 not in valid_orders:
+                            continue                             
+                        cov[o1,o2] = self.Vbeta_min[idx_beta+idx_o1,idx_beta+idx_o2]
+                        idx_o2 += 1
+                    p[o1] = self.fit_results[y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o1)][0]                    
+                    idx_o1 += 1
+                idx_beta += len(valid_orders)
+
+                ntoys = 200
+                y_rnd = np.zeros( (x.size, ntoys) )                
+                for itoy in range(ntoys):
+                    p_rnd = np.random.multivariate_normal(p, cov)
+                    y_rnd[:, itoy] = polynomial(x=x, coeff=p_rnd, order=order)
+
+                ax.fill_between(x,  polynomial(x=x, coeff=p, order=order)-np.std(y_rnd, axis=1), 
+                                polynomial(x=x, coeff=p, order=order)+np.std(y_rnd, axis=1), 
+                                color='y', linestyle='-', label=r'$\pm1\sigma$')
+                
+                ax.plot(x, polynomial(x=x, coeff=p, order=order), 'r--', 
+                        label=r'Fit ($\mathrm{pol}_{'+str(order)+'}$)', linewidth=3.0)
+
+                ax.errorbar([ (self.bins_qt[iqt]+self.bins_qt[iqt+1])*0.5 for iqt in range(self.bins_qt_size)], 
+                            self.res_coeff[coeff+'_'+y_bin+'_val'][0:self.bins_qt_size], 
+                            xerr=[(self.bins_qt[iqt+1]-self.bins_qt[iqt])*0.5 for iqt in range(self.bins_qt_size)], 
+                            yerr=self.res_coeff[coeff+'_'+y_bin+'_val_err'][0:self.bins_qt_size],
+                            fmt='o', color='black', label='$'+coeff[0]+'_{'+coeff[1]+'}$ true')            
+
+                plt.axis( [0.0, self.bins_qt[-1], -2, 2] )
+                plt.grid(True)
+                legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
+                plt.title('Dataset: '+self.dataset_type+', $|y| \in ['+y_bin[1:5]+','+y_bin[7:11]+']$', fontsize=20)
+                plt.xlabel('$q_{T}$ (GeV)', fontsize=20)
+                plt.ylabel('$'+coeff[0]+'_{'+coeff[1]+'}$', fontsize=20)
+                plt.show()
+                plt.savefig(self.out_dir+'/coefficient_'+coeff+'_'+y_bin+'_'+self.job_name+'_fit.png')
+                plt.close('all')            
 
                 
-    def plot_cov_matrix(self):
+    def plot_cov_matrix(self, n_free=0, cov=None, name=''):
         c = ROOT.TCanvas("canvas", "canvas", 600, 600) 
-        n_free = self.gMinuit.GetNumFreePars()
         h2 = ROOT.TH2F('cov', '', n_free, 0, n_free, n_free, 0, n_free)
         h2.SetStats(0) 
         for i in range(n_free):
             for j in range(n_free):
-                rho_ij = self.TMatrix(i,j)/math.sqrt(self.TMatrix(i,i)*self.TMatrix(j,j)) \
-                    if self.TMatrix(i,i)>0.0 and self.TMatrix(j,j)>0.0 else 0.0
+                if isinstance(cov, np.ndarray):
+                    rho_ij = cov[i,j]/math.sqrt(cov[i,i]*cov[j,j]) \
+                        if cov[i,i]>0.0 and cov[j,j]>0.0 else 0.0
+                else:
+                    rho_ij = cov(i,j)/math.sqrt(cov(i,i)*cov(j,j)) \
+                        if cov(i,i)>0.0 and cov(j,j)>0.0 else 0.0                    
                 h2.SetBinContent(i+1, j+1, rho_ij )
         h2.Draw("COLZ")
-        c.SaveAs(self.out_dir+'covariance_'+self.job_name+'.png')
-        #c.SaveAs(self.out_dir+'covariance_'+self.job_name+'.C')
+        c.SaveAs(self.out_dir+'covariance_'+name+'_'+self.job_name+'.png')
         c.IsA().Destructor( c )
 
 
