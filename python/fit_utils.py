@@ -636,11 +636,15 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
                 print cov_map['pdf'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] 
                 print cov_map['stat'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] 
 
-            plt.figure()
-            fig, ax = plt.subplots()
+
+            plt.figure()            
+
+            import matplotlib.gridspec as gridspec
+            gs = gridspec.GridSpec(6, 6)
+            (ax, ax1, ax2) = (plt.subplot(gs[:-2,:]), plt.subplot(gs[-2,:]),  plt.subplot(gs[-1,:]))
+
             ntoys = 100
             x = np_bins_qt_mid_from_zero[0:last_bin+1]
-
             y_rnd = np.zeros( (x.size, ntoys) )
 
             # 1sigma CL from STAT+PDF+SCALE
@@ -649,14 +653,27 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
                 y_rnd[:, itoy] = polynomial(x=x, coeff=p_rnd_sum, order=order)
             ax.fill_between(x,  polynomial(x=x, coeff=p, order=order)-np.std(y_rnd, axis=1), polynomial(x=x, coeff=p, order=order)+np.std(y_rnd, axis=1), 
                             color='y', linestyle='-', label=r'PDF $\oplus$ scale $\oplus$ stats.')
+            ax1.fill_between(x[1:], -np.std(y_rnd[1:,:], axis=1)/polynomial(x=x[1:], coeff=p, order=order), +np.std(y_rnd[1:,:], axis=1)/polynomial(x=x[1:], coeff=p, order=order), 
+                             color='y', linestyle='-')
 
             # 1sigma CL from scale
-            if not plot_updown:
+            if plot_updown:
+                scale_up   = data['scale'][bin_count:(bin_count+order+1), 0]
+                scale_down = data['scale'][bin_count:(bin_count+order+1), 1]            
+                ax.fill_between(x,  polynomial(x=x, coeff=scale_down, order=order), polynomial(x=x, coeff=scale_up, order=order))
+                print '********************************************'
+                for iscale,scale in enumerate(weights['scale']):  
+                    print  scale, '=>', polynomial(x=x[1:6], coeff=data['scale'][bin_count:(bin_count+order+1), iscale] , order=order)/ \
+                        polynomial(x=x[1:6], coeff=p, order=order)
+            else:
                 for itoy in range(ntoys):
                     p_rnd_scale = np.random.multivariate_normal(p, cov_map['scale'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] )
                     y_rnd[:, itoy] = polynomial(x=x, coeff=p_rnd_scale, order=order)
                 ax.fill_between(x,  polynomial(x=x, coeff=p, order=order)-np.std(y_rnd, axis=1), polynomial(x=x, coeff=p, order=order)+np.std(y_rnd, axis=1), 
                                 color='b', linestyle='-', label=r'Scale ($\mu_R$, $\mu_F$)' )
+                ax1.fill_between(x[1:], -np.std(y_rnd[1:,:], axis=1)/polynomial(x=x[1:], coeff=p, order=order), +np.std(y_rnd[1:,:], axis=1)/polynomial(x=x[1:], coeff=p, order=order), 
+                                 color='b', linestyle='-')
+
 
             # 1sigma CL from PDF
             for itoy in range(ntoys):
@@ -664,6 +681,8 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
                 y_rnd[:, itoy] = polynomial(x=x, coeff=p_rnd_pdf, order=order)
             ax.fill_between(x,  polynomial(x=x, coeff=p, order=order)-np.std(y_rnd, axis=1), polynomial(x=x, coeff=p, order=order)+np.std(y_rnd, axis=1), 
                             color='g', linestyle='-', label=r'PDF (replicas)')
+            ax1.fill_between(x[1:], -np.std(y_rnd[1:,:], axis=1)/polynomial(x=x[1:], coeff=p, order=order), +np.std(y_rnd[1:,:], axis=1)/polynomial(x=x[1:], coeff=p, order=order), 
+                             color='g', linestyle='-')
 
             # central fit
             ax.plot(x, polynomial(x=x, coeff=p, order=order), 'r--', 
@@ -674,22 +693,31 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
                         xerr=np_bins_qt_width[0:last_bin]/2, 
                         yerr=y_err[0:last_bin], fmt='o', color='black', label='$'+coeff[0]+'_{'+coeff[1]+'}$')            
 
-            if plot_updown:
-                scale_up   = data['scale'][bin_count:(bin_count+order+1), 0]
-                scale_down = data['scale'][bin_count:(bin_count+order+1), 1]            
-                ax.fill_between(x,  polynomial(x=x, coeff=scale_down, order=order), polynomial(x=x, coeff=scale_up, order=order))
-                print '********************************************'
-                for iscale,scale in enumerate(weights['scale']):  
-                    print  scale, '=>', polynomial(x=x[1:6], coeff=data['scale'][bin_count:(bin_count+order+1), iscale] , order=order)/ \
-                        polynomial(x=x[1:6], coeff=p, order=order)
+            # ratio plot
+            ax2.errorbar(np_bins_qt_mid[0:last_bin], (y[0:last_bin]-polynomial(x=x[1:], coeff=p, order=order))/y_err[0:last_bin], fmt='+', color='red')            
 
+            plt.subplot(gs[:-2,:])
+            plt.ylabel('$'+coeff[0]+'_{'+coeff[1]+'}$', fontsize=20)
             plt.axis( [0.0, np_bins_qt[last_bin]] + ranges_for_coeff_zoom(q=q)[coeff] )
             plt.grid(True)
+            ax.set_xticklabels([])
 
-            legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
+            plt.subplot(gs[-2,:])
+            plt.ylabel('Ratio')
+            plt.axis( [0.0, np_bins_qt[last_bin]] + ([-0.3, 0.3] if coeff in ['A0', 'A1', 'A2'] else [-0.5, 0.5])  )
+            plt.grid(True)
+            ax1.set_xticklabels([])
+
+            plt.subplot(gs[-1,:])
             plt.xlabel('$q_{T}$ (GeV)', fontsize=20)
-            plt.ylabel('$'+coeff[0]+'_{'+coeff[1]+'}$', fontsize=20)
-            plt.title(DY+', charge='+q[1:]+', var='+var[1:]+', $|y| \in ['+y_bin[1:5]+','+y_bin[7:11]+']$', fontsize=20)
+            plt.ylabel('Pull')
+            plt.axis( [0.0, np_bins_qt[last_bin], -4, 4] )
+            plt.grid(True)
+            plt.locator_params(axis='y', nbins=7)
+
+            legend = ax.legend(loc='best', shadow=False, fontsize='medium')
+
+            plt.suptitle(DY+', charge='+q[1:]+', var='+var[1:]+', $|y| \in ['+y_bin[1:5]+','+y_bin[7:11]+']$', fontsize=20)
             plt.show()
             plt.savefig('plots/coefficient_'+DY+'_'+q+'_'+var+'_'+coeff+'_'+y_bin+'_fit.png')
             plt.close('all')            

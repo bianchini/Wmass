@@ -179,7 +179,7 @@ class TemplateFitter:
             self.fit_results[key] = array( 'f', 5*[ 0.0 ] ) 
             self.out_tree.Branch(key, self.fit_results[key], key+'[5]/F')
             # add the bin-by-bin coefficients
-            if self.fit_mode=='parametric' and '_norm' in key:
+            if (self.fit_mode=='parametric' or self.fit_mode=='parametric2D') and '_norm' in key:
                 for coeff in self.coefficients:
                     name = key[:-5]+'_'+coeff
                     self.fit_results[name] = array( 'f', 5*[ 0.0 ] )
@@ -251,7 +251,7 @@ class TemplateFitter:
                 tMC = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-1])
                 coeff_vals = get_coeff_vals(res=self.res_coeff, 
                                             coeff_eval=('fit' if self.fit_mode=='parametric' else 'val'), 
-                                            bin_y=self.get_y_bin(iy), qt=self.mid_point(iqt), coeff=self.coefficients,
+                                            bin_y=self.get_y_bin(iy), qt=self.mid_point_qt(iqt), coeff=self.coefficients,
                                             np_bins_template_qt_new=self.bins_qt)
                 tUL = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-2])
                 tjA = np.zeros(tUL.shape)
@@ -318,7 +318,7 @@ class TemplateFitter:
 
         out = (0.1, 1., 1.)
         if self.setup_norm_ranges=='hardcoded':
-            rel_err = max(self.mid_point(bin[1])*0.01, 0.1)
+            rel_err = max(self.mid_point_qt(bin[1])*0.01, 0.1)
             out = (rel_err, (1-rel_err*4), (1+rel_err*4))
                 
         print par_name, '=> set step at ', '{:0.2f}'.format(out[0])+'*NORM and range at ['+ \
@@ -393,6 +393,22 @@ class TemplateFitter:
                                                    true=self.res_coeff[coeff+'_'+y_bin+'_fit'][o],
                                                    par_type='beta')
 
+                    elif self.fit_mode=='parametric2D':
+                        if iqt>0 or iy>0:
+                            continue
+                        (valid_orders_y, order_y)   = self.get_orders(coeff, '')
+                        (valid_orders_qt, order_qt) = self.get_orders(coeff, y_bin)
+                        for oy in valid_orders_y:
+                            for oqt in valid_orders_qt:
+                                step_beta  = 0.1
+                                start_beta = 0.0
+                                self.define_parameter( par_name=coeff+'_'+'pol'+str(order_y)+'_pol'+str(order_qt)+'_p'+str(oy)+'_p'+str(oqt), 
+                                                       start=start_beta,
+                                                       step=step_beta,
+                                                       par_range=(start_beta-5*step_beta, start_beta+5*step_beta),
+                                                       true=0.,
+                                                       par_type='beta')
+
         self.map_alphas = self.map_alphas[:self.dim_alpha]
         self.map_betas  = self.map_betas[:self.dim_beta]
 
@@ -404,6 +420,13 @@ class TemplateFitter:
 
     def get_orders(self, coeff='', y_bin=''):               
         valid_orders = []
+
+        if y_bin=='':
+            if coeff in ['A0','A2','A3']:
+                return ([0,2], 2)
+            else:
+                return ([1,3], 3)
+
         order = len(self.res_coeff[coeff+'_'+y_bin+'_fit'])-1
         for io,o in enumerate(self.res_coeff[coeff+'_'+y_bin+'_fit']):
             if o!=0.:
@@ -430,8 +453,11 @@ class TemplateFitter:
     def get_y_qt_bin(self, iy=-1, iqt=-1):
         return self.get_y_bin(iy)+'_'+self.get_qt_bin(iqt)
 
-    def mid_point(self, iqt=-1):
+    def mid_point_qt(self, iqt=-1):
          return 0.5*(self.bins_qt[iqt]+self.bins_qt[iqt+1])
+
+    def mid_point_y(self, iy=-1):
+         return 0.5*(self.bins_y[iy]+self.bins_y[iy+1])
 
     def build_aux_matrices(self):
 
@@ -450,10 +476,29 @@ class TemplateFitter:
                                 (valid_orders, order) = self.get_orders(coeff2, y_bin2)
                                 for o in valid_orders:
                                     if iy1==iy2 and coeff1==coeff2:
-                                        self.K[idx_A, idx_beta] += math.pow( self.mid_point(iqt), o)
+                                        self.K[idx_A, idx_beta] += math.pow( self.mid_point_qt(iqt), o)
                                     idx_beta += 1
                         idx_A += 1
                 
+        elif self.fit_mode=='parametric2D':
+            self.K = np.zeros( ( self.dim_A, self.dim_beta) )
+            # first loop
+            idx_A = 0
+            for iy in range(self.bins_y_size):
+                for iqt in range(self.bins_qt_size):
+                    for coeff1 in self.coefficients:                        
+                        # second loop
+                        idx_beta = 0
+                        for coeff2 in self.coefficients:
+                            (valid_orders_y, order_y)   = self.get_orders(coeff2, '')
+                            (valid_orders_qt, order_qt) = self.get_orders(coeff2, self.get_y_bin( 0 ))
+                            for oy in valid_orders_y:
+                                for oqt in valid_orders_qt:
+                                    if coeff1==coeff2:
+                                        self.K[idx_A, idx_beta] += math.pow( self.mid_point_y(iy), oy)*math.pow( self.mid_point_qt(iqt), oqt)
+                                    idx_beta += 1
+                        idx_A += 1            
+
         elif self.fit_mode=='binned':
             self.K = np.identity(self.dim_A)
         else:
@@ -754,9 +799,11 @@ class TemplateFitter:
                 self.plot_results_y_polynom(var='resolution')        
 
         if 'coeff' in save_plots:
-            if self.fit_mode=='parametric':
+            if self.fit_mode=='parametric2D' or self.fit_mode=='parametric':
                 self.plot_results_y_qt_coeff(var='resolution')
+            if self.fit_mode=='parametric':
                 self.plot_results_coeff_vs_qt()
+                self.plot_results_coeff_vs_qt_eigen()
 
         if 'norm' in save_plots:
             self.plot_results_y_qt_norm(var='resolution')        
@@ -875,7 +922,7 @@ class TemplateFitter:
         max_order = 5
         histos = {}
         for icoeff,coeff in enumerate(self.coefficients):
-            histos[coeff] = ROOT.TH2F('polynom_'+coeff+'_'+var, coeff+' '+var+';|y|;p_{n} (GeV^{-n})',  
+            histos[coeff] = ROOT.TH2F('polynom_'+coeff+'_'+var, coeff+' '+var+';|y|;c_{n} (GeV^{-n})',  
                                       self.bins_y_size, array('f',self.bins_y), 
                                       max_order+1, array('f', range(max_order+2) ) )
             histos[coeff].SetStats(0)         
@@ -907,7 +954,7 @@ class TemplateFitter:
     def plot_results_y_qt_coeff(self, var='resolution'):
         histos = {}
         for icoeff,coeff in enumerate(self.coefficients):
-            histos[coeff] = ROOT.TH2F('coeff_'+coeff+var, coeff+' '+var+';|y|;p_{n} (GeV^{-n})',  
+            histos[coeff] = ROOT.TH2F('coeff_'+coeff+var, coeff+' '+var+';|y|;q_{T}',  
                                       self.bins_y_size,  array('f',self.bins_y), 
                                       self.bins_qt_size, array('f',self.bins_qt), )
             histos[coeff].SetStats(0)         
@@ -991,7 +1038,7 @@ class TemplateFitter:
                             yerr=self.res_coeff[coeff+'_'+y_bin+'_val_err'][0:self.bins_qt_size],
                             fmt='o', color='black', label='$'+coeff[0]+'_{'+coeff[1]+'}$ true')            
 
-                plt.axis( [0.0, self.bins_qt[-1], -2, 2] )
+                plt.axis( [0.0, self.bins_qt[-1], -1, 1] )
                 plt.grid(True)
                 legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
                 plt.title('Dataset: '+self.dataset_type+', $|y| \in ['+y_bin[1:5]+','+y_bin[7:11]+']$', fontsize=20)
@@ -999,6 +1046,87 @@ class TemplateFitter:
                 plt.ylabel('$'+coeff[0]+'_{'+coeff[1]+'}$', fontsize=20)
                 plt.show()
                 plt.savefig(self.out_dir+'/coefficient_'+coeff+'_'+y_bin+'_'+self.job_name+'_fit.png')
+                plt.close('all')            
+
+    def plot_results_coeff_vs_qt_eigen(self):
+        from fit_utils import polynomial
+
+        x = np.array( [0.] + [ (self.bins_qt[iqt]+self.bins_qt[iqt+1])*0.5 for iqt in range(self.bins_qt_size)] + [self.bins_qt[-1]] )
+        idx_beta = 0
+        for iy in range(self.bins_y_size):
+            y_bin = self.get_y_bin(iy)
+            for icoeff,coeff in enumerate(self.coefficients):
+
+                plt.figure()
+                fig, ax = plt.subplots()
+
+                (valid_orders, order) = self.get_orders(coeff, y_bin)
+                p = np.zeros(order+1)
+                p_valid = np.zeros(len(valid_orders))
+
+                cov = np.zeros((order+1,order+1))
+                idx_o1 = 0
+                for o1 in range(order+1):
+                    if o1 not in valid_orders:
+                        continue         
+                    idx_o2 = 0
+                    for o2 in range(order+1):
+                        if o2 not in valid_orders:
+                            continue                             
+                        cov[o1,o2] = self.Vbeta_min[idx_beta+idx_o1,idx_beta+idx_o2]
+                        idx_o2 += 1
+                    p[o1] = self.fit_results[y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o1)][0]                    
+                    p_valid[idx_o1] =  p[o1]
+                    idx_o1 += 1
+                cov_valid = self.Vbeta_min[idx_beta:(idx_beta+len(valid_orders)), idx_beta:(idx_beta+len(valid_orders))]
+
+                idx_beta += len(valid_orders)
+
+                eigs =  np.linalg.eig(cov_valid)
+                cov_valid_prime = eigs[0]
+                U = eigs[1]
+                p_valid_prime = np.dot(U.T, p_valid)
+
+                ntoys = 200
+                y_rnd = np.zeros( (x.size, ntoys) )                
+                colors  = ['y', 'b', 'g', 'r', 'c']
+                hatches = ['/', '*', '|', '-', 'x']
+                for ieig in range(p_valid.size):
+                    for itoy in range(ntoys):
+                        p_valid_prime_rnd = np.zeros(p_valid.size)
+                        p_valid_prime_rnd[ieig] = np.random.normal(p_valid_prime[ieig], math.sqrt(cov_valid_prime[ieig]) ) 
+                        p_valid_rnd = np.dot(U, p_valid_prime_rnd)
+                        p_rnd = np.zeros(order+1)
+                        idx_o = 0
+                        for o in range(order+1):
+                            if o not in valid_orders:
+                                continue
+                            p_rnd[o] = p_valid_rnd[idx_o]
+                            idx_o += 1
+                        y_rnd[:, itoy] = polynomial(x=x, coeff=p_rnd, order=order)
+
+                    ax.fill_between(x,  polynomial(x=x, coeff=p, order=order)-np.std(y_rnd, axis=1), 
+                                    polynomial(x=x, coeff=p, order=order)+np.std(y_rnd, axis=1), 
+                                    color=colors[ieig], hatch=hatches[ieig], linestyle='-', 
+                                    #facecolor='none',
+                                    label=r'Eig. '+str(ieig+1))
+                
+                ax.plot(x, polynomial(x=x, coeff=p, order=order), 'r--', 
+                        label=r'Fit ($\mathrm{pol}_{'+str(order)+'}$)', linewidth=3.0)
+                ax.errorbar([ (self.bins_qt[iqt]+self.bins_qt[iqt+1])*0.5 for iqt in range(self.bins_qt_size)], 
+                            self.res_coeff[coeff+'_'+y_bin+'_val'][0:self.bins_qt_size], 
+                            xerr=[(self.bins_qt[iqt+1]-self.bins_qt[iqt])*0.5 for iqt in range(self.bins_qt_size)], 
+                            yerr=self.res_coeff[coeff+'_'+y_bin+'_val_err'][0:self.bins_qt_size],
+                            fmt='o', color='black', label='$'+coeff[0]+'_{'+coeff[1]+'}$ true')            
+
+                plt.axis( [0.0, self.bins_qt[-1], -1, 1] )
+                plt.grid(True)
+                legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
+                plt.title('Dataset: '+self.dataset_type+', $|y| \in ['+y_bin[1:5]+','+y_bin[7:11]+']$', fontsize=20)
+                plt.xlabel('$q_{T}$ (GeV)', fontsize=20)
+                plt.ylabel('$'+coeff[0]+'_{'+coeff[1]+'}$', fontsize=20)
+                plt.show()
+                plt.savefig(self.out_dir+'/coefficient_'+coeff+'_'+y_bin+'_'+self.job_name+'_eigenvector_fit.png')
                 plt.close('all')            
 
                 

@@ -15,12 +15,12 @@ prior_options = {'prior'  : 'sum',
                  'select' : ['A2', 'A3'], 
                  'inflate': 1e+03, 
                  'uncorrelate' : False}
-# prior_options = {}
+prior_options = {}
 
-templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job_name='TEST_p', mc_mass=80.419, 
+templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job_name='TEST', mc_mass=80.419, 
                                 num_events=1.5e+06,
                                 verbose=False, 
-                                fixed_parameters=['pol', 'A'], 
+                                fixed_parameters=['pol', 'A', 'mass'], 
                                 prior_options=prior_options,
                                 reduce_qt=-1, 
                                 reduce_y=-8,
@@ -38,6 +38,6 @@ for i in range(ntoys):
     status = templateFitter.run(n_points=100000, run_minos=False, run_post_hesse=False)
     if status>0:
         continue
-    templateFitter.update_results(print_results=False, save_plots=[], propagate_covariance=False)
+    templateFitter.update_results(print_results=True, save_plots=['coeff'], propagate_covariance=True)
 
 templateFitter.close()
