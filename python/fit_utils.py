@@ -483,9 +483,9 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
                 nuis_name = coeff+'_'+y_bin+'_p'+str(o) 
                 results[coeff+'_'+y_bin+'_fit'].append( r.Parameter(o) ) 
                 variables[nuis_name] = array( 'f', [ 0.0 ] )
-                variables[nuis_name+'_id'] = array( 'i', [ 0 ] )
+                variables[nuis_name+'_id'] = array( 'i', [ 0 ]*2 )
                 tree.Branch(nuis_name, variables[nuis_name], nuis_name+'/F')
-                tree.Branch(nuis_name+'_id', variables[nuis_name+'_id'], nuis_name+'_id'+'/I')
+                tree.Branch(nuis_name+'_id', variables[nuis_name+'_id'], nuis_name+'_id'+'[2]/I')
                 n_vars += 1
 
         if  (np_bins_template_qt.size!=0 or np_bins_template_y.size!=0):
@@ -504,12 +504,12 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
 
                 (h, h_norm) = (None, None)
                 if  (np_bins_template_qt.size==0 or np_bins_template_y.size==0):
-                    (h, h_norm) = (fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w)), 
-                                   fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w)+'_norm')) 
+                    (h, h_norm) = (fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w[0])), 
+                                   fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w[1])+'_norm')) 
                 else:
-                    (rebinned, rebinned_norm) = (rebin(h=fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w)), 
+                    (rebinned, rebinned_norm) = (rebin(h=fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w[0])), 
                                                        np_bins_template_qt=np_bins_template_qt, np_bins_template_y=np_bins_template_y ),
-                                                 rebin(h=fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w)+'_norm'), 
+                                                 rebin(h=fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w[1])+'_norm'), 
                                                        np_bins_template_qt=np_bins_template_qt, np_bins_template_y=np_bins_template_y ) )
                     (h, h_norm) = (rebinned[0], rebinned_norm[0])
                     (np_bins_qt, np_bins_y) = (rebinned[1], rebinned[2])
@@ -524,23 +524,25 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
 
                 for y in range(nbins_y/2+1, nbins_y+1):
                     y_bin = 'y{:03.2f}'.format(np_bins_y[y-1])+'_'+'y{:03.2f}'.format(np_bins_y[y])
-                    name = q+'_'+str(w)
+                    name0 = q+'_'+str(w[0])
+                    name1 = q+'_'+str(w[1])
                     #(h, h_norm) = (fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w)),
                     #               fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w)+'_norm'))
-                    (hslice, hslice_plus, hnorm, hnorm_plus) = (h.ProjectionY(str(y)+'_'+name+'_py', nbins_y+1-y, nbins_y+1-y),
-                                                                h.ProjectionY(str(y)+'_'+name+'_plus_py', y, y),
-                                                                h_norm.ProjectionY(str(y)+'_'+name+'_norm_py', nbins_y+1-y, nbins_y+1-y),
-                                                                h_norm.ProjectionY(str(y)+'_'+name+'_plus_norm_py', y, y))
+                    (hslice, hslice_plus, hnorm, hnorm_plus) = (h.ProjectionY(str(y)+'_'+name0+'_py', nbins_y+1-y, nbins_y+1-y),
+                                                                h.ProjectionY(str(y)+'_'+name0+'_plus_py', y, y),
+                                                                h_norm.ProjectionY(str(y)+'_'+name1+'_norm_py', nbins_y+1-y, nbins_y+1-y),
+                                                                h_norm.ProjectionY(str(y)+'_'+name1+'_plus_norm_py', y, y))
                     hslice.Add(hslice_plus)
                     hnorm.Add(hnorm_plus)
                     hslice.Divide(hnorm)
-                    print 'Syst:', syst, 'weight:', str(w), 'coeff:', coeff, 'y_bin:', y_bin
+                    print 'Syst:', syst, 'weight:', str(w[0])+','+str(w[1]), 'coeff:', coeff, 'y_bin:', y_bin
                     (r,order,fit,res,chi2_prob) = Fisher_test(h=hslice, coeff=coeff, fix_to_zero=fix_to_zero, fit_range=fit_range, 
                                                               force_order=orders[coeff+'_'+y_bin])                        
                     for o in range(order+1):
                         nuis_name = coeff+'_'+y_bin+'_p'+str(o) 
                         variables[nuis_name][0] = r.Parameter(o)
-                        variables[nuis_name+'_id'][0] = int(w)
+                        variables[nuis_name+'_id'][0] = int(w[0])
+                        variables[nuis_name+'_id'][1] = int(w[1])
                         data[syst][vars_count][iw] = r.Parameter(o)
                         vars_count += 1
 

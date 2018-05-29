@@ -796,17 +796,17 @@ class TemplateFitter:
 
         if 'polynom' in save_plots:
             if self.fit_mode=='parametric':
-                self.plot_results_y_polynom(var='resolution')        
+                self.plot_results_polynom_y(var='resolution')        
 
         if 'coeff' in save_plots:
             if self.fit_mode=='parametric2D' or self.fit_mode=='parametric':
-                self.plot_results_y_qt_coeff(var='resolution')
+                self.plot_results_coeff_y_qt(var='resolution')
             if self.fit_mode=='parametric':
-                self.plot_results_coeff_vs_qt()
-                self.plot_results_coeff_vs_qt_eigen()
+                self.plot_results_coeff_qt()
+                self.plot_results_coeff_qt_eigen()
 
         if 'norm' in save_plots:
-            self.plot_results_y_qt_norm(var='resolution')        
+            self.plot_results_norm_y_qt(var='resolution')        
 
         # fill the tree
         self.out_tree.Fill()
@@ -883,6 +883,7 @@ class TemplateFitter:
         self.out_tree.Write("tree", ROOT.TObject.kOverwrite)
         self.out_file.Close()
 
+    # plotting functions
     def save_template_snapshot(self, data=np.array([]), title='', tag=''):
         xx,yy = np.meshgrid(self.bins_pt, self.bins_eta)        
         plt.pcolormesh(yy, xx, data)
@@ -896,7 +897,7 @@ class TemplateFitter:
         plt.savefig(self.out_dir+'snapshot_'+tag+'_'+self.job_name+'.png')
         plt.close('all')
 
-    def plot_results_y_qt_norm(self, var='resolution'):
+    def plot_results_norm_y_qt(self, var='resolution'):
         c = ROOT.TCanvas("canvas", "canvas", 600, 600) 
         c.SetRightMargin(0.15)
         h2 = ROOT.TH2F('norm_'+var, var+';|y|;q_{T} (GeV)',  
@@ -918,7 +919,7 @@ class TemplateFitter:
         c.SaveAs(self.out_dir+'norm_'+var+'_'+self.job_name+'.png')
         c.IsA().Destructor( c )                
 
-    def plot_results_y_polynom(self, var='resolution'):
+    def plot_results_polynom_y(self, var='resolution'):
         max_order = 5
         histos = {}
         for icoeff,coeff in enumerate(self.coefficients):
@@ -951,7 +952,7 @@ class TemplateFitter:
         c.cd()
         c.SaveAs(self.out_dir+'polynom_'+var+'_'+self.job_name+'.png')            
 
-    def plot_results_y_qt_coeff(self, var='resolution'):
+    def plot_results_coeff_y_qt(self, var='resolution'):
         histos = {}
         for icoeff,coeff in enumerate(self.coefficients):
             histos[coeff] = ROOT.TH2F('coeff_'+coeff+var, coeff+' '+var+';|y|;q_{T}',  
@@ -988,7 +989,7 @@ class TemplateFitter:
         c.SaveAs(self.out_dir+'coeff_'+var+'_'+self.job_name+'.png')
 
 
-    def plot_results_coeff_vs_qt(self):
+    def plot_results_coeff_qt(self):
         from fit_utils import polynomial
 
         idx_beta = 0
@@ -1048,10 +1049,12 @@ class TemplateFitter:
                 plt.savefig(self.out_dir+'/coefficient_'+coeff+'_'+y_bin+'_'+self.job_name+'_fit.png')
                 plt.close('all')            
 
-    def plot_results_coeff_vs_qt_eigen(self):
+    def plot_results_coeff_qt_eigen(self):
         from fit_utils import polynomial
-
-        x = np.array( [0.] + [ (self.bins_qt[iqt]+self.bins_qt[iqt+1])*0.5 for iqt in range(self.bins_qt_size)] + [self.bins_qt[-1]] )
+        
+        # binning
+        x = np.array( [0.] + [ (self.bins_qt[iqt]+self.bins_qt[iqt+1])*0.5 \
+                                   for iqt in range(self.bins_qt_size)] + [self.bins_qt[-1]] )
         idx_beta = 0
         for iy in range(self.bins_y_size):
             y_bin = self.get_y_bin(iy)
@@ -1061,10 +1064,12 @@ class TemplateFitter:
                 fig, ax = plt.subplots()
 
                 (valid_orders, order) = self.get_orders(coeff, y_bin)
+                
+                # coefficients
                 p = np.zeros(order+1)
                 p_valid = np.zeros(len(valid_orders))
-
                 cov = np.zeros((order+1,order+1))
+
                 idx_o1 = 0
                 for o1 in range(order+1):
                     if o1 not in valid_orders:
@@ -1078,23 +1083,29 @@ class TemplateFitter:
                     p[o1] = self.fit_results[y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o1)][0]                    
                     p_valid[idx_o1] =  p[o1]
                     idx_o1 += 1
-                cov_valid = self.Vbeta_min[idx_beta:(idx_beta+len(valid_orders)), idx_beta:(idx_beta+len(valid_orders))]
+                
+                cov_valid = self.Vbeta_min[idx_beta:(idx_beta+len(valid_orders)), 
+                                           idx_beta:(idx_beta+len(valid_orders))]
 
                 idx_beta += len(valid_orders)
 
+                # eigenvalues/vectors of sub-cov matrix
                 eigs =  np.linalg.eig(cov_valid)
                 cov_valid_prime = eigs[0]
                 U = eigs[1]
+                # transformed of best-fit value of params
                 p_valid_prime = np.dot(U.T, p_valid)
 
                 ntoys = 200
                 y_rnd = np.zeros( (x.size, ntoys) )                
-                colors  = ['y', 'b', 'g', 'r', 'c']
-                hatches = ['/', '*', '|', '-', 'x']
+                colors  = ['m', 'b', 'g', 'y', 'c']
+                hatches = ['/', '/', '|', '|', '']
                 for ieig in range(p_valid.size):
                     for itoy in range(ntoys):
+                        # random value of the ieig'th eigenvector
                         p_valid_prime_rnd = np.zeros(p_valid.size)
                         p_valid_prime_rnd[ieig] = np.random.normal(p_valid_prime[ieig], math.sqrt(cov_valid_prime[ieig]) ) 
+                        # transform back to p
                         p_valid_rnd = np.dot(U, p_valid_prime_rnd)
                         p_rnd = np.zeros(order+1)
                         idx_o = 0
@@ -1104,11 +1115,13 @@ class TemplateFitter:
                             p_rnd[o] = p_valid_rnd[idx_o]
                             idx_o += 1
                         y_rnd[:, itoy] = polynomial(x=x, coeff=p_rnd, order=order)
-
-                    ax.fill_between(x,  polynomial(x=x, coeff=p, order=order)-np.std(y_rnd, axis=1), 
-                                    polynomial(x=x, coeff=p, order=order)+np.std(y_rnd, axis=1), 
-                                    color=colors[ieig], hatch=hatches[ieig], linestyle='-', 
-                                    #facecolor='none',
+                    ax.fill_between(x,  
+                                    y_rnd.mean(axis=1)-np.std(y_rnd, axis=1),
+                                    y_rnd.mean(axis=1)+np.std(y_rnd, axis=1),
+                                    facecolor='none' if ieig<p_valid.size-1 else colors[ieig] , 
+                                    hatch=hatches[ieig] if ieig<p_valid.size-1 else None, 
+                                    linestyle='-', 
+                                    edgecolor=colors[ieig] if ieig<p_valid.size-1 else 'none',
                                     label=r'Eig. '+str(ieig+1))
                 
                 ax.plot(x, polynomial(x=x, coeff=p, order=order), 'r--', 
