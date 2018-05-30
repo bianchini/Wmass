@@ -11,6 +11,21 @@ from scipy.stats import f
 from array import array
 import ROOT
 
+def veto_scale(comb=[0,0]):
+    if comb in [ 
+        [1,2], [2,1],
+        [1,6], [6,1],
+        [1,8], [8,1],
+        [3,2], [2,3],
+        [3,6], [6,3],
+        [3,8], [8,3],
+        [4,2], [2,4],
+        [4,6], [6,4],
+        [4,8], [8,4],
+        ]:
+        return True
+    return False
+
 
 def polynomial(x, coeff, order):
     val = np.zeros(x.size)
@@ -738,7 +753,6 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
         tree.Write("cov", ROOT.TObject.kOverwrite)
     fout.Close()
     fin.Close()
-    
 
 
 # compare fit results
