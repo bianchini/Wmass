@@ -33,48 +33,84 @@ elif argv[1]=='fit':
 
 elif argv[1]=='cov-all':
     weights = {}
-    weights['scale'] = ([0] + [1,2,3,4,6,8])
-    weights['pdf'] = range(9,109)
+
+    # take scales as uncorrelated
+    scale_ids = ([0,1,2,3,4,6,8]) 
+    weights['scale'] = [[0,0]]*len(scale_ids)*len(scale_ids)
+    count = 0
+    for isid1,sid1 in enumerate(scale_ids):
+        for isid2,sid2 in enumerate(scale_ids):
+            if not veto_scale([sid1,sid2]):
+                weights['scale'][count] = [sid1,sid2]
+                count += 1
+    weights['scale'] =  weights['scale'][0:count]
+
+    # take pdfs as correlated
+    pdf_ids = range(9,109)
+    weights['pdf'] = [[0,0]]*len(pdf_ids)
+    for isid1,sid1 in enumerate(pdf_ids):
+        weights['pdf'][isid1] = [sid1,sid1]
+
+    #weights['scale'] = ([0] + [1,2,3,4,6,8])
+    #weights['pdf'] = range(9,109)
     for DY in ['CC_FxFx']:
-        for q in ['Wplus', 'Wminus']:
+        for q in ['Wplus']:
             for var in ['WpreFSR']:
                 get_covariance(fname='../root/tree_histos1_'+DY+'.root', DY=DY, var=var, q=q, weights=weights, 
                                coefficients=['A0','A1','A2','A3','A4'], 
                                fix_to_zero={'A0': [0,1], 'A1': [0], 'A2': [0,1], 'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]},
                                forced_orders={'A0': 3, 'A1': 4, 'A2': 3, 'A3': 4, 'A4': 4, 'A5': 0, 'A6':0, 'A7':0},
-                               add_stat_uncert=True, postfix='all_A0-4_forced_v3',
+                               add_stat_uncert=True, postfix='all_A0-4_forced_v4_decorrelated',
                                save_corr=True, save_coeff=True, save_tree=True, save_pkl=True,
                                np_bins_template_qt = np.array([   0.,  4., 8.,  12.,  16.,  20.,  24.,  32.,   40.,   60. ]),
                                np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2, -0.8, -0.4,  0. , 
                                                                 0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5]),
-                               plot_updown=False
+                               plot_updown=False,
+                               decorrelate_scale=True
                                )
             
 elif argv[1]=='cov':
     weights = {}
-    weights['scale'] = ([0] + [1,2,3,4,6,8])
-    weights['pdf'] = range(9,109)
-    #weights['scale'] = ([1,2,3])
-    #weights['pdf'] = range(9,20)
+
+    scale_ids = ([0,1,2,3,4,6,8]) 
+    weights['scale'] = [[0,0]]*len(scale_ids)*len(scale_ids)
+    count = 0
+    for isid1,sid1 in enumerate(scale_ids):
+        for isid2,sid2 in enumerate(scale_ids):
+            if not veto_scale([sid1,sid2]):
+                weights['scale'][count] = [sid1,sid2]
+                count += 1
+    weights['scale'] =  weights['scale'][0:count]
+    #weights['scale'] = ([0] + [1,2,3,4,6,8])
+    #weights['pdf'] = range(9,109)
+    #weights['scale'] = ([0,0], [1,1], [2,2], [3,3], [4,4], [5,5])
+    #weights['pdf'] = [[9,9], [10,10], [11,11], [12,12], [13,13]]
+
+    pdf_ids = range(9,109)
+    weights['pdf'] = [[0,0]]*len(pdf_ids)
+    for isid1,sid1 in enumerate(pdf_ids):
+        weights['pdf'][isid1] = [sid1,sid1]
+
     for DY in ['CC_FxFx']:
         for q in ['Wplus']:
             for var in ['WpreFSR']:
-                for coeff in ['A0', 
-                              #'A1','A2','A3','A4'
+                for coeff in [ 'A0'
+                              #'A3','A4'
                               ]: 
                     get_covariance(fname='../root/tree_histos1_'+DY+'.root', DY=DY, var=var, q=q, weights=weights, 
                                    coefficients=[coeff], 
                                    fix_to_zero={'A0': [0,1], 'A1': [0], 'A2': [0,1], 'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]},
                                    forced_orders={'A0': 3, 'A1': 4, 'A2': 3, 'A3': 4, 'A4': 4, 'A5': 0, 'A6':0, 'A7':0},
                                    #forced_orders={},
-                                   add_stat_uncert=True, postfix=coeff+'_TEST',
+                                   add_stat_uncert=True, postfix=coeff+'_TEST_correlate',
                                    save_corr=True, save_coeff=True, save_tree=True, save_pkl=True,
                                    np_bins_template_qt = np.array([   0.,  4., 8.,  12.,  16.,  20.,  24.,  32.,   40.,   60. ]),
                                    np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2, -0.8, -0.4,  0. ,  
                                                                     0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5]),
 
                                    #np_bins_template_y  = np.array([ -0.4,  0. , 0.4])
-                                   plot_updown=False
+                                   plot_updown=False,
+                                   decorrelate_scale=False
                                    )
 
 elif argv[1]=='closure':
@@ -141,11 +177,12 @@ elif argv[1]=='templates':
     #np_bins_template_qt = np.array([   0., 4.])
     #np_bins_template_y  = np.array([-0.20, 0.0, 0.20])
     merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], 
-                    masses=[79.919, 80.419, 80.919], coeff=['A0', 'A1', 'A2', 'A3', 'A4'], 
+                    masses=[80.419], coeff=['A0', 'A1', 'A2', 'A3', 'A4'], 
                     np_bins_template_qt=np_bins_template_qt, 
                     np_bins_template_y=np_bins_template_y,
                     rebin=(2,4),
-                    postfix='_masses'
+                    input_tag='CC_MG5',
+                    postfix='_MG5'
                     )
 
     #merge_templates(charges=['Wminus'], var=['WpreFSR'], coeff_eval=['val'], 

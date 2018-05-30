@@ -359,7 +359,7 @@ def draw_qt_slice(fname='./tree.root', var='Wdress', coeff='A0', weight_name=0, 
     fin.Close()
 
 
-def rebin(h=None, np_bins_template_qt=np.array([]), np_bins_template_y=np.array([]), verbose=False):
+def rebin(h=None, np_bins_template_qt=np.array([]), np_bins_template_y=np.array([]), verbose=False, tag=-1):
     
     np_bins_template_y_extL = np.insert(np_bins_template_y,   0, [h.GetXaxis().GetXmin()])
     np_bins_template_y_ext  = np.append(np_bins_template_y_extL, [h.GetXaxis().GetXmax()])
@@ -367,7 +367,8 @@ def rebin(h=None, np_bins_template_qt=np.array([]), np_bins_template_y=np.array(
     nbins_template_y  = np_bins_template_y_ext.size - 1 
     nbins_template_qt = np_bins_template_qt_ext.size - 1 
 
-    h_rebin = ROOT.TH2D(h.GetName()+'_rebin', h.GetTitle(), nbins_template_y, array( 'f',  np_bins_template_y_ext ), nbins_template_qt, array( 'f',  np_bins_template_qt_ext ))
+    h_rebin = ROOT.TH2D(h.GetName()+'_rebin'+('' if tag<0 else str(tag)), h.GetTitle(), 
+                        nbins_template_y, array( 'f',  np_bins_template_y_ext ), nbins_template_qt, array( 'f',  np_bins_template_qt_ext ))
 
     for iy in range(1, h_rebin.GetNbinsX()+1):
         (y_low, y_high) = (h_rebin.GetXaxis().GetBinLowEdge(iy), h_rebin.GetXaxis().GetBinLowEdge(iy)+h_rebin.GetXaxis().GetBinWidth(iy))
@@ -401,7 +402,31 @@ def rebin(h=None, np_bins_template_qt=np.array([]), np_bins_template_y=np.array(
             h_rebin.SetBinError(iy,iqt, math.sqrt(err2))
             
     return (h_rebin, np_bins_template_qt_ext, np_bins_template_y_ext)
-    
+
+
+def add_errors(hslices={}, add='envelope'):
+    hslice = hslices['0_0'].Clone(hslices['0_0'].GetName()+'_sum')
+    for ibin in range(1, hslice.GetNbinsX()+1):
+        val = hslice.GetBinContent(ibin)
+        err_stat = hslice.GetBinError(ibin)
+        entries = np.zeros(len(hslices))
+        count = 0
+        for key,h in hslices.items():
+            entries[count] = h.GetBinContent(ibin)
+            count += 1
+        err2_syst = 0.0
+        if add=='envelope':
+            dev_up = abs(entries.max()-val)
+            dev_down = abs(entries.min()-val)
+            err2_syst += math.pow( max(dev_up,dev_down),2)
+        elif add=='rms':
+            err2_syst += entries.var()
+        else:
+            err2_syst = 0.
+        err_full =  math.sqrt(err_stat*err_stat + err2_syst )
+        hslice.SetBinError(ibin, err_full)
+        print 'Bin', ibin, 'error:', err_stat, '-->', err_full
+    return hslice
 
 
 def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress', 
@@ -410,7 +435,8 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
                    save_corr=True, save_coeff=True, save_tree=True, save_pkl=True,
                    forced_orders={},
                    np_bins_template_qt=np.array([]), np_bins_template_y=np.array([]),
-                   plot_updown=False):
+                   plot_updown=False,
+                   decorrelate_scale=False):
 
     # bins used for the (y,qt) plots
     if np_bins_template_qt.size==0 or np_bins_template_y.size==0:
@@ -441,17 +467,35 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
     n_vars = 0
     for coeff in coefficients:
 
-        (h, h_norm) = (None, None)
-        if  (np_bins_template_qt.size==0 or np_bins_template_y.size==0):
-            (h, h_norm) = (fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(0)), 
-                           fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(0)+'_norm')) 
+        if not decorrelate_scale:
+            (h, h_norm) = (None, None)
+            if  (np_bins_template_qt.size==0 or np_bins_template_y.size==0):
+                (h, h_norm) = (fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(0)), 
+                               fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(0)+'_norm')) 
+            else:
+                (rebinned, rebinned_norm) = (rebin(h=fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(0)), 
+                                                   np_bins_template_qt=np_bins_template_qt, np_bins_template_y=np_bins_template_y ),
+                                             rebin(h=fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(0)+'_norm'), 
+                                                   np_bins_template_qt=np_bins_template_qt, np_bins_template_y=np_bins_template_y ) )
+                (h, h_norm) = (rebinned[0], rebinned_norm[0])
+                (np_bins_qt, np_bins_y) = (rebinned[1], rebinned[2])
         else:
-            (rebinned, rebinned_norm) = (rebin(h=fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(0)), 
-                                               np_bins_template_qt=np_bins_template_qt, np_bins_template_y=np_bins_template_y ),
-                                         rebin(h=fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(0)+'_norm'), 
-                                               np_bins_template_qt=np_bins_template_qt, np_bins_template_y=np_bins_template_y ) )
-            (h, h_norm) = (rebinned[0], rebinned_norm[0])
-            (np_bins_qt, np_bins_y) = (rebinned[1], rebinned[2])
+            histos_scale = {}
+            for iw,w in enumerate(weights['scale']):
+                (hw, hw_norm) = (None, None)
+                if  (np_bins_template_qt.size==0 or np_bins_template_y.size==0):
+                    (hw, hw_norm) = (fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w[0])), 
+                                   fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w[1])+'_norm')) 
+                else:
+                    (rebinned, rebinned_norm) = (rebin(h=fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w[0])), 
+                                                       np_bins_template_qt=np_bins_template_qt, np_bins_template_y=np_bins_template_y, tag=str(iw) ),
+                                                 rebin(h=fin.Get(q+'/'+var+'/'+coeff+'/'+q+'_'+var+'_'+coeff+'_'+str(w[1])+'_norm'), 
+                                                       np_bins_template_qt=np_bins_template_qt, np_bins_template_y=np_bins_template_y, tag=str(iw) ) )
+                    (hw, hw_norm) = (rebinned[0], rebinned_norm[0])
+                    (np_bins_qt, np_bins_y) = (rebinned[1], rebinned[2])
+                print 'Adding scale variation...', w
+                histos_scale[str(w[0])+'_'+str(w[1])] = hw
+                histos_scale[str(w[0])+'_'+str(w[1])+'_norm'] = hw_norm
 
         np_bins_qt_width = np.array( [np_bins_qt[i+1]-np_bins_qt[i] for i in range(np_bins_qt.size-1)] )
         np_bins_qt_mid = np.array( [(np_bins_qt[i+1]+np_bins_qt[i])*0.5 for i in range(np_bins_qt.size-1)] )
@@ -465,14 +509,29 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
             y_bin = 'y{:03.2f}'.format(np_bins_y[y-1])+'_'+'y{:03.2f}'.format(np_bins_y[y])
             print 'Bin Y: ', y_bin
             name = q+'_'+str(0)
-            (hslice, hslice_plus, hnorm, hnorm_plus) = (h.ProjectionY(str(y)+'_'+name+'_py', nbins_y+1-y, nbins_y+1-y),
-                                                        h.ProjectionY(str(y)+'_'+name+'_plus_py', y, y),
-                                                        h_norm.ProjectionY(str(y)+'_'+name+'_norm_py', nbins_y+1-y, nbins_y+1-y),
-                                                        h_norm.ProjectionY(str(y)+'_'+name+'_plus_norm_py', y, y))
-            print  '(', nbins_y+1-y, ' + ', y, ') /', nbins_y
-            hslice.Add(hslice_plus)
-            hnorm.Add(hnorm_plus)
-            hslice.Divide(hnorm)
+
+            if not decorrelate_scale:
+                (hslice, hslice_plus, hnorm, hnorm_plus) = (h.ProjectionY(str(y)+'_'+name+'_py', nbins_y+1-y, nbins_y+1-y),
+                                                            h.ProjectionY(str(y)+'_'+name+'_plus_py', y, y),
+                                                            h_norm.ProjectionY(str(y)+'_'+name+'_norm_py', nbins_y+1-y, nbins_y+1-y),
+                                                            h_norm.ProjectionY(str(y)+'_'+name+'_plus_norm_py', y, y))
+                print  '(', nbins_y+1-y, ' + ', y, ') /', nbins_y
+                hslice.Add(hslice_plus)
+                hnorm.Add(hnorm_plus)
+                hslice.Divide(hnorm)
+            else:
+                hslices = {}
+                for iw,w in enumerate(weights['scale']):
+                    (hslice, hslice_plus, hnorm, hnorm_plus) = (histos_scale[str(w[0])+'_'+str(w[1])].ProjectionY(str(y)+'_'+str(iw)+'_'+name+'_py', nbins_y+1-y, nbins_y+1-y),
+                                                                histos_scale[str(w[0])+'_'+str(w[1])].ProjectionY(str(y)+'_'+str(iw)+'_'+name+'_plus_py', y, y),
+                                                                histos_scale[str(w[0])+'_'+str(w[1])+'_norm'].ProjectionY(str(y)+'_'+str(iw)+'_'+name+'_norm_py', nbins_y+1-y, nbins_y+1-y),
+                                                                histos_scale[str(w[0])+'_'+str(w[1])+'_norm'].ProjectionY(str(y)+'_'+str(iw)+'_'+name+'_plus_norm_py', y, y))
+                    print  '(', nbins_y+1-y, ' + ', y, ') /', nbins_y
+                    hslice.Add(hslice_plus)
+                    hnorm.Add(hnorm_plus)
+                    hslice.Divide(hnorm)
+                    hslices[str(w[0])+'_'+str(w[1])] = hslice
+                hslice = add_errors(hslices)
 
              # make the fit to decide the pol order
             if len(forced_orders)>0:
@@ -503,14 +562,22 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
                 tree.Branch(nuis_name+'_id', variables[nuis_name+'_id'], nuis_name+'_id'+'[2]/I')
                 n_vars += 1
 
+            if decorrelate_scale:
+                hslice.IsA().Destructor(hslice)        
+
         if  (np_bins_template_qt.size!=0 or np_bins_template_y.size!=0):
-            h.IsA().Destructor( h )
-            h_norm.IsA().Destructor( h_norm )
+            if not decorrelate_scale:
+                h.IsA().Destructor( h )
+                h_norm.IsA().Destructor( h_norm )
+            else:
+                for key,h in histos_scale.items():
+                    h.IsA().Destructor( h )
 
 
     # map of np matrix of all fit-coefficients for all weights
     data = {}
-    for syst in ['scale', 'pdf']:
+    systs = ['scale', 'pdf'] if not decorrelate_scale else ['pdf']
+    for syst in systs:
         ws =  weights[syst]
         data[syst] = np.zeros( (n_vars, len(ws)) )
         for iw,w in enumerate(ws):
@@ -572,7 +639,8 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
     print 'Making the covariance matrix...'
     cov_map = {}
     dict_cov_map = {}
-    for syst in ['pdf', 'scale', 'stat']:
+    systs = ['pdf', 'scale', 'stat'] if not decorrelate_scale else ['pdf', 'stat']
+    for syst in systs:
         # statistical one is formed from 
         # the cov matrix of the fit
         print '\t> '+syst
@@ -610,9 +678,11 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
     # total covariance matrix
     cov_map['sum']  = np.zeros((n_vars,n_vars))
     cov_map['syst'] = np.zeros((n_vars,n_vars))
-    for syst in ['pdf', 'scale', 'stat']:
+    systs = ['pdf', 'scale', 'stat'] if not decorrelate_scale else ['pdf', 'stat']
+    for syst in systs:
         cov_map['sum'] += cov_map[syst]
-        if syst in ['pdf', 'scale']:
+        systs2 = ['pdf', 'scale'] if not decorrelate_scale else ['pdf']
+        if syst in systs2:
             cov_map['syst'] += cov_map[syst]
     # make a snapshot of the matrix
     if save_corr:
@@ -649,7 +719,8 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
                 print '\t Val         :', y
                 print '\t Err         :', y_err
                 print '\t Coefficients:', p            
-                print cov_map['scale'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] 
+                if not decorrelate_scale:
+                    print cov_map['scale'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] 
                 print cov_map['pdf'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] 
                 print cov_map['stat'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] 
 
@@ -674,7 +745,7 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
                              color='y', linestyle='-')
 
             # 1sigma CL from scale
-            if plot_updown:
+            if plot_updown and not decorrelate_scale:
                 scale_up   = data['scale'][bin_count:(bin_count+order+1), 0]
                 scale_down = data['scale'][bin_count:(bin_count+order+1), 1]            
                 ax.fill_between(x,  polynomial(x=x, coeff=scale_down, order=order), polynomial(x=x, coeff=scale_up, order=order))
@@ -682,7 +753,7 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
                 for iscale,scale in enumerate(weights['scale']):  
                     print  scale, '=>', polynomial(x=x[1:6], coeff=data['scale'][bin_count:(bin_count+order+1), iscale] , order=order)/ \
                         polynomial(x=x[1:6], coeff=p, order=order)
-            else:
+            elif not plot_updown and not decorrelate_scale: 
                 for itoy in range(ntoys):
                     p_rnd_scale = np.random.multivariate_normal(p, cov_map['scale'][bin_count:(bin_count+order+1), bin_count:(bin_count+order+1)] )
                     y_rnd[:, itoy] = polynomial(x=x, coeff=p_rnd_scale, order=order)
@@ -736,7 +807,7 @@ def get_covariance(fname='./tree.root', DY='CC', q='Wplus', var='Wdress',
 
             plt.suptitle(DY+', charge='+q[1:]+', var='+var[1:]+', $|y| \in ['+y_bin[1:5]+','+y_bin[7:11]+']$', fontsize=20)
             plt.show()
-            plt.savefig('plots/coefficient_'+DY+'_'+q+'_'+var+'_'+coeff+'_'+y_bin+'_fit.png')
+            plt.savefig('plots/coefficient_'+DY+'_'+q+'_'+var+'_'+coeff+'_'+y_bin+'_fit_'+postfix+'.png')
             plt.close('all')            
             bin_count += (order+1)
 
