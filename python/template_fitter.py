@@ -30,6 +30,8 @@ class TemplateFitter:
                  DY='CC_FxFx', 
                  charge='Wplus', 
                  var='WpreFSR', 
+                 input_tag='all_A0-4_forced_v3',  
+                 alternative_mc='',
                  job_name='TEST', 
                  mc_mass=80.419, 
                  num_events=-1,
@@ -71,12 +73,17 @@ class TemplateFitter:
 
         self.update=True
 
-        self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced_v3.pkl', 'r'))        
-
-        templates = np.load(self.in_dir+'template_'+charge+'_'+var+'_val_masses.npz')
         templates_files = {'template': 0, 'masses': 1, 'bins_qt' : 2, 
                            'bins_y'  : 3, 'coefficients' : 4, 'bins_eta': 5, 
                            'bins_pt' : 6, 'mc_acceptances' : 7 }
+
+        self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY+'_'+charge+'_'+var+'_'+input_tag+'.pkl', 'r'))        
+        templates = np.load(self.in_dir+'template_'+charge+'_'+var+'_val_masses.npz')
+
+        if alternative_mc!='':
+            print 'Loading alternative MC...'
+            templates_alternative = np.load(self.in_dir+'template_'+charge+'_'+var+'_val_'+alternative_mc+'.npz')
+            self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY[:2]+'_'+alternative_mc+'_'+charge+'_'+var+'_'+input_tag+'_alternative.pkl', 'r'))        
 
         # for template, save the size of (pt,eta) plane 
         # for bins, save len(bins)-1, since bins are edges
@@ -89,6 +96,9 @@ class TemplateFitter:
             if key=='template':
                 size = template_file[0,0,0,0].size
                 setattr(self, key,template_file[:,:,:,:,:,0:reduce_pt] if reduce_pt<0 else template_file)
+                if alternative_mc!='':
+                    setattr(self, key+'_alt', templates_alternative['arr_'+str(p)][:,:,:,:,:,0:reduce_pt] \
+                                if reduce_pt<0 else templates_alternative['arr_'+str(p)])
             elif key=='bins_qt':
                 size = template_file.size - 1 + reduce_qt
                 setattr(self, key, template_file[:reduce_qt] if reduce_qt<0 else template_file)
@@ -107,6 +117,9 @@ class TemplateFitter:
             else:
                 size = template_file.size
                 setattr(self, key,template_file)
+                if alternative_mc!='':
+                    setattr(self, key+'_alt', templates_alternative['arr_'+str(p)])
+
             setattr(self, key+'_size', size)
 
         print 'Fitting these bins:'
@@ -149,10 +162,16 @@ class TemplateFitter:
         self.overflow_template = np.zeros( self.mc.shape )
         for burn_qt in range(reduce_qt, 0):
             for y in range(self.bins_y_size - reduce_y):
-                self.overflow_template += self.template[self.mc_mass_index, burn_qt, y, -1]
+                if alternative_mc=='':
+                    self.overflow_template += getattr(self, 'template')[self.mc_mass_index, burn_qt, y, -1]
+                else:
+                    self.overflow_template += getattr(self, 'template_alt')[0, burn_qt, y, -1]
         for burn_y in range(reduce_y, 0):
             for qt in range(self.bins_qt_size):
-                self.overflow_template += self.template[self.mc_mass_index, qt, burn_y, -1]                
+                if alternative_mc=='':
+                    self.overflow_template += getattr(self, 'template')[self.mc_mass_index, qt, burn_y, -1]                
+                else:
+                    self.overflow_template += getattr(self, 'template_alt')[0, qt, burn_y, -1]                
         if 'of' in save_plots:
             self.save_template_snapshot(data=self.overflow_template, title='Overflow', tag='of')
 
@@ -178,7 +197,6 @@ class TemplateFitter:
                 continue
             self.fit_results[key] = array( 'f', 5*[ 0.0 ] ) 
             self.out_tree.Branch(key, self.fit_results[key], key+'[5]/F')
-            # add the bin-by-bin coefficients
             if (self.fit_mode=='parametric' or self.fit_mode=='parametric2D') and '_norm' in key:
                 for coeff in self.coefficients:
                     name = key[:-5]+'_'+coeff
@@ -192,36 +210,51 @@ class TemplateFitter:
 
         if self.use_prior:
             print 'Use prior...'+self.prior_options['prior']
-            self.reshape_covariance( cov=np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_'+self.prior_options['prior']+'_all_A0-4_forced_v3.npy', 'r')), 
-                                     dictionary=pickle.load(open(self.in_dir+'covariance_dict_'+DY+'_'+charge+'_'+var+'_all_A0-4_forced_v3.pkl', 'r')) )
+            self.reshape_covariance( cov=np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_'+self.prior_options['prior']+'_'+input_tag+'.npy', 'r')), 
+                                     dictionary=pickle.load(open(self.in_dir+'covariance_dict_'+DY+'_'+charge+'_'+var+'_'+input_tag+'.pkl', 'r')), 
+                                     save_plots=save_plots )
         
 
-    def reshape_covariance(self, cov=np.array([]), dictionary={}):
+    def reshape_covariance(self, cov=np.array([]), dictionary={}, save_plots=[]):
         V_prior = np.zeros((self.dim_beta,self.dim_beta))
         self.beta_prior =  np.zeros(self.dim_beta)
+
         for ib1,b1 in enumerate(self.map_betas):
             par_name1 = ''
             for key1,p1 in self.map_params.items():                        
+                if '_true' in key1:
+                    continue
                 if p1==b1:
                     par_name1 = key1
             self.beta_prior[ib1] = self.map_params[par_name1+'_true']
-
             match1 = any([sel in par_name1 for sel in self.prior_options['select']]) or self.prior_options['select']==[]
-
             idx1 = dictionary[par_name1]
             for ib2,b2 in enumerate(self.map_betas):
                 par_name2 = ''
                 for key2,p2 in self.map_params.items():                        
+                    if '_true' in key2:
+                        continue
                     if p2==b2:
-                        par_name2 = key2
-
+                        par_name2 = key2                    
                 match2 = any([sel in par_name2 for sel in self.prior_options['select']]) or self.prior_options['select']==[]
-
                 idx2 = dictionary[par_name2]
                 V_prior[ib1,ib2] = cov[idx1,idx2]
-
-                #if ('A4' in par_name1 or 'A4' in par_name2):
-                #    V_prior[ib1,ib2] *= (1e+06 if 'A4' in par_name1 and 'A4' in par_name2 else 1e+03)
+                
+                if 'ybins' in self.prior_options['decorrelate']:
+                    if par_name1[0:11]!=par_name2[0:11]:
+                        if self.verbose:
+                            print 'Removing correlations between '+par_name1+' and '+par_name2
+                        V_prior[ib1,ib2] *= 0.
+                if 'coeff' in self.prior_options['decorrelate']:
+                    if par_name1[12:14]!=par_name2[12:14]:
+                        if self.verbose:
+                            print 'Removing correlations between '+par_name1+' and '+par_name2
+                        V_prior[ib1,ib2] *= 0.                    
+                if 'all' in self.prior_options['decorrelate']:
+                    if par_name1!=par_name2:
+                        if self.verbose:
+                            print 'Removing correlations between '+par_name1+' and '+par_name2
+                        V_prior[ib1,ib2] *= 0.                                            
 
                 if not match1:
                     inflate = math.pow(self.prior_options['inflate'], 2.0 if not match2 else 1.0)
@@ -229,15 +262,10 @@ class TemplateFitter:
                         print 'Inflate V_prior['+par_name1+', '+par_name2+'] by... ', inflate
                     V_prior[ib1,ib2] *= inflate
 
-                #if ib1==ib2:
-                #    print par_name1, '=' , self.beta_prior[ib1], '+/-', math.sqrt(self.Vbeta_prior[ib1,ib1])
+        self.Vinv_prior = np.linalg.inv(V_prior)
 
-        self.plot_cov_matrix(n_free=V_prior.shape[0], cov=V_prior, name='prior_'+self.prior_options['prior'])
-        if self.prior_options['uncorrelate']:
-            print 'Removing correlations...'
-            self.Vinv_prior = np.linalg.inv(np.diag(np.diag(V_prior)))
-        else:
-            self.Vinv_prior = np.linalg.inv(V_prior)
+        if 'prior' in save_plots:
+            self.plot_cov_matrix(n_free=V_prior.shape[0], cov=V_prior, name='prior_'+self.prior_options['prior'])
 
 
     def run_closure_tests(self, save_plots=['mc-sum', 'sum']):
@@ -269,25 +297,21 @@ class TemplateFitter:
 
     # tell Minuit to fix a parameter
     def fix_parameter(self, par_name):
-
         # condition for reducing by one the n.d.o.f.:
         # <=> a parameter may be fixed in the minimisation, but still count as --dof
         subtract_dof = (self.fit_mode=='parametric' and 'pol' in par_name) or \
             (self.fit_mode=='binned' and ('y' in par_name and 'qt' in par_name and 'A' in par_name) )
-
         # check for a regexpr matching
         for fix in self.fixed_parameters:
             if fix in par_name:
                 if subtract_dof:
                     self.ndof -= 1
                 return True
-
         # check if the parameter is in the list of fixed parameters:
         if (par_name in self.fixed_parameters):
             if subtract_dof:
                 self.ndof -= 1
             return True
-
         # reduce ndof
         self.ndof -= 1
         return False
@@ -315,7 +339,6 @@ class TemplateFitter:
 
     # return (scale, scale_range_low, scale_range_high)
     def norm_ranges(self, par_name='', bin=()):
-
         out = (0.1, 1., 1.)
         if self.setup_norm_ranges=='hardcoded':
             rel_err = max(self.mid_point_qt(bin[1])*0.01, 0.1)
@@ -357,7 +380,10 @@ class TemplateFitter:
                 qt_bin = self.get_qt_bin(iqt)
                 mc_norm = self.template[self.mc_mass_index][iqt][iy][-1].sum()/ \
                     self.mc_acceptances[self.mc_mass_index][iqt][iy]
-
+                if hasattr(self, 'template_alt'):
+                    mc_norm = self.template_alt[0][iqt][iy][-1].sum()/ \
+                        self.mc_acceptances_alt[0][iqt][iy]
+                    
                 norm_range = self.norm_ranges(par_name=y_bin+'_'+qt_bin+'_norm', bin=(iy,iqt))
                 self.define_parameter( par_name=y_bin+'_'+qt_bin+'_norm', 
                                        start=mc_norm, 
@@ -423,9 +449,9 @@ class TemplateFitter:
 
         if y_bin=='':
             if coeff in ['A0','A2','A3']:
-                return ([0,2], 2)
+                return ([0,2,4], 4)
             else:
-                return ([1,3], 3)
+                return ([1,3,5], 5)
 
         order = len(self.res_coeff[coeff+'_'+y_bin+'_fit'])-1
         for io,o in enumerate(self.res_coeff[coeff+'_'+y_bin+'_fit']):
@@ -600,8 +626,13 @@ class TemplateFitter:
         self.data = np.zeros( self.mc.shape )
         if dataset=='asimov':
             self.data += copy.deepcopy(self.mc)
+            print 'Loading asimov dataset as DATA with', self.data.sum(), 'entries'
         elif dataset=='random':
             self.data += np.random.poisson( self.mc )
+            print 'Loading poisson dataset as DATA with', self.data.sum(), 'entries'
+        elif dataset=='alternative':
+            self.data += copy.deepcopy(self.template_alt.sum(axis=(1,2))[0,-1])
+            print 'Loading alternative dataset as DATA with', self.data.sum(), 'entries'
         else:
             print 'Option not implemented'
         if 'data' in save_plots:
@@ -833,6 +864,8 @@ class TemplateFitter:
         for ia,a in enumerate(self.map_alphas):
             par_name = ''
             for key,p in self.map_params.items():
+                if '_true' in key:
+                    continue
                 if p==a:
                     par_name = key
             self.gMinuit.GetParameter(self.map_params[par_name], val, err)
@@ -842,12 +875,16 @@ class TemplateFitter:
         for ia1,a1 in enumerate(self.map_alphas):
             par_name1 = ''
             for key1,p1 in self.map_params.items():
+                if '_true' in key1:
+                    continue
                 if p1==a1:
                     par_name1 = key1            
             aa1 = self.map_params_minuit[par_name1] if self.map_params_minuit.has_key(par_name1) else -1
             for ia2,a2 in enumerate(self.map_alphas):
                 par_name2 = ''
                 for key2,p2 in self.map_params.items():
+                    if '_true' in key2:
+                        continue
                     if p2==a2:
                         par_name2 = key2
                 aa2 = self.map_params_minuit[par_name2] if self.map_params_minuit.has_key(par_name2) else -1
@@ -860,12 +897,15 @@ class TemplateFitter:
             if itoy%50==0:
                 print '\tToy ',itoy, '/', ntoys
             rnd_alpha = np.random.multivariate_normal(self.alpha,self.Valpha)
-            if rnd_alpha[0]<self.mc_mass-0.499 or rnd_alpha[0]>self.mc_mass+0.499:
+            if self.interpolation=='linear' and \
+                    rnd_alpha[0]<self.mc_mass-0.499 or rnd_alpha[0]>self.mc_mass+0.499:
                 continue
             rnd_par = [0.]*self.n_param
             for ia,a in enumerate(self.map_alphas):
                 par_name = ''
                 for key,p in self.map_params.items():
+                    if '_true' in key:
+                        continue
                     if p==a:
                         rnd_par[p] = rnd_alpha[ia]
             self.chi2(par=rnd_par)
@@ -1103,7 +1143,7 @@ class TemplateFitter:
                 for ieig in range(p_valid.size):
                     for itoy in range(ntoys):
                         # random value of the ieig'th eigenvector
-                        p_valid_prime_rnd = np.zeros(p_valid.size)
+                        p_valid_prime_rnd = copy.deepcopy(p_valid_prime)
                         p_valid_prime_rnd[ieig] = np.random.normal(p_valid_prime[ieig], math.sqrt(cov_valid_prime[ieig]) ) 
                         # transform back to p
                         p_valid_rnd = np.dot(U, p_valid_prime_rnd)
