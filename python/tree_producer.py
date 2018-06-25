@@ -110,7 +110,7 @@ class TreeProducer:
             if self.debug:
                 if i%100==0:
                     print "Processing event", i, '/', self.events.size()
-                if i>10000:
+                if i>1000:
                     break
             else:
                 if i%1000==0:

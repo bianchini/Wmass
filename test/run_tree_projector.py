@@ -33,7 +33,6 @@ elif argv[1]=='fit':
 
 elif argv[1]=='cov-all':
     weights = {}
-
     # take scales as uncorrelated
     scale_ids = ([0,1,2,3,4,6,8]) 
     weights['scale'] = [[0,0]]*len(scale_ids)*len(scale_ids)
@@ -60,11 +59,13 @@ elif argv[1]=='cov-all':
                                coefficients=['A0','A1','A2','A3','A4'], 
                                fix_to_zero={'A0': [0,1], 'A1': [0], 'A2': [0,1], 'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]},
                                forced_orders={'A0': 3, 'A1': 4, 'A2': 3, 'A3': 4, 'A4': 4, 'A5': 0, 'A6':0, 'A7':0},
-                               add_stat_uncert=True, postfix='all_A0-4_forced_v4_decorrelated',
+                               add_stat_uncert=True, postfix='all_A0-4_forced_v4_finer_y_qt_decorrelated',
                                save_corr=True, save_coeff=True, save_tree=True, save_pkl=True,
-                               np_bins_template_qt = np.array([   0.,  4., 8.,  12.,  16.,  20.,  24.,  32.,   40.,   60. ]),
-                               np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2, -0.8, -0.4,  0. , 
-                                                                0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5]),
+                               #np_bins_template_qt = np.array([   0.,  4., 8.,  12.,  16.,  20.,  24.,  32.,   40.,   60. ]),
+                               np_bins_template_qt = np.array([  0.,  2.,   4.,  6.,   8.,  10.,   12.,  14.,  16., 20.,   24.,  32.,   40.,   60. ]),
+                               np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.8, -1.6, -1.4, -1.2, -1.0, -0.8, -0.6, -0.4, -0.2,  0. , 
+                                                                0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. ,  3.5]),
+                               #np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2, -0.8, -0.4,  0. , 0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5]),
                                plot_updown=False,
                                decorrelate_scale=True
                                )
@@ -107,7 +108,6 @@ elif argv[1]=='cov':
                                    np_bins_template_qt = np.array([   0.,  4., 8.,  12.,  16.,  20.,  24.,  32.,   40.,   60. ]),
                                    np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2, -0.8, -0.4,  0. ,  
                                                                     0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5]),
-
                                    #np_bins_template_y  = np.array([ -0.4,  0. , 0.4])
                                    plot_updown=False,
                                    decorrelate_scale=False
@@ -169,20 +169,19 @@ elif argv[1]=='compare':
                         compare='CC_Wminus_Wdress_generator')
 
 elif argv[1]=='templates':
-    np_bins_template_qt = np.array([   0.,     4.,   8.,   12.,   16.,
-                                       20.,   24.,  32.,   40.,   60. ])
-    np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2,
-                                     -0.8, -0.4,  0. ,  0.4, 0.8, 
-                                     1.2,  1.6,  2. ,  2.5,  3. ,  3.5])
-    #np_bins_template_qt = np.array([   0., 4.])
-    #np_bins_template_y  = np.array([-0.20, 0.0, 0.20])
+    #np_bins_template_qt = np.array([   0.,     4.,   8.,   12.,   16., 20.,   24.,  32.,   40.,   60. ])
+    np_bins_template_qt = np.array([   0.,  2.,   4.,  6.,   8.,  10.,   12.,  14.,  16., 20.,   24.,  32.,   40.,   60. ])
+    #np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2, -0.8, -0.4,  0. ,  0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5])
+    np_bins_template_y  = np.array([-3.5, -3. , -2.5, -2., -1.8, -1.6, -1.4, -1.2, -1.0, -0.8, -0.6, -0.4, -0.2,  0. , 
+                                     0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. ,  3.5]),
+
     merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], 
-                    masses=[80.419], coeff=['A0', 'A1', 'A2', 'A3', 'A4'], 
+                    masses=[79.919, 80.419, 80.919], coeff=['A0', 'A1', 'A2', 'A3', 'A4'], 
                     np_bins_template_qt=np_bins_template_qt, 
                     np_bins_template_y=np_bins_template_y,
                     rebin=(2,4),
-                    input_tag='CC_MG5',
-                    postfix='_MG5'
+                    input_tag='CC_FxFx_extra_masses',
+                    postfix='_finer_y_qt'
                     )
 
     #merge_templates(charges=['Wminus'], var=['WpreFSR'], coeff_eval=['val'], 

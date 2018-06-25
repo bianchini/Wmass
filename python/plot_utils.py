@@ -479,7 +479,7 @@ def plot_closure_test(charge='Wplus', DY='CC', var='Wdress', coeff_eval='val',
 
 def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], masses=[80.419], coeff=['A0'], 
                     np_bins_template_qt=np.array([]), np_bins_template_y=np.array([]), rebin=(),
-                    postfix=''):
+                    input_tag='CC_FxFx', postfix=''):
 
     from tree_utils import np_bins_y, np_bins_qt, np_bins_eta, np_bins_pt, angular_pdf_string
 
@@ -507,7 +507,7 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
     np_coeff_ext = np.chararray(len(coeff_ext), itemsize=2, unicode=True)
     np_coeff_ext[:] = coeff_ext
 
-    fin = ROOT.TFile('../root/tree_histos3_CC_FxFx_masses.root', 'READ')
+    fin = ROOT.TFile('../root/tree_histos3_'+input_tag+'.root', 'READ')
 
     # create TH2D
     for q in charges:

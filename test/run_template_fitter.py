@@ -14,19 +14,20 @@ ntoys = 1
 prior_options = {'prior'  : 'sum', 
                  'select' : [], 
                  'inflate': 1e+03, 
-                 'decorrelate' : ['coeff', 'ybins']}
+                 'decorrelate' : []}
 prior_options = {}
 
 templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job_name='TEST', 
-                                input_tag='all_A0-4_forced_v4',
+                                input_tag_fit='all_A0-4_forced_v4_finer_y_decorrelated',
+                                input_tag_templ='_finer_y',
                                 alternative_mc='',
                                 mc_mass=80.419, 
                                 num_events=1.5e+06,
-                                verbose=False, 
-                                fixed_parameters=['pol', 'A'],  
+                                verbose=True, 
+                                fixed_parameters=['pol', 'A', 'mass'],  
                                 prior_options=prior_options,
                                 reduce_qt=-1, 
-                                reduce_y=-1,
+                                reduce_y=-11,
                                 reduce_pt=0,
                                 fit_mode='parametric2D',
                                 interpolation='quadratic',
@@ -41,6 +42,6 @@ for i in range(ntoys):
     status = templateFitter.run(n_points=100000, run_minos=False, run_post_hesse=False)
     if status>0:
         continue
-    templateFitter.update_results(print_results=True, save_plots=['coeff', 'polynom', 'norm', 'cov'], propagate_covariance=True)
+    templateFitter.update_results(print_results=True, save_plots=['cov', 'norm', 'coeff', 'polynom'], propagate_covariance=True)
 
 templateFitter.close()
