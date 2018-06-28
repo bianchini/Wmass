@@ -30,7 +30,7 @@ class TemplateFitter:
                  DY='CC_FxFx', 
                  charge='Wplus', 
                  var='WpreFSR', 
-                 input_tag_fit='all_A0-4_forced_v3',  
+                 input_tag_fit='all_A0-4_forced_v4',  
                  input_tag_templ='',
                  alternative_mc='',
                  job_name='TEST', 
@@ -47,20 +47,19 @@ class TemplateFitter:
                  use_prefit=False,
                  add_nonclosure=True,
                  save_plots=['mc', 'of'],
-                 print_evals=True
+                 print_evals=True,
+                 run_on_crab=False
                  ):
 
         self.in_dir  = os.environ['CMSSW_BASE']+'/src/Wmass/data/'
         self.out_dir = os.environ['CMSSW_BASE']+'/src/Wmass/test/'
+        if run_on_crab:
+            self.out_dir = './'
         self.job_name = job_name
         self.num_events = num_events 
         
         self.verbose = verbose
-        self.setup_norm_ranges = 'hardcoded'
-        if 'finer_y' in input_tag_fit:
-            self.setup_norm_ranges += '-finer_y'
-        elif 'finer_qt' in input_tag_fit:
-            self.setup_norm_ranges += '-finer_qt'
+        self.setup_norm_ranges = 'hardcoded'+input_tag_templ
 
         self.print_evals = print_evals
 
@@ -353,17 +352,22 @@ class TemplateFitter:
                 (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
             out = (rel_err, (1-rel_err*4), (1+rel_err*4))
                 
-        elif self.setup_norm_ranges=='hardcoded-finer_y':
+        elif self.setup_norm_ranges=='hardcoded_finer_y':
+            rel_err = max(self.mid_point_qt(bin[1])*0.02, 0.2)* \
+                (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
+            out = (rel_err, (1-rel_err*10), (1+rel_err*10))            
+
+        elif self.setup_norm_ranges=='hardcoded_finer_y_qt32':
+            rel_err = max(self.mid_point_qt(bin[1])*0.02, 0.2)* \
+                (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
+            out = (rel_err, (1-rel_err*10), (1+rel_err*10))            
+
+        elif self.setup_norm_ranges=='hardcoded_finer_qt':
             rel_err = max(self.mid_point_qt(bin[1])*0.02, 0.2)* \
                 (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
             out = (rel_err, (1-rel_err*4), (1+rel_err*4))            
 
-        elif self.setup_norm_ranges=='hardcoded-finer_qt':
-            rel_err = max(self.mid_point_qt(bin[1])*0.02, 0.2)* \
-                (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
-            out = (rel_err, (1-rel_err*4), (1+rel_err*4))            
-
-        elif self.setup_norm_ranges=='hardcoded-finer_y_qt':
+        elif self.setup_norm_ranges=='hardcoded_finer_y_qt':
             rel_err = max(self.mid_point_qt(bin[1])*0.03, 0.3)* \
                 (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
             out = (rel_err, (1-rel_err*4), (1+rel_err*4))            
@@ -984,6 +988,7 @@ class TemplateFitter:
                 h2.SetBinContent(iy+1,iqt+1, val)
         h2.Draw('COLZ')
         c.SaveAs(self.out_dir+'norm_'+var+'_'+self.job_name+'.png')
+        c.SaveAs(self.out_dir+'norm_'+var+'_'+self.job_name+'.C')
         c.IsA().Destructor( c )                
 
     def plot_results_polynom_y(self, var='resolution'):
@@ -1018,6 +1023,7 @@ class TemplateFitter:
         
         c.cd()
         c.SaveAs(self.out_dir+'polynom_'+var+'_'+self.job_name+'.png')            
+        c.SaveAs(self.out_dir+'polynom_'+var+'_'+self.job_name+'.C')            
 
     def plot_results_coeff_y_qt(self, var='resolution'):
         histos = {}
@@ -1054,6 +1060,7 @@ class TemplateFitter:
         
         c.cd()
         c.SaveAs(self.out_dir+'coeff_'+var+'_'+self.job_name+'.png')
+        c.SaveAs(self.out_dir+'coeff_'+var+'_'+self.job_name+'.C')
 
 
     def plot_results_coeff_qt(self):
@@ -1067,7 +1074,6 @@ class TemplateFitter:
                 plt.figure()
                 fig, ax = plt.subplots()
 
-                #x = self.bins_qt
                 x = np.array( [0.] + [ (self.bins_qt[iqt]+self.bins_qt[iqt+1])*0.5 for iqt in range(self.bins_qt_size)] + [self.bins_qt[-1]] )
                 
                 (valid_orders, order) = self.get_orders(coeff, y_bin)
@@ -1284,7 +1290,7 @@ class TemplateFitter:
                 plt.xlabel('$q_{T}$ (GeV)', fontsize=20)
                 plt.ylabel('$'+coeff[0]+'_{'+coeff[1]+'}$', fontsize=20)
                 plt.show()
-                plt.savefig(self.out_dir+'/coefficient_'+coeff+'_'+y_bin+'_'+self.job_name+'_2D_fit.png')
+                plt.savefig(self.out_dir+'/coefficient_'+coeff+'_'+y_bin+'_'+self.job_name+'_fit.png')
                 plt.close('all')            
 
                 idx_beta += (len(valid_orders_y)*len(valid_orders_qt))
@@ -1303,8 +1309,11 @@ class TemplateFitter:
                     rho_ij = cov(i,j)/math.sqrt(cov(i,i)*cov(j,j)) \
                         if cov(i,i)>0.0 and cov(j,j)>0.0 else 0.0                    
                 h2.SetBinContent(i+1, j+1, rho_ij )
+        h2.SetMinimum(-1.0)
+        h2.SetMaximum(+1.0)
         h2.Draw("COLZ")
         c.SaveAs(self.out_dir+'covariance_'+name+'_'+self.job_name+'.png')
+        c.SaveAs(self.out_dir+'covariance_'+name+'_'+self.job_name+'.C')
         c.IsA().Destructor( c )
 
 

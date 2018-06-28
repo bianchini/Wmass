@@ -11,6 +11,7 @@ config.JobType.psetName = 'PSet.py'
 config.JobType.scriptExe = 'crab_script.sh'
 config.JobType.inputFiles = ['crab_script.py', 'FrameworkJobReport.xml', 'tree_utils.py', 'fit_utils.py', 'template_fitter.py']
 config.JobType.sendPythonFolder	 = True
+#config.JobType.maxJobRuntimeMin = 1315
 config.JobType.outputFiles = ['result'+'.root']
 
 config.section_("Data")
@@ -29,7 +30,7 @@ from sys import argv
 import copy 
 
 job_base = {'job_name'         : 'TEST', 
-            'ntoys'            : 2,
+            'ntoys'            : 1,
             'dataset'          : 'random',
             'input_tag_fit'    : 'all_A0-4_forced_v4_finer_y_decorrelated', 
             'input_tag_templ'  : '_finer_y',
@@ -42,20 +43,24 @@ job_base = {'job_name'         : 'TEST',
 bins_template_y = [ 0.,0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. , 3.5]
 
 jobs = []
-for fit_mode in ['parametric']:
-    for reduce_y in [-6, -4, -3]:
-        job_new = copy.deepcopy(job_base)
-        job_new['job_name'] = 'random_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')
-        job_new['fit_mode'] = fit_mode
-        job_new['reduce_y'] = reduce_y
-        jobs.append(job_new)
+for dataset in ['random', 'asimov']:
+    for fit_mode in ['parametric']:
+        for reduce_y in [-10, 
+                          #-6, -4, -3
+                          ]:
+            job_new = copy.deepcopy(job_base)
+            job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')
+            job_new['fit_mode'] = fit_mode
+            job_new['reduce_y'] = reduce_y
+            job_new['dataset'] = dataset
+            jobs.append(job_new)
 
 job_new = copy.deepcopy(job_base)
 job_new['job_name'] = 'random_'+'parametric'+'_'+('y{:03.2f}'.format(bins_template_y[-1])).replace('.', 'p')+'_'+'prior_options_y'
 job_new['fit_mode'] = 'parametric'
 job_new['reduce_y'] = -1
 job_new['prior_options'] = 'prior_options_y'
-jobs.append(job_new)
+#jobs.append(job_new)
 
 
 if __name__ == '__main__':
@@ -98,6 +103,10 @@ if __name__ == '__main__':
                     line += ']'
                 elif 'reduce_y' in line:
                     line += str(job['reduce_y'])
+                elif "#save_plots=[]" in line and job['dataset']=='random':
+                    line = line.replace('#', '')
+                elif "#save_plots=['norm', 'cov']" in line and job['dataset']=='asimov':
+                    line = line.replace('#', '')
 
                 line += '\n'
                 fout.write(line)
@@ -123,6 +132,7 @@ if __name__ == '__main__':
             config.JobType.inputFiles = ['crab_script_'+job['job_name']+'.py', 'FrameworkJobReport.xml', 'tree_utils.py', 'fit_utils.py', 'template_fitter.py']
             config.JobType.outputFiles = ['result_CC_FxFx_Wplus_'+job['job_name']+'.root']
             if job['dataset']=='asimov':
+                config.Data.totalUnits = 1     
                 config.JobType.outputFiles.extend([ 'covariance_fit_'+job['job_name']+'.png', 'covariance_fit_'+job['job_name']+'.C',
                                                     'norm_resolution_'+job['job_name']+'.png', 'norm_resolution_'+job['job_name']+'.C'])
                 

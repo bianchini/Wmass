@@ -60,7 +60,7 @@ for i in range(ntoys):
         continue
     templateFitter.update_results(print_results=False, 
                                   #save_plots=['norm', 'cov'], 
-                                  save_plots=[], 
+                                  #save_plots=[], 
                                   propagate_covariance=True)
 
 templateFitter.close()
