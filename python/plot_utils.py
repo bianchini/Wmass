@@ -663,4 +663,127 @@ def derivative_templates(charge='Wplus', var='WpreFSR', coeff_eval='val', bin=(0
     plt.close('all')
 
 
+def profile_toys( files=[], alphas=['norm'], var='rms', postfix=''):
+
+    bins_template_y = [ 0., 0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. , 3.5]
+    bins_template_qt= [ 0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 24.0, 32.0 ]
+
+    for ifname,fname in enumerate(files):
+
+        c = ROOT.TCanvas('canvas_'+str(ifname), '', 1350, 800)      
+        ROOT.gPad.SetBottomMargin(0.35)
+
+        f = ROOT.TFile('plots/result_'+fname[0]+'.root', 'READ')
+        tree = f.Get('tree')
+
+        ys  = []
+        last_y = False
+        for iy in range(len(bins_template_y)-1):
+            if last_y:
+                continue
+            ys.append( 'y{:03.2f}'.format(bins_template_y[iy])+'_'+'y{:03.2f}'.format(bins_template_y[iy+1])  )
+            if 'y{:03.2f}'.format(bins_template_y[iy+1]).replace('.', 'p') in fname[0]:
+                last_y = True
+
+        qts = []
+        last_qt = False
+        for iqt in range(len(bins_template_qt)-1):
+            if last_qt:
+                continue
+            qts.append( 'qt{:03.1f}'.format(bins_template_qt[iqt])+'_'+'qt{:03.1f}'.format(bins_template_qt[iqt+1])  )
+            if 'qt{:03.0f}'.format(bins_template_qt[iqt+1]) in fname[0]:
+                last_qt = True
+
+        tot = len(ys)*(len(alphas)-1)*len(qts)+1 if 'mass' in alphas else len(ys)*len(alphas)*len(qts)
+        print ys
+        print qts
+        print tot
+
+        title = fname[1]+';;'+var
+        res   = ROOT.TH1F('res', title, tot, 0, tot)        
+        res.SetLineWidth(2)
+        res.SetLineColor(ROOT.kBlue)
+        res.SetStats(ROOT.kFALSE)
+
+        line0 = ROOT.TF1("line0", "+0.0", 0, tot) 
+        line0.SetLineColor(ROOT.kBlack) 
+        line0.SetLineWidth(3)
+        line0.SetLineStyle(ROOT.kDashed)
+        line1 = ROOT.TF1("line1", "+1.0", 0, tot) 
+        line1.SetLineColor(ROOT.kRed) 
+        line1.SetLineWidth(3) 
+        line1.SetLineStyle(ROOT.kDashed)
+        line2 = ROOT.TF1("line2", "-1.0", 0, tot) 
+        line2.SetLineColor(ROOT.kRed) 
+        line2.SetLineWidth(3)
+        line2.SetLineStyle(ROOT.kDashed);
+
+        bin = 1
+        for y in ys:
+            for A in alphas:        
+                for qt in qts:
+
+                    if A=='mass':
+                        res.GetXaxis().SetBinLabel(bin, A)
+                    else:
+                        res.GetXaxis().SetBinLabel(bin, y+'_'+qt+'_'+A)
+
+                    hpull = ROOT.TH1F('hpull','', 100, -4,4)
+                    hpull.Sumw2()
+                    g = ROOT.TF1('g', '[0]*TMath::Exp( -0.5*(x-[1])*(x-[1])/[2]/[2] )', -2.5, +2.5)
+                    g.SetNpx(10000)
+                    g.SetParameter(0, 10.)
+                    g.SetParameter(1, 0.)
+                    g.SetParameter(2, 1.)
+
+                    if A=='mass':
+                        if y==ys[0] and qt==qts[0]:
+                            tree.Draw(A+'[4]>>hpull')
+                        else:
+                            hpull.IsA().Destructor(hpull)
+                            g.IsA().Destructor(g)
+                            continue
+                    else:
+                        tree.Draw(y+'_'+qt+'_'+A+'[4]>>hpull')
+
+                    if hpull.Integral( hpull.FindBin(-2.5), hpull.FindBin(+2.5) ) <= 0.:
+                        bin += 1
+                        hpull.IsA().Destructor(hpull)
+                        g.IsA().Destructor(g)
+                        continue
+
+                    fit = hpull.Fit('g', 'SRQ')
+                    (mu, mu_err)       = (fit.Parameter(1), fit.ParError(1))
+                    (sigma, sigma_err) = (abs(fit.Parameter(2)), fit.ParError(2))
+                    
+                    if var=='rms':
+                        res.SetBinContent(bin, sigma)
+                        res.SetBinError(bin, sigma_err)
+                    elif var=='bias':
+                        res.SetBinContent(bin, mu)
+                        res.SetBinError(bin, mu_err)
+                    elif var=='biasANDrms':
+                        res.SetBinContent(bin, mu)
+                        res.SetBinError(bin, sigma)                        
+
+                    bin += 1
+                    hpull.IsA().Destructor(hpull)
+                    g.IsA().Destructor(g)
+
+        c.cd()
+        res.SetMaximum(+3.0)
+        res.SetMinimum(-3.0)
+        res.Draw("HISTE")
+        res.GetXaxis().LabelsOption('v')
+        line0.Draw("SAME")
+        line1.Draw("SAME")
+        line2.Draw("SAME")
+
+        #raw_input()
+        c.SaveAs('plots/profile_toys_'+fname[0]+'_'+var+postfix+'.png')
+
+        print 'Done. Close the file and remove canvas'
+        f.Close()
+        c.IsA().Destructor( c )
+    
 

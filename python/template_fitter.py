@@ -358,7 +358,7 @@ class TemplateFitter:
             out = (rel_err, (1-rel_err*10), (1+rel_err*10))            
 
         elif self.setup_norm_ranges=='hardcoded_finer_y_qt32':
-            rel_err = max(self.mid_point_qt(bin[1])*0.02, 0.2)* \
+            rel_err = max(self.mid_point_qt(bin[1])*0.03, 0.2)* \
                 (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
             out = (rel_err, (1-rel_err*10), (1+rel_err*10))            
 

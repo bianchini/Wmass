@@ -17,7 +17,7 @@ config.JobType.outputFiles = ['result'+'.root']
 config.section_("Data")
 config.Data.splitting = 'EventBased'
 config.Data.unitsPerJob = 1
-config.Data.totalUnits = 250
+config.Data.totalUnits = 500
 #config.Data.totalUnits = 1
 config.Data.publication = False
 config.Data.outputDatasetTag = 'TEST'
@@ -32,8 +32,8 @@ import copy
 job_base = {'job_name'         : 'TEST', 
             'ntoys'            : 1,
             'dataset'          : 'random',
-            'input_tag_fit'    : 'all_A0-4_forced_v4_finer_y_decorrelated', 
-            'input_tag_templ'  : '_finer_y',
+            'input_tag_fit'    : 'all_A0-4_forced_v4_finer_y_qt32_decorrelated', 
+            'input_tag_templ'  : '_finer_y_qt32',
             'fixed_parameters' : ['pol', 'A', 'mass'], 
             'fit_mode'         : 'parametric',
             'reduce_y'         : -1,
@@ -43,24 +43,24 @@ job_base = {'job_name'         : 'TEST',
 bins_template_y = [ 0.,0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. , 3.5]
 
 jobs = []
-for dataset in ['random', 'asimov']:
+for dataset in ['random']:
     for fit_mode in ['parametric']:
-        for reduce_y in [-10, 
-                          #-6, -4, -3
+        for reduce_y in [-6, 
+                          #-4, -3
                           ]:
             job_new = copy.deepcopy(job_base)
-            job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')
+            job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32'+'_release'
             job_new['fit_mode'] = fit_mode
             job_new['reduce_y'] = reduce_y
             job_new['dataset'] = dataset
             jobs.append(job_new)
 
-job_new = copy.deepcopy(job_base)
-job_new['job_name'] = 'random_'+'parametric'+'_'+('y{:03.2f}'.format(bins_template_y[-1])).replace('.', 'p')+'_'+'prior_options_y'
-job_new['fit_mode'] = 'parametric'
-job_new['reduce_y'] = -1
-job_new['prior_options'] = 'prior_options_y'
-#jobs.append(job_new)
+    job_new = copy.deepcopy(job_base)
+    job_new['job_name'] = dataset+'_'+'parametric'+'_'+('y{:03.2f}'.format(bins_template_y[-1])).replace('.', 'p')+'_'+'prior_options_y'+'_qt32'
+    job_new['fit_mode'] = 'parametric'
+    job_new['reduce_y'] = -1
+    job_new['prior_options'] = 'prior_options_y'
+    #jobs.append(job_new)
 
 
 if __name__ == '__main__':
