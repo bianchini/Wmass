@@ -49,7 +49,7 @@ for dataset in ['random']:
                           #-4, -3
                           ]:
             job_new = copy.deepcopy(job_base)
-            job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32'+'_release'
+            job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32'+'_3sigmas'
             job_new['fit_mode'] = fit_mode
             job_new['reduce_y'] = reduce_y
             job_new['dataset'] = dataset

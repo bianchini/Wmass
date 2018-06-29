@@ -676,6 +676,8 @@ def profile_toys( files=[], alphas=['norm'], var='rms', postfix=''):
         f = ROOT.TFile('plots/result_'+fname[0]+'.root', 'READ')
         tree = f.Get('tree')
 
+        asimov = ('asimov' in fname[0])
+
         ys  = []
         last_y = False
         for iy in range(len(bins_template_y)-1):
@@ -752,9 +754,13 @@ def profile_toys( files=[], alphas=['norm'], var='rms', postfix=''):
                         g.IsA().Destructor(g)
                         continue
 
-                    fit = hpull.Fit('g', 'SRQ')
-                    (mu, mu_err)       = (fit.Parameter(1), fit.ParError(1))
-                    (sigma, sigma_err) = (abs(fit.Parameter(2)), fit.ParError(2))
+                    if not asimov:
+                        fit = hpull.Fit('g', 'SRQ')
+                        (mu, mu_err)       = (fit.Parameter(1), fit.ParError(1))
+                        (sigma, sigma_err) = (abs(fit.Parameter(2)), fit.ParError(2))
+                    else:
+                        (mu, mu_err)       = ( hpull.GetMean(), 0.0 )
+                        (sigma, sigma_err) = (0., 0.)
                     
                     if var=='rms':
                         res.SetBinContent(bin, sigma)

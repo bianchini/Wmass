@@ -23,11 +23,11 @@ templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job
                                 alternative_mc='',
                                 mc_mass=80.419, 
                                 num_events=1.5e+06,
-                                verbose=True, 
+                                verbose=False, 
                                 fixed_parameters=['pol', 'A', 'mass'],  
                                 prior_options=prior_options,
                                 reduce_qt=-1, 
-                                reduce_y=-9,
+                                reduce_y=-13,
                                 reduce_pt=0,
                                 fit_mode='parametric',
                                 interpolation='quadratic',
@@ -44,8 +44,8 @@ for i in range(ntoys):
         continue
     templateFitter.update_results(print_results=True, 
                                   #save_plots=['cov', 'norm', 'coeff', 'polynom'], 
-                                  save_plots=['cov', 'norm'], 
-                                  #save_plots=[], 
+                                  #save_plots=['cov', 'norm'], 
+                                  save_plots=[], 
                                   propagate_covariance=False)
 
 templateFitter.close()
