@@ -20,6 +20,8 @@ prior_options = {}
 templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job_name='TEST', 
                                 input_tag_fit='all_A0-4_forced_v4_finer_y_qt32_decorrelated',
                                 input_tag_templ='_finer_y_qt32',
+                                #input_tag_fit='all_A0-4_forced_v4_finer_y_decorrelated',
+                                #input_tag_templ='_finer_y',
                                 alternative_mc='',
                                 mc_mass=80.419, 
                                 num_events=1.5e+06,
@@ -27,7 +29,7 @@ templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job
                                 fixed_parameters=['pol', 'A', 'mass'],  
                                 prior_options=prior_options,
                                 reduce_qt=-1, 
-                                reduce_y=-13,
+                                reduce_y=-11,
                                 reduce_pt=0,
                                 fit_mode='parametric',
                                 interpolation='quadratic',
@@ -39,13 +41,13 @@ templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job
 
 for i in range(ntoys):
     templateFitter.load_data( dataset='asimov', save_plots=[], postfix='_'+str(i) )
-    status = templateFitter.run(n_points=100000, run_minos=False, run_post_hesse=False)
+    status = templateFitter.run(n_points=100000, strategy=2, tolerance=0.1, run_minos=False, run_post_hesse=False)
     if status>0:
         continue
     templateFitter.update_results(print_results=True, 
-                                  #save_plots=['cov', 'norm', 'coeff', 'polynom'], 
+                                  save_plots=['cov', 'norm', 'coeff', 'polynom'], 
                                   #save_plots=['cov', 'norm'], 
-                                  save_plots=[], 
-                                  propagate_covariance=False)
+                                  #save_plots=[], 
+                                  propagate_covariance=True)
 
 templateFitter.close()

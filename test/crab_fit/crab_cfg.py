@@ -43,24 +43,41 @@ job_base = {'job_name'         : 'TEST',
 bins_template_y = [ 0.,0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. , 3.5]
 
 jobs = []
-for dataset in ['random']:
+for dataset in ['random',
+                'asimov'
+                ]:
     for fit_mode in ['parametric']:
         for reduce_y in [-6, 
                           #-4, -3
                           ]:
-            job_new = copy.deepcopy(job_base)
-            job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32'+'_3sigmas'
-            job_new['fit_mode'] = fit_mode
-            job_new['reduce_y'] = reduce_y
-            job_new['dataset'] = dataset
-            jobs.append(job_new)
+     
+            for prior_option in [
+                'prior_options_noprior',
+                #'prior_options_A0',
+                #'prior_options_A1',
+                #'prior_options_A2',
+                #'prior_options_A3',
+                #'prior_options_A4',
+                #'prior_options_A0A1A2',
+                #'prior_options_A3A4',
+                #'prior_options_A0A2',
+                ]:
 
+                job_new = copy.deepcopy(job_base)
+                job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32'+'_'+'strategy2' #prior_option.split('_')[-1]
+                job_new['fit_mode'] = fit_mode
+                job_new['reduce_y'] = reduce_y
+                job_new['dataset'] = dataset
+                job_new['prior_options'] = prior_option
+                jobs.append(job_new)
+
+    continue
     job_new = copy.deepcopy(job_base)
     job_new['job_name'] = dataset+'_'+'parametric'+'_'+('y{:03.2f}'.format(bins_template_y[-1])).replace('.', 'p')+'_'+'prior_options_y'+'_qt32'
     job_new['fit_mode'] = 'parametric'
     job_new['reduce_y'] = -1
     job_new['prior_options'] = 'prior_options_y'
-    #jobs.append(job_new)
+    jobs.append(job_new)
 
 
 if __name__ == '__main__':

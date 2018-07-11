@@ -16,16 +16,19 @@ from plot_utils import *
 # (qt,y) binning 
 np_bins_template_qt_coarser       = np.array([   0.,  4., 8.,  12.,  16.,  20.,  24.,  32.,   40.,   60. ])
 np_bins_template_qt_coarser_qt32  = np.array([   0.,  4., 8.,  12.,  16.,  20.,  24.,  32. ])
+np_bins_template_qt_coarser_qt20  = np.array([   0.,  4., 8.,  12.,  16.,  20. ])
 np_bins_template_qt_finer         = np.array([   0.,  2.,   4.,  6.,   8.,  10.,   12.,  14.,  16., 20.,   24.,  32.,   40.,   60. ])
 np_bins_template_y_coarser        = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2, -0.8, -0.4,  0. , 0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5])
 np_bins_template_y_finer          = np.array([-3.5, -3. , -2.5, -2., -1.8, -1.6, -1.4, -1.2, -1.0, -0.8, -0.6, -0.4, -0.2,  0. ,  0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. ,  3.5])
 
 # forced orders for qt fit
-forced_orders_default = {'A0': 3, 'A1': 4, 'A2': 3, 'A3': 4, 'A4': 4, 'A5': 0, 'A6':0, 'A7':0}
-forced_orders_qt32    = {'A0': 2, 'A1': 2, 'A2': 2, 'A3': 2, 'A4': 2, 'A5': 0, 'A6':0, 'A7':0}
+forced_orders_default  = {'A0': 3, 'A1': 4, 'A2': 3, 'A3': 4, 'A4': 4, 'A5': 0, 'A6':0, 'A7':0}
+forced_orders_pol2     = {'A0': 2, 'A1': 2, 'A2': 2, 'A3': 2, 'A4': 2, 'A5': 0, 'A6':0, 'A7':0}
+forced_orders_pol3     = {'A0': 3, 'A1': 3, 'A2': 3, 'A3': 3, 'A4': 3, 'A5': 0, 'A6':0, 'A7':0}
 
 # coefficients in qt fit that will be fixed to zero
 fix_to_zero_default = {'A0': [0,1], 'A1': [0], 'A2': [0,1], 'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]}
+fix_to_zero_float   = {'A0': [0],   'A1': [0], 'A2': [0],   'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]}
 
 ### Plot pole mass and width from a BW fit ###
 if argv[1]=='pole':
@@ -114,13 +117,13 @@ elif argv[1]=='cov-all':
                 get_covariance(fname='../root/tree_histos1_'+DY+'.root', DY=DY, var=var, q=q, weights=weights, 
                                coefficients=['A0','A1','A2','A3','A4'], 
                                fix_to_zero=fix_to_zero_default,
-                               forced_orders=forced_orders_qt32,
-                               fit_range=[0.0, 28.0],
+                               forced_orders=forced_orders_pol2,
+                               fit_range=[0.0, 18.0],
                                add_stat_uncert=True, 
-                               postfix='all_A0-4_forced_v4_finer_y_qt32_decorrelated',
+                               postfix='all_A0-4_forced_v4_finer_y_qt20_decorrelated',
                                save_corr=True, save_coeff=True, save_tree=True, save_pkl=True,
-                               np_bins_template_qt=np_bins_template_qt_coarser_qt32
-                               np_bins_template_y=np_bins_template_y_finer
+                               np_bins_template_qt=np_bins_template_qt_coarser_qt20,
+                               np_bins_template_y=np_bins_template_y_finer,
                                plot_updown=False,
                                decorrelate_scale=True
                                )
@@ -169,11 +172,11 @@ elif argv[1]=='compare':
 elif argv[1]=='templates':
     merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], 
                     masses=[79.919, 80.419, 80.919], coeff=['A0', 'A1', 'A2', 'A3', 'A4'], 
-                    np_bins_template_qt=np_bins_template_qt_coarser_qt32, 
+                    np_bins_template_qt=np_bins_template_qt_coarser_qt20, 
                     np_bins_template_y=np_bins_template_y_finer,
                     rebin=(2,4),
                     input_tag='CC_FxFx_extra_masses',
-                    postfix='_finer_y_qt32'
+                    postfix='_finer_y_qt20'
                     )
 else:
     print 'Option not supported'

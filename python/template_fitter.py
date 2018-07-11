@@ -284,6 +284,7 @@ class TemplateFitter:
                 tMC = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-1])
                 coeff_vals = get_coeff_vals(res=self.res_coeff, 
                                             coeff_eval=('fit' if self.fit_mode=='parametric' else 'val'), 
+                                            #coeff_eval='val', 
                                             bin_y=self.get_y_bin(iy), qt=self.mid_point_qt(iqt), coeff=self.coefficients,
                                             np_bins_template_qt_new=self.bins_qt)
                 tUL = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-2])
@@ -293,6 +294,7 @@ class TemplateFitter:
                     tjA += copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][icoeff_val])*coeff_val
                 
                 residual = (normUL*tUL+tjA)*inorm-tMC
+                #print self.get_y_bin(iy), self.get_qt_bin(iqt), residual.sum()/math.sqrt(tMC.sum())
                 self.mc_nonclosure[iqt,iy] += residual
                 if 'mc-sum' in save_plots:
                     self.save_template_snapshot(data=residual, title='MC - sum of templates', tag=self.get_y_qt_bin(iy,iqt)+'_closure')
@@ -393,7 +395,7 @@ class TemplateFitter:
         self.arglist = array( 'd', 10*[0.] )
         self.ierflg = ROOT.Long(0)
         
-        # 0.5: chi2, 1.0: -2nll
+        # 0.5: chi2, 1.0: -nll
         self.arglist[0] = 1.0
         self.gMinuit.mnexcm( "SET ERR", self.arglist, 1, self.ierflg )
 
@@ -413,6 +415,7 @@ class TemplateFitter:
                 qt_bin = self.get_qt_bin(iqt)
                 mc_norm = self.template[self.mc_mass_index][iqt][iy][-1].sum()/ \
                     self.mc_acceptances[self.mc_mass_index][iqt][iy]
+
                 if hasattr(self, 'template_alt'):
                     mc_norm = self.template_alt[0][iqt][iy][-1].sum()/ \
                         self.mc_acceptances_alt[0][iqt][iy]
@@ -682,28 +685,32 @@ class TemplateFitter:
         return
 
 
-    def run(self, n_points=500000, run_minos=False, run_post_hesse=False):
+    def run(self, n_points=500000, strategy=2, tolerance=0.1, run_minos=False, run_post_hesse=False):
 
         clock = time.time()
-
-        # Run HESSE --> MIGRAD --> MINOS
-        self.arglist[0] = n_points
-        self.arglist[1] = 1.0
-        print("Convergence at EDM %s" % (self.arglist[1]*0.001))        
 
         # this flag freezes beta's in chi2
         self.release_for_hesse = False
 
-        #self.arglist[0] = 1
+        self.arglist[0] = 0
         #self.gMinuit.mnexcm( "SET GRA", self.arglist, 1, self.ierflg)
         self.gMinuit.mnexcm( "SET NOG", self.arglist, 0, self.ierflg)
 
+        # Run HESSE --> MIGRAD --> MINOS
         print 'Running HESSE...'
+        self.arglist[0] = n_points
         self.gMinuit.mnexcm( "HES", self.arglist, 1, self.ierflg )
-        self.arglist[0] = 1
+
+        print 'Running MIGRAD with strategy', strategy, '...'
+        self.arglist[0] = strategy
         self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
-        print 'Running MIGRAD with strategy', int(self.arglist[0]), '...'
-        status = self.gMinuit.Migrad()
+        #status = self.gMinuit.Migrad()
+        print("Convergence at EDM %s" % (self.arglist[1]*0.001))        
+        self.arglist[0] = n_points
+        self.arglist[1] = tolerance
+        self.gMinuit.mnexcm( "MIG", self.arglist, 2, self.ierflg )
+        status = copy.deepcopy(int(self.ierflg))
+
         if status>0:
             return 1
             self.arglist[0] = 2
