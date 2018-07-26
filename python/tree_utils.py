@@ -24,6 +24,7 @@ np_bins_y_width = np.array( [np_bins_y[i+1]-np_bins_y[i] for i in range(np_bins_
 np_bins_y_mid   = np.array( [(np_bins_y[i+1]+np_bins_y[i])*0.5 for i in range(np_bins_y.size-1)] )
 
 np_bins_pt  = np.linspace( 25.0, 65.0, 81  )
+np_bins_ptinv = np.linspace( 1./65.0, 1./25.0, 81  )
 np_bins_eta = np.linspace( -2.5, 2.5,  101 )
 
 
@@ -239,10 +240,15 @@ def add_histo2D_CS(charges=['Wminus','Wplus'], var=['Wdress'], coeff_eval=['fit'
         
     return histos
 
-def add_histo2D_lepton(charges=['Wminus','Wplus'], var=['Wdress'], coeff_eval=['val'], masses=[80.000], coeff=['A0']):
+def add_histo2D_lepton(charges=['Wminus','Wplus'], var=['Wdress'], coeff_eval=['val'], masses=[80.000], coeff=['A0'], plot_vars=['eta','pt']):
     # binning
-    bins_pt  = array( 'f',  np_bins_pt )
-    bins_eta = array( 'f',  np_bins_eta )
+    np_bins_xx = np_bins_eta
+    np_bins_yy = np_bins_pt
+    if plot_vars[1]=='1/pt':
+        np_bins_yy = np_bins_ptinv
+        
+    bins_yy = array( 'f',  np_bins_yy )
+    bins_xx = array( 'f',  np_bins_xx )
 
     np_bins_y_extL = np.insert(np_bins_y,   0, [-10.])
     np_bins_y_ext  = np.append(np_bins_y_extL, [+10.])
@@ -271,7 +277,7 @@ def add_histo2D_lepton(charges=['Wminus','Wplus'], var=['Wdress'], coeff_eval=['
                             histos[q][v][ceval][mass_str][bin_name] = {}                                
                             for c in (coeff+['', 'UL']):
                                 name = q+'_'+v+'_'+ceval+'_'+mass_str+'_'+bin_name+'_'+c
-                                h2 = ROOT.TH2F(name, name, len(bins_eta)-1, bins_eta, len(bins_pt)-1, bins_pt) 
+                                h2 = ROOT.TH2F(name, name, len(bins_xx)-1, bins_xx, len(bins_yy)-1, bins_yy) 
                                 h2.Sumw2()
                                 histos[q][v][ceval][mass_str][bin_name][c]= h2
     return histos

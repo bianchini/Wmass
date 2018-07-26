@@ -20,7 +20,7 @@ from DataFormats.FWLite import Handle, Events
 
 class TreeProducer:
 
-    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test', save_tree=True, save_histo1=False, save_histo2=False, save_histo3=False, masses=[80.419]):
+    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test', save_tree=True, save_histo1=False, save_histo2=False, save_histo3=False, masses=[80.419],  plot_vars_histo3=['eta','pt']):
     
         print "****** TreeProducer *****"
         print 'Running for '+DY+' Drell-Yan'
@@ -70,12 +70,13 @@ class TreeProducer:
 
         # pt-eta
         self.save_histo3 = save_histo3
+        self.plot_vars_histo3 = plot_vars_histo3
         if save_histo3:
             for q in ['Wplus', 'Wminus']:
                 self.fit_result[q]  = {}
                 for var in ['Wdress', 'Wbare', 'WpreFSR']:
                     self.fit_result[q][var] = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_'+q+'_'+var+'_all_A0-7.pkl') )
-            self.histos = add_histo2D_lepton( charges=['Wminus','Wplus'], var=['WpreFSR'], coeff_eval=['val'], masses=masses, coeff=['A0','A1','A2','A3','A4','A5','A6','A7'] ) 
+            self.histos = add_histo2D_lepton( charges=['Wminus','Wplus'], var=['WpreFSR'], coeff_eval=['val'], masses=masses, coeff=['A0','A1','A2','A3','A4','A5','A6','A7'],  plot_vars=plot_vars_histo3 ) 
 
         # add branches to tree (needed even if self.save_tree=False)
         self.variables = add_vars(self.outtree)
@@ -381,7 +382,11 @@ class TreeProducer:
                 if self.save_histo3:
                     if t not in ['WpreFSR']:
                         continue
-                    q1 = 'Wplus' if self.variables['mu_charge'][0]==-13 else 'Wminus'
+                    q1 = 'Wplus' if self.variables['mu_charge'][0]==-13 else 'Wminus'                    
+                    ps_lep = (self.variables['Wbare_mu_eta'][0], self.variables['Wbare_mu_pt'][0])
+                    if self.plot_vars_histo3[1]=='1/pt':
+                        ps_lep = (self.variables['Wbare_mu_eta'][0], 1./self.variables['Wbare_mu_pt'][0] if self.variables['Wbare_mu_pt'][0]>0. else +99999.)
+                        
                     fill_lepton_lab(res=getattr(self, "fit_result")[q1][t],
                                     histos=self.histos, 
                                     q=q1,
@@ -390,11 +395,10 @@ class TreeProducer:
                                     masses=self.masses,
                                     ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt(), Wp4[t].M()), 
                                     ps_CS=(ps[1],ps[2]),
-                                    ps_lep=(self.variables['Wbare_mu_eta'][0], self.variables['Wbare_mu_pt'][0]),
+                                    ps_lep=ps_lep,
                                     weight=self.variables['weights'][0],
                                     coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7']
                                     )
-
 
             # fill the tree
             if self.save_tree:
