@@ -43,6 +43,7 @@ class TemplateFitter:
                  reduce_y=-1,
                  reduce_pt=0,
                  fit_mode='parametric',
+                 do_analytic_fit=False,
                  interpolation='linear',
                  use_prefit=False,
                  add_nonclosure=True,
@@ -72,6 +73,7 @@ class TemplateFitter:
 
         self.mc_mass = mc_mass
         self.fit_mode = fit_mode
+        self.do_analytic_fit = do_analytic_fit
         self.map_params = {}
         self.map_params_minuit = {}
         self.release_for_hesse = False
@@ -181,10 +183,10 @@ class TemplateFitter:
             self.save_template_snapshot(data=self.overflow_template, title='Overflow', tag='of')
 
 
-        self.dim_A = 0
+        self.dim_A     = 0
         self.dim_alpha = 0
-        self.dim_beta = 0
-        self.n_param = 0
+        self.dim_beta  = 0
+        self.n_param   = 0
         self.n_param_minuit = 0
 
         if use_prefit and (os.path.isfile(self.in_dir+'prefit_beta.npy') and os.path.isfile(self.in_dir+'prefit_Vbeta.npy')):
@@ -348,7 +350,8 @@ class TemplateFitter:
     def norm_ranges(self, par_name='', bin=()):
         out = (0.1, 1., 1.)
 
-        print self.setup_norm_ranges
+        if self.verbose:
+            print self.setup_norm_ranges
         if self.setup_norm_ranges=='hardcoded':
             rel_err = max(self.mid_point_qt(bin[1])*0.01, 0.1)* \
                 (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
@@ -367,6 +370,13 @@ class TemplateFitter:
             n_sigmas = 10
             out = (rel_err, (1-rel_err*n_sigmas), (1+rel_err*n_sigmas))            
 
+        elif self.setup_norm_ranges=='hardcoded_finer_y_qt20':
+            rel_err = max(self.mid_point_qt(bin[1])*0.03, 0.2)* \
+                (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
+            rel_err /= math.sqrt(self.num_events/1.5e+06)
+            n_sigmas = 10
+            out = (rel_err, (1-rel_err*n_sigmas), (1+rel_err*n_sigmas))
+
         elif self.setup_norm_ranges=='hardcoded_finer_qt':
             rel_err = max(self.mid_point_qt(bin[1])*0.02, 0.2)* \
                 (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
@@ -379,8 +389,9 @@ class TemplateFitter:
             n_sigmas = 4
             out = (rel_err, (1-rel_err*n_sigmas), (1+rel_err*n_sigmas))            
 
-        print par_name, '=> set step at ', '{:0.2f}'.format(out[0])+'*NORM and range at ['+ \
-            '{:0.2f}'.format(out[1])+', '+'{:0.2f}'.format(out[2])+']*NORM'
+        if self.verbose:
+            print par_name, '=> set step at ', '{:0.2f}'.format(out[0])+'*NORM and range at ['+ \
+                '{:0.2f}'.format(out[1])+', '+'{:0.2f}'.format(out[2])+']*NORM'
         return out
 
 
@@ -422,11 +433,17 @@ class TemplateFitter:
                     
                 norm_range = self.norm_ranges(par_name=y_bin+'_'+qt_bin+'_norm', bin=(iy,iqt))
                 self.define_parameter( par_name=y_bin+'_'+qt_bin+'_norm', 
-                                       start=mc_norm, 
+                                       start=mc_norm,
+                                       #start=(mc_norm + np.random.normal(mc_norm, math.sqrt(mc_norm))), 
                                        step=mc_norm*norm_range[0], 
+                                       #step=mc_norm*0.1, 
                                        par_range=(mc_norm*norm_range[1], mc_norm*norm_range[2]),
+                                       #par_range=(-1e+05,1e+05),
                                        true=mc_norm,
-                                       par_type='alpha')
+                                       par_type=('alpha' if not self.do_analytic_fit else 'beta'))
+
+                if self.do_analytic_fit:
+                    self.dim_A += 1
 
                 for coeff in self.coefficients:
                     self.dim_A += 1
@@ -494,8 +511,8 @@ class TemplateFitter:
             if o!=0.:
                 valid_orders.append(io)
         
-        #if coeff in ['A0','A1','A2','A3','A4']:
-        #    return ([0,1,2], 2)
+        #if coeff in ['A0','A2']:
+            #return ([1,2], 2)
             #return ([], 0)
         #if coeff in ['A1', 'A3']:
         #    return ([1,2,3], 3)
@@ -523,7 +540,7 @@ class TemplateFitter:
 
     def build_aux_matrices(self):
 
-        if self.fit_mode=='parametric':
+        if self.fit_mode=='parametric' and not self.do_analytic_fit:
             self.K = np.zeros( ( self.dim_A, self.dim_beta) )
             # first loop
             idx_A = 0
@@ -541,6 +558,30 @@ class TemplateFitter:
                                         self.K[idx_A, idx_beta] += math.pow( self.mid_point_qt(iqt), o)
                                     idx_beta += 1
                         idx_A += 1
+
+   
+        #elif self.fit_mode=='parametric' and self.do_analytic_fit:
+        #    self.K = np.zeros( ( self.dim_A, self.dim_beta) )
+        #    # first loop
+        #    idx_A = 0
+        #    for iy1 in range(self.bins_y_size):
+        #        for iqt in range(self.bins_qt_size):
+        #            self.K[idx_A,idx_A] = 1.0
+        #            idx_A += 1
+        #    for iy1 in range(self.bins_y_size):
+        #        for iqt in range(self.bins_qt_size):
+        #            for coeff1 in self.coefficients:                        
+        #                # second loop
+        #                idx_beta = self.bins_y_size*self.bins_qt_size
+        #                for iy2 in range(self.bins_y_size):                    
+        #                    y_bin2 = self.get_y_bin( iy2 )
+        #                    for coeff2 in self.coefficients:
+        #                        (valid_orders, order) = self.get_orders(coeff2, y_bin2)
+        #                        for o in valid_orders:
+        #                            if iy1==iy2 and coeff1==coeff2:
+        #                                self.K[idx_A, idx_beta] += math.pow( self.mid_point_qt(iqt), o)
+        #                            idx_beta += 1
+        #                idx_A += 1
                 
         elif self.fit_mode=='parametric2D':
             self.K = np.zeros( ( self.dim_A, self.dim_beta) )
@@ -590,7 +631,7 @@ class TemplateFitter:
     #def grad(self, par):
     #    der = [0.]*self.n_param #[(par[0]-self.mc_mass)/0.1/0.1]*self.n_param
     #    return der
-
+ 
     def chi2(self, par):
 
         #return math.pow((par[0]-self.mc_mass)/0.1,2.0)
@@ -598,18 +639,32 @@ class TemplateFitter:
         # construction of Am and Bm matrices
         (Am, bm) = (np.zeros((self.data.size, self.dim_A)), np.zeros(self.nsub.shape))
         bm = np.zeros(self.nsub.shape)
-        idx_A = 0
-        for iy in range(self.bins_y_size):
-            for iqt in range(self.bins_qt_size):
-                inorm = par[self.map_params[self.get_y_qt_bin(iy,iqt)+'_norm']]
-                tUL = self.interpolate(mass=par[0], iqt=iqt, iy=iy, icoeff=-2) 
-                bm += tUL.flatten()*inorm
-                for icoeff,coeff in enumerate(self.coefficients):
-                    tjA = self.interpolate(mass=par[0], iqt=iqt, iy=iy, icoeff=icoeff) 
-                    Am[:, idx_A] += tjA.flatten()*inorm
+ 
+        if self.do_analytic_fit:
+            idx_A = 0
+            for iy in range(self.bins_y_size):
+                for iqt in range(self.bins_qt_size):
+                    tUL = self.interpolate(mass=par[0], iqt=iqt, iy=iy, icoeff=-2)
+                    Am[:, idx_A] += tUL.flatten()        
                     idx_A += 1
-        
-        nsub = (self.nsub - bm)
+                    for icoeff,coeff in enumerate(self.coefficients):
+                        tjA = self.interpolate(mass=par[0], iqt=iqt, iy=iy, icoeff=icoeff) 
+                        Am[:, idx_A] += tjA.flatten()
+                        idx_A += 1
+            nsub = self.nsub
+
+        else:
+            idx_A = 0
+            for iy in range(self.bins_y_size):
+                for iqt in range(self.bins_qt_size):
+                    inorm = par[self.map_params[self.get_y_qt_bin(iy,iqt)+'_norm']]
+                    tUL = self.interpolate(mass=par[0], iqt=iqt, iy=iy, icoeff=-2) 
+                    bm += tUL.flatten()*inorm
+                    for icoeff,coeff in enumerate(self.coefficients):
+                        tjA = self.interpolate(mass=par[0], iqt=iqt, iy=iy, icoeff=icoeff) 
+                        Am[:, idx_A] += tjA.flatten()*inorm
+                        idx_A += 1        
+            nsub = (self.nsub - bm)
 
         if self.release_for_hesse:
             beta = np.zeros( self.dim_beta )
@@ -625,6 +680,13 @@ class TemplateFitter:
                 print 'Chi2: ', '{:0.5f}'.format(chi2min), \
                     (' = '+'{:0.5f}'.format(chi2min-chi2_prior)+' (stat.) + '+'{:0.5f}'.format(chi2_prior)+' (prior)' if self.use_prior else ''), \
                     '/', self.ndof, ' dof = ', '{:0.5f}'.format(chi2min/self.ndof)
+            # debug in case of negative norms
+            if self.verbose:
+                for key,p in self.map_params.items():
+                    if 'true' in key or '_norm' not in key:
+                        continue
+                    if par[p]<0.:
+                        print '\t', key, par[p]
             return chi2min
 
         # construction of chi2
@@ -653,6 +715,14 @@ class TemplateFitter:
         self.beta  = beta
         self.Vbeta = aux1_inv
 
+        # debug in case of negative norms
+        if self.verbose:
+            for key,p in self.map_params.items():
+                if 'true' in key or '_norm' not in key:
+                    continue
+                if par[p]<0.:
+                    print '\t', key, par[p]
+
         return chi2min
     
     
@@ -666,6 +736,14 @@ class TemplateFitter:
         elif dataset=='random':
             self.data += np.random.poisson( self.mc )
             print 'Loading poisson dataset as DATA with', self.data.sum(), 'entries'
+
+        elif dataset=='normal':
+            data_tmp = np.zeros( self.mc.shape ) 
+            while (data_tmp[data_tmp<=0.].size > 0):
+                data_tmp = np.random.normal( self.mc, np.sqrt(self.mc) )
+            self.data += data_tmp
+            print 'Loading normal dataset as DATA with', self.data.sum(), 'entries'
+
         elif dataset=='alternative':
             self.data += copy.deepcopy(self.template_alt.sum(axis=(1,2))[0,-1])
             print 'Loading alternative dataset as DATA with', self.data.sum(), 'entries'
@@ -689,6 +767,50 @@ class TemplateFitter:
 
         clock = time.time()
 
+        if self.do_analytic_fit:
+            chi2min =  self.chi2(par=[self.mc_mass])
+            status = 1
+            # stop the clock
+            clock -= time.time()
+            pvalue = 1-stats.chi2.cdf(chi2min, self.ndof)            
+            print 'Bins: ', self.data.size, ', number of d.o.f.: ', self.ndof, \
+                ' chi2: '+'{:4.1f}'.format(chi2min), ' (p-value: '+'{:4.3f}'.format(pvalue)+')'
+            print('Fit done in '+'{:4.1f}'.format(-clock)+' seconds')
+
+            idx_beta = 0
+            for iy in range(self.bins_y_size):
+                y_bin = self.get_y_bin(iy)
+                for iqt in range(self.bins_qt_size):                    
+                    qt_bin = self.get_qt_bin(iqt)
+                    val = self.beta[idx_beta]
+                    true = self.map_params[y_bin+'_'+qt_bin+'_norm_true']
+                    err = math.sqrt(self.Vbeta[idx_beta,idx_beta])
+                    pull = (val-true)/err
+                    idx_beta += 1
+                    print y_bin+'_'+qt_bin+'_norm'+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
+                        ' true = ', '{:0.2E}'.format(true), \
+                        ' pull = ', '{:0.2f}'.format(pull)
+                    for icoeff,coeff in enumerate(self.coefficients):
+                        idx_beta += 1
+            
+            self.plot_cov_matrix(n_free=self.Vbeta.shape[0], cov=self.Vbeta, name='analytic')
+
+            #for iy in range(self.bins_y_size):
+            #    for coeff in self.coefficients:                                                
+            #        (valid_orders, order) = self.get_orders(coeff, y_bin)
+            #        for o in valid_orders:
+            #            val = self.beta[idx_beta]/self.beta[iy*self.bins_qt_size + iqt]
+            #            true = self.map_params[y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o)+'_true']
+            #            err = val*math.sqrt( math.pow(self.Vbeta[iy*self.bins_qt_size + iqt,iy*self.bins_qt_size + iqt]/self.beta[iy*self.bins_qt_size + iqt] ,2) ) 
+            #            math.sqrt(self.Vbeta[idx_beta,idx_beta])
+            #            pull = (val-true)/true                        
+            #            print y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o)+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
+            #                ' true = ', '{:0.2E}'.format(true), \
+            #                ' pull = ', '{:0.2f}'.format(pull)
+            #            idx_beta += 1                         
+
+            return status
+
         # this flag freezes beta's in chi2
         self.release_for_hesse = False
 
@@ -705,7 +827,7 @@ class TemplateFitter:
         self.arglist[0] = strategy
         self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
         #status = self.gMinuit.Migrad()
-        print("Convergence at EDM %s" % (self.arglist[1]*0.001))        
+        print("Convergence at EDM %s" % (self.arglist[1]*0.001))         
         self.arglist[0] = n_points
         self.arglist[1] = tolerance
         self.gMinuit.mnexcm( "MIG", self.arglist, 2, self.ierflg )
@@ -737,7 +859,7 @@ class TemplateFitter:
         self.gMinuit.mnstat( amin, edm, errdef, nvpar, nparx, icstat )
         self.gMinuit.mnprin( 3, amin )            
         pvalue = 1-stats.chi2.cdf(float(amin), self.ndof)
-
+        
         print 'Bins: ', self.data.size, ', number of d.o.f.: ', self.ndof, \
             ' chi2: '+'{:4.1f}'.format(float(amin)), ' (p-value: '+'{:4.3f}'.format(pvalue)+')'
         print('Fit done in '+'{:4.1f}'.format(-clock)+' seconds')
@@ -767,6 +889,23 @@ class TemplateFitter:
         self.gMinuit.mnemat(self.TMatrix.GetMatrixArray(), self.n_param_minuit)
 
         return 0
+
+    def scan(self, par_name='', step=1, par_low=-1, par_high=+1):
+        self.print_evals = False
+        par = [0.]*self.n_param 
+        (val,err)  = (ROOT.Double(0.), ROOT.Double(0.))
+        nsteps = int((par_high-par_low)/step)
+        print par_name
+        for s in range(nsteps):
+            param_val = par_low + step*s
+            for key,p in self.map_params.items(): 
+                if '_true' in key:
+                    continue
+                self.gMinuit.GetParameter(p, val, err)            
+                par[p] = float(val) if key!=par_name else param_val
+            chi2 = self.chi2(par=par)
+            print param_val, ' ===> ',  '{:0.2f}'.format(chi2) 
+
 
     def update_results(self, print_results=True, save_plots=['coeff', 'polynom', 'norm', 'cov'], propagate_covariance=False):
 
