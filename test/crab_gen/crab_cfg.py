@@ -40,5 +40,5 @@ from CRABAPI.RawCommand import crabCommand
 
 for data in datasets:
     config.Data.inputDataset = data[0]
-    config.General.requestName = 'TreeProducer_Histo3_'+data[1]
+    config.General.requestName = 'TreeProducer_Histo3_'+data[1]+'_ptinv'
     crabCommand('submit', config = config)    

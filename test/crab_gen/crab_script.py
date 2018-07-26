@@ -11,7 +11,7 @@ from tree_producer import TreeProducer
 mass_mc = 80.419
 masses = [mass_mc]
 
-treeProducer = TreeProducer(DY='CC_FxFx', verbose=False, debug=False, filenames=inputFiles(), save_tree=False, save_histo1=False, save_histo2=False, save_histo3=True, masses=masses, postfix='test')
+treeProducer = TreeProducer(DY='CC_FxFx', verbose=False, debug=False, filenames=inputFiles(), save_tree=False, save_histo1=False, save_histo2=False, save_histo3=True, masses=masses, postfix='test',  plot_vars_histo3=['eta','1/pt'])
 treeProducer.run()
 
 print "DONE"
