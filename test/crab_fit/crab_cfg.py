@@ -47,8 +47,7 @@ for dataset in ['random',
                 'asimov'
                 ]:
     for fit_mode in ['parametric']:
-        for reduce_y in [-6, 
-                          #-4, -3
+        for reduce_y in [ -4
                           ]:
      
             for prior_option in [
@@ -64,7 +63,7 @@ for dataset in ['random',
                 ]:
 
                 job_new = copy.deepcopy(job_base)
-                job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32'+'_'+'strategy2' #prior_option.split('_')[-1]
+                job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32'+'_'+'default'  #prior_option.split('_')[-1]
                 job_new['fit_mode'] = fit_mode
                 job_new['reduce_y'] = reduce_y
                 job_new['dataset'] = dataset
@@ -122,7 +121,7 @@ if __name__ == '__main__':
                     line += str(job['reduce_y'])
                 elif "#save_plots=[]" in line and job['dataset']=='random':
                     line = line.replace('#', '')
-                elif "#save_plots=['norm', 'cov']" in line and job['dataset']=='asimov':
+                elif "#save_plots=['norm', 'cov', 'coeff']" in line and job['dataset']=='asimov':
                     line = line.replace('#', '')
 
                 line += '\n'
@@ -152,7 +151,9 @@ if __name__ == '__main__':
                 config.Data.totalUnits = 1     
                 config.JobType.outputFiles.extend([ 'covariance_fit_'+job['job_name']+'.png', 'covariance_fit_'+job['job_name']+'.C',
                                                     'norm_resolution_'+job['job_name']+'.png', 'norm_resolution_'+job['job_name']+'.C'])
-                
+                for coeff in ['A0','A1','A2','A3','A4']:
+                    for iy,y in enumerate(bins_template_y[0:job['reduce_y']]): 
+                        config.JobType.outputFiles.extend([ 'coefficient_'+coeff+'_'+'y{:03.2f}'.format(bins_template_y[iy])+'_'+'y{:03.2f}'.format(bins_template_y[iy+1])+'_'+job['job_name']+'_fit.png' ])
             crabCommand('submit', config = config)
 
     if argv[1]=='killall':

@@ -67,7 +67,7 @@ templateFitter = TemplateFitter(DY='CC_FxFx'
                                 ,input_tag_templ=
                                 ,alternative_mc=''
                                 ,mc_mass=80.419
-                                ,num_events=1.5e+06
+                                ,num_events=3.0e+07
                                 ,verbose=True
                                 ,fixed_parameters=
                                 ,prior_options=
@@ -78,6 +78,8 @@ templateFitter = TemplateFitter(DY='CC_FxFx'
                                 ,interpolation='quadratic'
                                 ,use_prefit=False
                                 ,add_nonclosure=True
+                                ,use_gradient=False
+                                ,random_start=False
                                 ,save_plots=[]
                                 ,print_evals=True
                                 ,run_on_crab=True
@@ -91,7 +93,7 @@ for i in range(ntoys):
     if status>0:
         continue
     templateFitter.update_results(print_results=False, 
-                                  #save_plots=['norm', 'cov'], 
+                                  #save_plots=['norm', 'cov', 'coeff'], 
                                   #save_plots=[], 
                                   propagate_covariance=True)
 

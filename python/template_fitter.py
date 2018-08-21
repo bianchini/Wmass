@@ -47,7 +47,9 @@ class TemplateFitter:
                  interpolation='linear',
                  use_prefit=False,
                  add_nonclosure=True,
+                 use_gradient=False,
                  save_plots=['mc', 'of'],
+                 random_start=False,
                  print_evals=True,
                  run_on_crab=False
                  ):
@@ -61,6 +63,8 @@ class TemplateFitter:
         
         self.verbose = verbose
         self.setup_norm_ranges = 'hardcoded'+input_tag_templ
+        self.random_start = random_start
+        self.use_gradient = use_gradient
 
         self.print_evals = print_evals
 
@@ -78,7 +82,7 @@ class TemplateFitter:
         self.map_params_minuit = {}
         self.release_for_hesse = False
 
-        self.update=True
+        self.update = True
 
         templates_files = {'template': 0, 'masses': 1, 'bins_qt' : 2, 
                            'bins_y'  : 3, 'coefficients' : 4, 'bins_eta': 5, 
@@ -86,6 +90,12 @@ class TemplateFitter:
 
         self.res_coeff = np.load(open(self.in_dir+'fit_results_'+DY+'_'+charge+'_'+var+'_'+input_tag_fit+'.pkl', 'r'))        
         templates = np.load(self.in_dir+'template_'+charge+'_'+var+'_val'+input_tag_templ+'.npz')
+
+        #########################################
+        #for key,p in self.res_coeff.items():
+        #    if ('A2' in key and 'fit' in key):
+        #        self.res_coeff[key] += [0.,0.,0.]
+        #########################################
 
         if alternative_mc!='':
             print 'Loading alternative MC...'
@@ -285,8 +295,8 @@ class TemplateFitter:
                 inorm = self.template[self.mc_mass_index][iqt][iy][-1].sum()/self.mc_acceptances[self.mc_mass_index][iqt][iy]
                 tMC = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-1])
                 coeff_vals = get_coeff_vals(res=self.res_coeff, 
-                                            coeff_eval=('fit' if self.fit_mode=='parametric' else 'val'), 
-                                            #coeff_eval='val', 
+                                            #coeff_eval=('fit' if self.fit_mode=='parametric' else 'val'), 
+                                            coeff_eval='val', 
                                             bin_y=self.get_y_bin(iy), qt=self.mid_point_qt(iqt), coeff=self.coefficients,
                                             np_bins_template_qt_new=self.bins_qt)
                 tUL = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy][-2])
@@ -367,14 +377,15 @@ class TemplateFitter:
         elif self.setup_norm_ranges=='hardcoded_finer_y_qt32':
             rel_err = max(self.mid_point_qt(bin[1])*0.03, 0.2)* \
                 (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
-            n_sigmas = 10
+            rel_err /= math.sqrt(self.num_events/1.5e+06)
+            n_sigmas = 5
             out = (rel_err, (1-rel_err*n_sigmas), (1+rel_err*n_sigmas))            
 
         elif self.setup_norm_ranges=='hardcoded_finer_y_qt20':
             rel_err = max(self.mid_point_qt(bin[1])*0.03, 0.2)* \
                 (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
             rel_err /= math.sqrt(self.num_events/1.5e+06)
-            n_sigmas = 10
+            n_sigmas = 5
             out = (rel_err, (1-rel_err*n_sigmas), (1+rel_err*n_sigmas))
 
         elif self.setup_norm_ranges=='hardcoded_finer_qt':
@@ -433,12 +444,9 @@ class TemplateFitter:
                     
                 norm_range = self.norm_ranges(par_name=y_bin+'_'+qt_bin+'_norm', bin=(iy,iqt))
                 self.define_parameter( par_name=y_bin+'_'+qt_bin+'_norm', 
-                                       start=mc_norm,
-                                       #start=(mc_norm + np.random.normal(mc_norm, math.sqrt(mc_norm))), 
+                                       start=( mc_norm + np.random.normal(mc_norm, math.sqrt(mc_norm)) if self.random_start else mc_norm),
                                        step=mc_norm*norm_range[0], 
-                                       #step=mc_norm*0.1, 
                                        par_range=(mc_norm*norm_range[1], mc_norm*norm_range[2]),
-                                       #par_range=(-1e+05,1e+05),
                                        true=mc_norm,
                                        par_type=('alpha' if not self.do_analytic_fit else 'beta'))
 
@@ -511,8 +519,9 @@ class TemplateFitter:
             if o!=0.:
                 valid_orders.append(io)
         
-        #if coeff in ['A0','A2']:
-            #return ([1,2], 2)
+        ###############################
+        #if coeff in ['A2']:
+        #    return ([0,1,2,3,4], 5)
             #return ([], 0)
         #if coeff in ['A1', 'A3']:
         #    return ([1,2,3], 3)
@@ -520,6 +529,7 @@ class TemplateFitter:
         #if coeff in ['A4']:
         #    return ([0], 0)                            
         #    return ([0,1], 1)   
+        ###############################
 
         return (valid_orders, order)                
 
@@ -560,29 +570,6 @@ class TemplateFitter:
                         idx_A += 1
 
    
-        #elif self.fit_mode=='parametric' and self.do_analytic_fit:
-        #    self.K = np.zeros( ( self.dim_A, self.dim_beta) )
-        #    # first loop
-        #    idx_A = 0
-        #    for iy1 in range(self.bins_y_size):
-        #        for iqt in range(self.bins_qt_size):
-        #            self.K[idx_A,idx_A] = 1.0
-        #            idx_A += 1
-        #    for iy1 in range(self.bins_y_size):
-        #        for iqt in range(self.bins_qt_size):
-        #            for coeff1 in self.coefficients:                        
-        #                # second loop
-        #                idx_beta = self.bins_y_size*self.bins_qt_size
-        #                for iy2 in range(self.bins_y_size):                    
-        #                    y_bin2 = self.get_y_bin( iy2 )
-        #                    for coeff2 in self.coefficients:
-        #                        (valid_orders, order) = self.get_orders(coeff2, y_bin2)
-        #                        for o in valid_orders:
-        #                            if iy1==iy2 and coeff1==coeff2:
-        #                                self.K[idx_A, idx_beta] += math.pow( self.mid_point_qt(iqt), o)
-        #                            idx_beta += 1
-        #                idx_A += 1
-                
         elif self.fit_mode=='parametric2D':
             self.K = np.zeros( ( self.dim_A, self.dim_beta) )
             # first loop
@@ -625,16 +612,19 @@ class TemplateFitter:
     def fcn(self, npar, gin, f, par, iflag ):
         nll = self.chi2(par=par)
         f[0] = nll
-        #gin[0] = 0.*(par[0]-self.mc_mass)/0.1/0.1 #self.grad(par=par) 
+        if self.use_gradient:
+            gin[0] = self.grad(par=par) 
         return
 
-    #def grad(self, par):
-    #    der = [0.]*self.n_param #[(par[0]-self.mc_mass)/0.1/0.1]*self.n_param
-    #    return der
+    def grad(self, par):
+        der = [0.]*self.n_param
+        return der
  
     def chi2(self, par):
 
+        ##############################
         #return math.pow((par[0]-self.mc_mass)/0.1,2.0)
+        ##############################
 
         # construction of Am and Bm matrices
         (Am, bm) = (np.zeros((self.data.size, self.dim_A)), np.zeros(self.nsub.shape))
@@ -680,13 +670,16 @@ class TemplateFitter:
                 print 'Chi2: ', '{:0.5f}'.format(chi2min), \
                     (' = '+'{:0.5f}'.format(chi2min-chi2_prior)+' (stat.) + '+'{:0.5f}'.format(chi2_prior)+' (prior)' if self.use_prior else ''), \
                     '/', self.ndof, ' dof = ', '{:0.5f}'.format(chi2min/self.ndof)
-            # debug in case of negative norms
-            if self.verbose:
-                for key,p in self.map_params.items():
-                    if 'true' in key or '_norm' not in key:
-                        continue
-                    if par[p]<0.:
-                        print '\t', key, par[p]
+
+            #################################
+            # Debug in case of negative norms
+            #if self.verbose:
+            #    for key,p in self.map_params.items():
+            #        if 'true' in key or '_norm' not in key:
+            #            continue
+            #        if par[p]<0.:
+            #            print '\t', key, par[p]
+            #################################
             return chi2min
 
         # construction of chi2
@@ -715,13 +708,15 @@ class TemplateFitter:
         self.beta  = beta
         self.Vbeta = aux1_inv
 
+        #################################
         # debug in case of negative norms
-        if self.verbose:
-            for key,p in self.map_params.items():
-                if 'true' in key or '_norm' not in key:
-                    continue
-                if par[p]<0.:
-                    print '\t', key, par[p]
+        #if self.verbose:
+        #    for key,p in self.map_params.items():
+        #        if 'true' in key or '_norm' not in key:
+        #            continue
+        #        if par[p]<0.:
+        #            print '\t', key, par[p]
+        #################################
 
         return chi2min
     
@@ -776,7 +771,6 @@ class TemplateFitter:
             print 'Bins: ', self.data.size, ', number of d.o.f.: ', self.ndof, \
                 ' chi2: '+'{:4.1f}'.format(chi2min), ' (p-value: '+'{:4.3f}'.format(pvalue)+')'
             print('Fit done in '+'{:4.1f}'.format(-clock)+' seconds')
-
             idx_beta = 0
             for iy in range(self.bins_y_size):
                 y_bin = self.get_y_bin(iy)
@@ -791,32 +785,18 @@ class TemplateFitter:
                         ' true = ', '{:0.2E}'.format(true), \
                         ' pull = ', '{:0.2f}'.format(pull)
                     for icoeff,coeff in enumerate(self.coefficients):
-                        idx_beta += 1
-            
+                        idx_beta += 1        
             self.plot_cov_matrix(n_free=self.Vbeta.shape[0], cov=self.Vbeta, name='analytic')
-
-            #for iy in range(self.bins_y_size):
-            #    for coeff in self.coefficients:                                                
-            #        (valid_orders, order) = self.get_orders(coeff, y_bin)
-            #        for o in valid_orders:
-            #            val = self.beta[idx_beta]/self.beta[iy*self.bins_qt_size + iqt]
-            #            true = self.map_params[y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o)+'_true']
-            #            err = val*math.sqrt( math.pow(self.Vbeta[iy*self.bins_qt_size + iqt,iy*self.bins_qt_size + iqt]/self.beta[iy*self.bins_qt_size + iqt] ,2) ) 
-            #            math.sqrt(self.Vbeta[idx_beta,idx_beta])
-            #            pull = (val-true)/true                        
-            #            print y_bin+'_'+coeff+'_'+'pol'+str(order)+'_p'+str(o)+' = ', '{:0.2E}'.format(val), '+/-', '{:0.2E}'.format(err), \
-            #                ' true = ', '{:0.2E}'.format(true), \
-            #                ' pull = ', '{:0.2f}'.format(pull)
-            #            idx_beta += 1                         
-
             return status
 
         # this flag freezes beta's in chi2
         self.release_for_hesse = False
 
         self.arglist[0] = 0
-        #self.gMinuit.mnexcm( "SET GRA", self.arglist, 1, self.ierflg)
-        self.gMinuit.mnexcm( "SET NOG", self.arglist, 0, self.ierflg)
+        if self.use_gradient:
+            self.gMinuit.mnexcm( "SET GRA", self.arglist, 1, self.ierflg)
+        else:
+            self.gMinuit.mnexcm( "SET NOG", self.arglist, 0, self.ierflg)
 
         # Run HESSE --> MIGRAD --> MINOS
         print 'Running HESSE...'
@@ -1014,7 +994,7 @@ class TemplateFitter:
                 self.plot_results_coeff_y_qt(var='resolution')
             if self.fit_mode=='parametric':
                 self.plot_results_coeff_qt()
-                self.plot_results_coeff_qt_eigen()
+                #self.plot_results_coeff_qt_eigen()
             if self.fit_mode=='parametric2D':
                 self.plot_results_coeff_qt_2D()
 
