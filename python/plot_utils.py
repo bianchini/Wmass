@@ -481,7 +481,7 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
                     np_bins_template_qt=np.array([]), np_bins_template_y=np.array([]), rebin=(),
                     input_tag='CC_FxFx', postfix=''):
 
-    from tree_utils import np_bins_y, np_bins_qt, np_bins_eta, np_bins_pt, angular_pdf_string
+    from tree_utils import np_bins_y, np_bins_qt, np_bins_eta, np_bins_pt, np_bins_ptinv, angular_pdf_string
 
     # available templates
     np_bins_y_extL = np.insert(np_bins_y,   0, [-10.])
@@ -497,10 +497,14 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
     nbins_template_y  = np_bins_template_y_ext.size - 1 
     nbins_template_qt = np_bins_template_qt_ext.size - 1 
 
-    (np_bins_rebin_eta, np_bins_rebin_pt) = (np_bins_eta,np_bins_pt)    
+    (np_bins_rebin_eta, np_bins_rebin_pt) = (np_bins_eta,np_bins_pt) 
+    if 'ptinv' in input_tag:
+        (np_bins_rebin_eta, np_bins_rebin_pt) = (np_bins_eta,np_bins_ptinv) 
     if rebin!=():
         np_bins_rebin_eta = np.linspace(np_bins_eta[0], np_bins_eta[-1], (np_bins_eta.size-1)/rebin[0]+1 )
         np_bins_rebin_pt  = np.linspace(np_bins_pt[0],  np_bins_pt[-1],  (np_bins_pt.size-1)/rebin[1]+1 )
+        if 'ptinv' in input_tag:
+            np_bins_rebin_pt  = np.linspace(np_bins_ptinv[0],  np_bins_ptinv[-1],  (np_bins_ptinv.size-1)/rebin[1]+1 )
 
     xx, yy = np.meshgrid(np_bins_rebin_pt, np_bins_rebin_eta)        
     coeff_ext = coeff+['UL', '']
@@ -663,10 +667,17 @@ def derivative_templates(charge='Wplus', var='WpreFSR', coeff_eval='val', bin=(0
     plt.close('all')
 
 
-def profile_toys( files=[], alphas=['norm'], var='rms', postfix=''):
+def profile_toys( files=[], alphas=['norm'], var='rms', postfix='', save_pulls=False, truth='val'):
 
-    bins_template_y = [ 0., 0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. , 3.5]
+    bins_template_y = [ 0., 0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2.]
     bins_template_qt= [ 0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 24.0, 32.0 ]
+
+    #bins_template_y = [ 0., 0.2]
+    #bins_template_qt= [ 0.0, 4.0, 8.0, 12.0, 16.0, 20.0]
+
+    from fit_utils import polynomial, get_orders    
+    res_coeff = np.load(open('../data/fit_results_CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated.pkl', 'r'))
+    x = np.array( [ (bins_template_qt[iqt]+bins_template_qt[iqt+1])*0.5 for iqt in range(len(bins_template_qt)-1) ] )
 
     for ifname,fname in enumerate(files):
 
@@ -675,8 +686,44 @@ def profile_toys( files=[], alphas=['norm'], var='rms', postfix=''):
 
         f = ROOT.TFile('plots/result_'+fname[0]+'.root', 'READ')
         tree = f.Get('tree')
+        ntoys = tree.GetEntries()
 
         asimov = ('asimov' in fname[0])
+        
+        # Minimizer status
+        if 'minuit' in alphas:
+            hminuits = [ROOT.TH1F('hminuit_status','Status distribution from '+str(ntoys)+' toys;Status;Entries', 5, 0,5), 
+                        ROOT.TH1F('hminuit_edm','EDM distribution from '+str(ntoys)+' toys;EDM;Entries', 50, 0, 1e-04), 
+                        ROOT.TH1F('hminuit_ndof','ndof distribution from '+str(ntoys)+' toys;ndof;Entries', 1000, 0, 1000),  
+                        ROOT.TH1F('hminuit_chi2min','#chi^{2}_{min} distribution from '+str(ntoys)+' toys;#chi^{2}_{min};Entries', 100, 600, 1000), 
+                        ROOT.TH1F('hminuit_pval','P-value distribution from '+str(ntoys)+' toys;p-value;Entries', 51, 0., 1.02), 
+                        ]
+            tree.Draw('minuit[0]>>hminuit_status')
+            tree.Draw('minuit[1]>>hminuit_edm')
+            tree.Draw('minuit[3]>>hminuit_ndof')
+            tree.Draw('minuit[2]>>hminuit_chi2min')
+            tree.Draw('minuit[4]>>hminuit_pval')
+            ndof = 0
+            for hminuit in hminuits:
+                if 'ndof' in hminuit.GetName():
+                    ndof = hminuit.GetMean()
+                    continue
+                c.cd()
+                hminuit.Draw('HIST')
+                if 'chi2min' in hminuit.GetName():
+                    line = ROOT.TLine(ndof, 0, ndof, hminuit.GetMaximum())
+                    line.SetLineStyle(ROOT.kDashed)
+                    line.SetLineColor(ROOT.kRed)
+                    line.SetLineWidth(3)
+                    line.Draw('SAME')
+                c.SaveAs('plots/profile_toys_'+fname[0]+'_'+(hminuit.GetName().split('_')[-1])+'.png')
+            
+            for hminuit in hminuits:
+                hminuit.IsA().Destructor( hminuit )
+            print 'Done. Close the file and remove canvas'
+            f.Close()
+            c.IsA().Destructor( c )
+            return
 
         ys  = []
         last_y = False
@@ -721,18 +768,27 @@ def profile_toys( files=[], alphas=['norm'], var='rms', postfix=''):
         line2.SetLineStyle(ROOT.kDashed);
 
         bin = 1
-        for y in ys:
+        for iy,y in enumerate(ys):
             for A in alphas:        
-                for qt in qts:
+                for iqt,qt in enumerate(qts):
+
+                    leg1 = ROOT.TLegend(0.15,0.75,0.35,0.88, "","brNDC")
+                    leg1.SetFillStyle(0)
+                    leg1.SetBorderSize(0)
+                    leg1.SetTextSize(0.04)
+                    leg1.SetFillColor(10)
 
                     if A=='mass':
                         res.GetXaxis().SetBinLabel(bin, A)
                     else:
                         res.GetXaxis().SetBinLabel(bin, y+'_'+qt+'_'+A)
 
-                    hpull = ROOT.TH1F('hpull','', 100, -4,4)
+                    hpull = ROOT.TH1F('hpull','Pull distribution from '+str(ntoys)+' toys;(toy-'+truth+')/err;Entries', 100, -4,4)
+                    hpull.SetStats(ROOT.kFALSE)
                     hpull.Sumw2()
-                    g = ROOT.TF1('g', '[0]*TMath::Exp( -0.5*(x-[1])*(x-[1])/[2]/[2] )', -2.5, +2.5)
+                    g = ROOT.TF1('g', '[0]*TMath::Exp( -0.5*(x-[1])*(x-[1])/[2]/[2] )', -3.0, +3.0)
+                    g.SetLineColor(ROOT.kBlue)
+                    g.SetLineWidth(3)
                     g.SetNpx(10000)
                     g.SetParameter(0, 10.)
                     g.SetParameter(1, 0.)
@@ -744,20 +800,36 @@ def profile_toys( files=[], alphas=['norm'], var='rms', postfix=''):
                         else:
                             hpull.IsA().Destructor(hpull)
                             g.IsA().Destructor(g)
+                            leg1.IsA().Destructor(leg1)
                             continue
-                    else:
-                        tree.Draw(y+'_'+qt+'_'+A+'[4]>>hpull')
+                    else:                        
+                        if truth=='val':
+                            tree.Draw(y+'_'+qt+'_'+A+'[4]>>hpull')
+                        elif truth=='fit':
+                            (valid_orders, order) = get_orders(res_coeff, A, y)
+                            p = res_coeff[A+'_'+y+'_fit']
+                            vals = polynomial(x=x, coeff=p, order=order)
+                            tree.Draw('(('+y+'_'+qt+'_'+A+'[0]-'+'{:03.5f}'.format(vals[iqt])+')/'+y+'_'+qt+'_'+A+'[2])'+'>>hpull')
 
                     if hpull.Integral( hpull.FindBin(-2.5), hpull.FindBin(+2.5) ) <= 0.:
                         bin += 1
                         hpull.IsA().Destructor(hpull)
-                        g.IsA().Destructor(g)
+                        g.IsA().Destructor(g)            
+                        leg1.IsA().Destructor(leg1)
                         continue
 
                     if not asimov:
                         fit = hpull.Fit('g', 'SRQ')
                         (mu, mu_err)       = (fit.Parameter(1), fit.ParError(1))
                         (sigma, sigma_err) = (abs(fit.Parameter(2)), fit.ParError(2))
+                        if save_pulls:
+                            c.cd()
+                            leg1.AddEntry(hpull, 'Mean='+'{:3.2f}'.format(hpull.GetMean())+', RMS='+'{:3.2f}'.format(hpull.GetRMS()), 'P')
+                            leg1.AddEntry(g, '#mu='+'{:3.2f}'.format(mu)+', #sigma='+'{:3.2f}'.format(sigma), 'L')
+                            hpull.Draw('HIST')
+                            g.Draw('SAME')
+                            leg1.Draw()
+                            c.SaveAs('plots/profile_toys_'+fname[0]+'_'+y+'_'+qt+'_'+A+'_'+'pulls'+'.png')
                     else:
                         (mu, mu_err)       = ( hpull.GetMean(), 0.0 )
                         (sigma, sigma_err) = (0., 0.)
@@ -775,6 +847,7 @@ def profile_toys( files=[], alphas=['norm'], var='rms', postfix=''):
                     bin += 1
                     hpull.IsA().Destructor(hpull)
                     g.IsA().Destructor(g)
+                    leg1.IsA().Destructor(leg1)
 
         c.cd()
         res.SetMaximum(+3.0)
