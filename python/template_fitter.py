@@ -230,6 +230,7 @@ class TemplateFitter:
             self.reshape_covariance( cov=np.load(open(self.in_dir+'covariance_'+DY+'_'+charge+'_'+var+'_'+self.prior_options['prior']+'_'+input_tag_fit+'.npy', 'r')), 
                                      dictionary=pickle.load(open(self.in_dir+'covariance_dict_'+DY+'_'+charge+'_'+var+'_'+input_tag_fit+'.pkl', 'r')), 
                                      save_plots=save_plots )
+            self.ndof += self.dim_beta
         
 
     def reshape_covariance(self, cov=np.array([]), dictionary={}, save_plots=[]):
@@ -279,7 +280,9 @@ class TemplateFitter:
                         print 'Inflate V_prior['+par_name1+', '+par_name2+'] by... ', inflate
                     V_prior[ib1,ib2] *= inflate
 
+        self.V_prior = V_prior
         self.Vinv_prior = np.linalg.inv(V_prior)
+        self.beta_prior_backup = copy.deepcopy(self.beta_prior)
 
         if 'prior' in save_plots:
             self.plot_cov_matrix(n_free=V_prior.shape[0], cov=V_prior, name='prior_'+self.prior_options['prior'])
@@ -313,6 +316,43 @@ class TemplateFitter:
                 if 'sum' in save_plots:
                     self.save_template_snapshot(data=(normUL*tUL+tjA)*inorm, title='Sum of templates', tag=self.get_y_qt_bin(iy,iqt)+'_template')
                 
+    #########
+    def randomize_norm_and_coeff(self):
+        from tree_utils import get_coeff_vals
+        self.mc_random = np.zeros( (self.bins_qt_size, self.bins_y_size, self.bins_eta_size, self.bins_pt_size) )
+        # random instance of betas sampled from prior covariance matrix
+        beta_rnd = np.random.multivariate_normal(self.beta_prior_backup, self.V_prior)
+        for iy1 in range(self.bins_y_size):
+            y_bin1 = self.get_y_bin(iy1)
+            for iqt in range(self.bins_qt_size):
+                tUL = copy.deepcopy(self.template[self.mc_mass_index][iqt][iy1][-2])
+                tjA = np.zeros(tUL.shape)
+                normUL = 1.0
+                inorm = self.template[self.mc_mass_index][iqt][iy1][-1].sum()/self.mc_acceptances[self.mc_mass_index][iqt][iy1]
+                for icoeff1,coeff1 in enumerate(self.coefficients): 
+                    (valid_orders1, order1) = self.get_orders(coeff1, y_bin1)                    
+                    coeff_val = 0.0
+                    for io1,o1 in enumerate(valid_orders1):
+                        counter_beta2 = 0
+                        for iy2 in range(self.bins_y_size):
+                            y_bin2 = self.get_y_bin(iy2)
+                            for icoeff2,coeff2 in enumerate(self.coefficients):
+                                (valid_orders2, order2) = self.get_orders(coeff2, y_bin2)
+                                for io2,o2 in enumerate(valid_orders2):                                    
+                                    if iy1==iy2 and icoeff1==icoeff2 and io1==io2:
+                                       counter_beta1 = counter_beta2 
+                                    counter_beta2 += 1
+                        coeff_val += math.pow( self.mid_point_qt(iqt), o1)*beta_rnd[counter_beta1]
+                        #coeff_val += math.pow( self.mid_point_qt(iqt), o1)*self.beta_prior_backup[counter_beta1]
+                    tjA += copy.deepcopy(self.template[self.mc_mass_index][iqt][iy1][icoeff1])*coeff_val
+
+                residual = (normUL*tUL+tjA)*inorm
+                self.mc_random[iqt,iy1] += residual
+        # use 'smeared' value of beta_prior in chi2 function
+        if self.verbose:
+            print 'Old betas:', self.beta_prior
+            print 'New betas:', beta_rnd
+        self.beta_prior = copy.deepcopy(beta_rnd)
 
     # tell Minuit to fix a parameter
     def fix_parameter(self, par_name):
@@ -501,7 +541,7 @@ class TemplateFitter:
 
         # the coefficients
         self.beta = np.zeros(self.dim_beta) 
-        # approximate cov. matrix of beta
+        # conditional cov. matrix of beta
         self.Vbeta = np.identity(self.dim_beta) 
 
 
@@ -731,7 +771,10 @@ class TemplateFitter:
         elif dataset=='random':
             self.data += np.random.poisson( self.mc )
             print 'Loading poisson dataset as DATA with', self.data.sum(), 'entries'
-
+        elif dataset=='random-all':
+            self.randomize_norm_and_coeff()
+            self.data += np.random.poisson(self.overflow_template + self.mc_random.sum(axis=(0,1)))
+            print 'Loading dataset with poisson(norm) and V_prior(coeff) as DATA with', self.data.sum(), 'entries'
         elif dataset=='normal':
             data_tmp = np.zeros( self.mc.shape ) 
             while (data_tmp[data_tmp<=0.].size > 0):
@@ -807,9 +850,9 @@ class TemplateFitter:
         self.arglist[0] = strategy
         self.gMinuit.mnexcm( "SET STR", self.arglist, 1, self.ierflg )
         #status = self.gMinuit.Migrad()
-        print("Convergence at EDM %s" % (self.arglist[1]*0.001))         
         self.arglist[0] = n_points
         self.arglist[1] = tolerance
+        print("Convergence at EDM %s" % (self.arglist[1]*0.001))         
         self.gMinuit.mnexcm( "MIG", self.arglist, 2, self.ierflg )
         status = copy.deepcopy(int(self.ierflg))
 
@@ -909,7 +952,7 @@ class TemplateFitter:
             print 'Mass:'
             print 'mass'+' = ', '{:0.3f}'.format(val), '+/-', '{:0.3f}'.format(err), \
                 ' true = ', '{:0.3f}'.format(true), \
-                ' pull = ', '{:0.2f}'.format(pull)
+                ' pull = ', '{:0.2f}'.format(pull), (' ' if not hasattr(self, 'massL') else ' MINOS: ['+'{:0.3f}'.format(self.massL-val)+', +'+'{:0.3f}'.format(self.massH-val)+']')
 
         if print_results:
             print 'Normalisations:'
