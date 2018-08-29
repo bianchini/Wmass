@@ -22,13 +22,15 @@ np_bins_template_y_coarser        = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2,
 np_bins_template_y_finer          = np.array([-3.5, -3. , -2.5, -2., -1.8, -1.6, -1.4, -1.2, -1.0, -0.8, -0.6, -0.4, -0.2,  0. ,  0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. ,  3.5])
 
 # forced orders for qt fit
-forced_orders_default  = {'A0': 3, 'A1': 4, 'A2': 3, 'A3': 4, 'A4': 4, 'A5': 0, 'A6':0, 'A7':0}
-forced_orders_pol2     = {'A0': 2, 'A1': 2, 'A2': 2, 'A3': 2, 'A4': 2, 'A5': 0, 'A6':0, 'A7':0}
-forced_orders_pol3     = {'A0': 3, 'A1': 3, 'A2': 3, 'A3': 3, 'A4': 3, 'A5': 0, 'A6':0, 'A7':0}
+forced_orders_default    = {'A0': 3, 'A1': 4, 'A2': 3, 'A3': 4, 'A4': 4, 'A5': 0, 'A6':0, 'A7':0}
+forced_orders_pol2       = {'A0': 2, 'A1': 2, 'A2': 2, 'A3': 2, 'A4': 2, 'A5': 0, 'A6':0, 'A7':0}
+forced_orders_pol3       = {'A0': 3, 'A1': 3, 'A2': 3, 'A3': 3, 'A4': 3, 'A5': 0, 'A6':0, 'A7':0}
+forced_orders_A1A3A4pol3 = {'A0': 2, 'A1': 3, 'A2': 2, 'A3': 3, 'A4': 3, 'A5': 0, 'A6':0, 'A7':0}
+forced_orders_A1A3pol3   = {'A0': 2, 'A1': 3, 'A2': 2, 'A3': 3, 'A4': 2, 'A5': 0, 'A6':0, 'A7':0}
 
 # coefficients in qt fit that will be fixed to zero
 fix_to_zero_default = {'A0': [0,1], 'A1': [0], 'A2': [0,1], 'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]}
-fix_to_zero_float   = {'A0': [0],   'A1': [0], 'A2': [0],   'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]}
+fix_to_zero_p0      = {'A0': [0],   'A1': [0], 'A2': [0],   'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]}
 
 ### Plot pole mass and width from a BW fit ###
 if argv[1]=='pole':
@@ -117,12 +119,12 @@ elif argv[1]=='cov-all':
                 get_covariance(fname='../root/tree_histos1_'+DY+'.root', DY=DY, var=var, q=q, weights=weights, 
                                coefficients=['A0','A1','A2','A3','A4'], 
                                fix_to_zero=fix_to_zero_default,
-                               forced_orders=forced_orders_pol2,
-                               fit_range=[0.0, 18.0],
+                               forced_orders=forced_orders_A1A3pol3,
+                               fit_range=[0.0, 28.0],
                                add_stat_uncert=True, 
-                               postfix='all_A0-4_forced_v4_finer_y_qt20_decorrelated',
+                               postfix='all_A0-4_forced_v4_finer_y_qt32_A1A3pol3_decorrelated',
                                save_corr=True, save_coeff=True, save_tree=True, save_pkl=True,
-                               np_bins_template_qt=np_bins_template_qt_coarser_qt20,
+                               np_bins_template_qt=np_bins_template_qt_coarser_qt32,
                                np_bins_template_y=np_bins_template_y_finer,
                                plot_updown=False,
                                decorrelate_scale=True
@@ -171,12 +173,25 @@ elif argv[1]=='compare':
 ### Produce a npy array with all the templates ###
 elif argv[1]=='templates':
     merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], 
-                    masses=[79.919, 80.419, 80.919], coeff=['A0', 'A1', 'A2', 'A3', 'A4'], 
+                    masses=[80.419], coeff=['A0', 'A1', 'A2', 'A3', 'A4'], 
                     np_bins_template_qt=np_bins_template_qt_coarser_qt20, 
                     np_bins_template_y=np_bins_template_y_finer,
                     rebin=(2,4),
-                    input_tag='CC_FxFx_extra_masses',
-                    postfix='_finer_y_qt20'
+                    input_tag='CC_FxFx_ptinv',
+                    postfix='_finer_y_qt20_ptinv'
                     )
+
+### Produce a npy array with all the templates ###
+elif argv[1]=='templates_mc_weights':
+    merge_templates_mc_weights(charges=['Wplus'],
+                               masses=[80.419],
+                               weights=range(2),
+                               np_bins_template_qt=np.array([0.]), 
+                               np_bins_template_y=np.array([0.]),
+                               rebin=(2,4),
+                               input_tag='CC_FxFx',
+                               postfix='mc_weights'
+                               )
+
 else:
     print 'Option not supported'

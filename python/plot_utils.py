@@ -625,6 +625,138 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
                 for f in res.files:
                     print 'File: '+f, 'with size = ', res[f].size
                     print res[f]
+
+
+def merge_templates_mc_weights(charges=['Wplus'],  masses=[80.419], weights=[],
+                               np_bins_template_qt=np.array([]), np_bins_template_y=np.array([]), rebin=(),
+                               input_tag='CC_FxFx', postfix=''):
+
+    from tree_utils import np_bins_y, np_bins_qt, np_bins_eta, np_bins_pt, np_bins_ptinv, angular_pdf_string
+
+    # available templates
+    np_bins_y_extL = np.insert(np_bins_y,   0, [-10.])
+    np_bins_y_ext  = np.append(np_bins_y_extL, [+10.])
+    np_bins_qt_ext = np.append(np_bins_qt, 999.)
+    nbins_y  = np_bins_y_ext.size - 1 
+    nbins_qt = np_bins_qt_ext.size - 1 
+
+    # target templates
+    np_bins_template_y_extL = np.insert(np_bins_template_y,   0, [-10.])
+    np_bins_template_y_ext  = np.append(np_bins_template_y_extL, [+10.])
+    np_bins_template_qt_ext = np.append(np_bins_template_qt, 999.)
+    nbins_template_y  = np_bins_template_y_ext.size - 1 
+    nbins_template_qt = np_bins_template_qt_ext.size - 1 
+
+    (np_bins_rebin_eta, np_bins_rebin_pt) = (np_bins_eta,np_bins_pt) 
+    if 'ptinv' in input_tag:
+        (np_bins_rebin_eta, np_bins_rebin_pt) = (np_bins_eta,np_bins_ptinv) 
+    if rebin!=():
+        np_bins_rebin_eta = np.linspace(np_bins_eta[0], np_bins_eta[-1], (np_bins_eta.size-1)/rebin[0]+1 )
+        np_bins_rebin_pt  = np.linspace(np_bins_pt[0],  np_bins_pt[-1],  (np_bins_pt.size-1)/rebin[1]+1 )
+        if 'ptinv' in input_tag:
+            np_bins_rebin_pt  = np.linspace(np_bins_ptinv[0],  np_bins_ptinv[-1],  (np_bins_ptinv.size-1)/rebin[1]+1 )
+
+    xx, yy = np.meshgrid(np_bins_rebin_pt, np_bins_rebin_eta)        
+    np_weights_ext = np.array(weights)
+
+    fin = ROOT.TFile('../root/tree_histos4_'+input_tag+'.root', 'READ')
+
+    # create TH2D
+    for q in charges:
+        template = np.zeros( (len(masses), nbins_template_qt, nbins_template_y/2, len(weights), np_bins_rebin_eta.size-1, np_bins_rebin_pt.size-1) )    
+        mc_acceptances = np.zeros( (len(masses), nbins_template_qt, nbins_template_y/2) )
+        bin_template_qt_index = -1
+        for qt in range(1, nbins_template_qt+1):
+            bin_template_qt_index += 1
+            qt_template_bin = 'qt{:03.1f}'.format(np_bins_template_qt_ext[qt-1])+'_'+'qt{:03.1f}'.format(np_bins_template_qt_ext[qt]) if qt<nbins_template_qt else 'OF'
+            (qt_template_low, qt_template_high) = (np_bins_template_qt_ext[qt-1], np_bins_template_qt_ext[qt])
+
+            bin_template_y_index = -1
+            for y in range(nbins_template_y/2+1, nbins_template_y+1):
+                bin_template_y_index += 1
+                y_template_bin = 'y{:03.2f}'.format(np_bins_template_y_ext[y-1])+'_'+'y{:03.2f}'.format(np_bins_template_y_ext[y]) if y<nbins_template_y else 'OF'
+                (y_template_low, y_template_high) = (np_bins_template_y_ext[y-1], np_bins_template_y_ext[y])
+                                                  
+                template_bin_name = qt_template_bin+'_'+y_template_bin
+                print 'Doing....'+template_bin_name
+
+                iqts = []
+                for iqt in range(1, nbins_qt+1):
+                    (qt_low, qt_high) = (np_bins_qt_ext[iqt-1], np_bins_qt_ext[iqt])
+                    if (qt_low>qt_template_low or np.isclose(qt_low,qt_template_low)) and (qt_high<qt_template_high or np.isclose(qt_high,qt_template_high)):
+                        print '\t\t[',qt_low,',',qt_high, '] < [', qt_template_low,',',qt_template_high, ']'
+                        iqts.append(iqt)
+
+                iys = []
+                for iy in range(nbins_y/2+1, nbins_y+1):
+                    (y_low, y_high) = (np_bins_y_ext[iy-1], np_bins_y_ext[iy])
+                    if (y_low>y_template_low or np.isclose(y_low,y_template_low)) and (y_high<y_template_high or np.isclose(y_high,y_template_high)):
+                        print '\t\t[',y_low,',',y_high, '] < [', y_template_low,',',y_template_high, ']'
+                        iys.append(iy)
+
+                print '\tMerging qt bins with index:', [ iqt-1 for iqt in iqts ]
+                print '\tMerging y  bins with index:', [ iy-1  for iy  in iys ]
+
+                for im,m in enumerate(masses):
+                    mass_str = 'M'+'{:05.3f}'.format(m)
+                    for iw,w in enumerate(weights):
+                        template_name = q+'_'+mass_str+'_'+qt_template_bin+'_'+y_template_bin+'_'+str(w)
+                        h = None
+                        for iqt in iqts:
+                            qt_bin = 'qt{:03.1f}'.format(np_bins_qt_ext[iqt-1])+'_'+'qt{:03.1f}'.format(np_bins_qt_ext[iqt]) if iqt<nbins_qt else 'OF'
+                            for iy in iys:
+                                y_bin = 'y{:03.2f}'.format(np_bins_y_ext[iy-1])+'_'+'y{:03.2f}'.format(np_bins_y_ext[iy]) if iy<nbins_y else 'OF'
+                                (dir_name, h_name) = (q+'/'+mass_str+'/'+qt_bin+'_'+y_bin, q+'_'+mass_str+'_'+qt_bin+'_'+y_bin+'_'+str(w))
+                                h_tmp = fin.Get(dir_name+'/'+h_name)
+                                if h==None:
+                                    h = h_tmp.Clone(template_name)
+                                else:
+                                    h.Add( h_tmp )                                        
+
+                                if rebin!=():
+                                    h.Rebin2D(rebin[0], rebin[1])
+
+                                # templates are normalised in acceptance
+                                for ipt in range(np_bins_rebin_pt.size-1):
+                                    for ieta in range(np_bins_rebin_eta.size-1):
+                                        template[im][bin_template_qt_index][bin_template_y_index][iw][ieta][ipt] = h.GetBinContent(ieta+1,ipt+1)
+                                        
+
+                                plt.pcolormesh(yy, xx, template[im][bin_template_qt_index][bin_template_y_index][iw])
+                                plt.colorbar()
+
+                                words = template_name.split('_')
+                                print words
+                                title = r'$'+words[0][0]+'^{'+('+' if 'plus' in words[0] else '-')+'}$, '
+                                title += r'$q_{T}\in['+'{:0.0f}'.format(np_bins_template_qt_ext[qt-1])+', '+('{:0.0f}'.format(np_bins_template_qt_ext[qt]) if qt<nbins_template_qt else '\infty')+']$ GeV'+', '
+                                title += r'$|y|\in['+'{:0.1f}'.format(np_bins_template_y_ext[y-1])+', '+('{:0.1f}'.format(np_bins_template_y_ext[y]) if y<nbins_template_y else '\infty')+']$'+', '
+                                title += r'weight '+str(w)
+                                plt.title(title, fontsize=20)
+                                plt.axis([np_bins_rebin_eta[0], np_bins_rebin_eta[-1], np_bins_rebin_pt[0], np_bins_rebin_pt[-1]])        
+                                plt.figtext(0.15, 0.86, r'$M_{W}$ = '+words[1][1:]+' GeV', color='white')
+                                plt.xlabel('$\eta$', fontsize=20)
+                                plt.ylabel('$p_{T}$ (GeV)', fontsize=20)
+                                plt.show()
+                                plt.savefig('plots/template_'+template_name+'.png')
+                                plt.close('all')
+                                #return
+
+                outname = 'plots/template_'+q+'_'+postfix
+                np.savez(outname,
+                         template, 
+                         np.array(masses), 
+                         np_bins_template_qt_ext, 
+                         np_bins_template_y_ext[(nbins_template_y/2):], 
+                         np_weights_ext, 
+                         np_bins_rebin_eta, np_bins_rebin_pt,
+                         )
+
+                # for validation
+                print 'Content of file '+outname+'.npz'
+                res = np.load(outname+'.npz')
+                for f in res.files:
+                    print 'File: '+f, 'with size = ', res[f].size
+                    print res[f]
                     
 # draw derivative of template against one coefficient at the time
 def derivative_templates(charge='Wplus', var='WpreFSR', coeff_eval='val', bin=(0,0)):
