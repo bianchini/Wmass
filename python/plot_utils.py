@@ -697,12 +697,14 @@ def profile_toys( files=[], alphas=['norm'], var='rms', postfix='', save_pulls=F
                         ROOT.TH1F('hminuit_ndof','ndof distribution from '+str(ntoys)+' toys;ndof;Entries', 1000, 0, 1000),  
                         ROOT.TH1F('hminuit_chi2min','#chi^{2}_{min} distribution from '+str(ntoys)+' toys;#chi^{2}_{min};Entries', 100, 600, 1000), 
                         ROOT.TH1F('hminuit_pval','P-value distribution from '+str(ntoys)+' toys;p-value;Entries', 51, 0., 1.02), 
+                        ROOT.TH1F('hminuit_cpu','CPU time distribution from '+str(ntoys)+' toys;time [h];Entries', 50, 0., 10), 
                         ]
             tree.Draw('minuit[0]>>hminuit_status')
             tree.Draw('minuit[1]>>hminuit_edm')
             tree.Draw('minuit[3]>>hminuit_ndof')
             tree.Draw('minuit[2]>>hminuit_chi2min')
             tree.Draw('minuit[4]>>hminuit_pval')
+            tree.Draw('minuit[5]/3600>>hminuit_cpu')
             ndof = 0
             for hminuit in hminuits:
                 if 'ndof' in hminuit.GetName():
@@ -786,6 +788,10 @@ def profile_toys( files=[], alphas=['norm'], var='rms', postfix='', save_pulls=F
                     hpull = ROOT.TH1F('hpull','Pull distribution from '+str(ntoys)+' toys;(toy-'+truth+')/err;Entries', 100, -4,4)
                     hpull.SetStats(ROOT.kFALSE)
                     hpull.Sumw2()
+                    if A=='mass':
+                        hmass = ROOT.TH1F('hmass','Parameter distribution from '+str(ntoys)+' toys;Parameter;Entries', 300, 80.419-0.150,80.419+0.150)
+                        hmass.SetStats(ROOT.kTRUE)
+                        hmass.Sumw2()
                     g = ROOT.TF1('g', '[0]*TMath::Exp( -0.5*(x-[1])*(x-[1])/[2]/[2] )', -3.0, +3.0)
                     g.SetLineColor(ROOT.kBlue)
                     g.SetLineWidth(3)
@@ -797,8 +803,12 @@ def profile_toys( files=[], alphas=['norm'], var='rms', postfix='', save_pulls=F
                     if A=='mass':
                         if y==ys[0] and qt==qts[0]:
                             tree.Draw(A+'[4]>>hpull')
+                            tree.Draw(A+'[0]>>hmass')
+                            hmass.Draw('HIST')
+                            c.SaveAs('plots/profile_toys_'+fname[0]+'_'+A+'_'+'toys'+'.png')
                         else:
                             hpull.IsA().Destructor(hpull)
+                            hmass.IsA().Destructor(hmass)
                             g.IsA().Destructor(g)
                             leg1.IsA().Destructor(leg1)
                             continue
@@ -829,7 +839,7 @@ def profile_toys( files=[], alphas=['norm'], var='rms', postfix='', save_pulls=F
                             hpull.Draw('HIST')
                             g.Draw('SAME')
                             leg1.Draw()
-                            c.SaveAs('plots/profile_toys_'+fname[0]+'_'+y+'_'+qt+'_'+A+'_'+'pulls'+'.png')
+                            c.SaveAs('plots/profile_toys_'+fname[0]+'_'+(y+'_'+qt+'_' if A!='mass' else '')+A+'_'+'pulls'+'.png')
                     else:
                         (mu, mu_err)       = ( hpull.GetMean(), 0.0 )
                         (sigma, sigma_err) = (0., 0.)

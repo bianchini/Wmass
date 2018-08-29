@@ -20,7 +20,7 @@ from DataFormats.FWLite import Handle, Events
 
 class TreeProducer:
 
-    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test', save_tree=True, save_histo1=False, save_histo2=False, save_histo3=False, masses=[80.419],  plot_vars_histo3=['eta','pt']):
+    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test', save_tree=True, save_histo1=False, save_histo2=False, save_histo3=False, save_histo4=False, masses=[80.419],  plot_vars_histo3=['eta','pt']):
     
         print "****** TreeProducer *****"
         print 'Running for '+DY+' Drell-Yan'
@@ -78,6 +78,12 @@ class TreeProducer:
                     self.fit_result[q][var] = pickle.load( open(os.environ['CMSSW_BASE']+'/src/Wmass/data/'+'fit_results_'+DY+'_'+q+'_'+var+'_all_A0-7.pkl') )
             self.histos = add_histo2D_lepton( charges=['Wminus','Wplus'], var=['WpreFSR'], coeff_eval=['val'], masses=masses, coeff=['A0','A1','A2','A3','A4','A5','A6','A7'],  plot_vars=plot_vars_histo3 ) 
 
+        # pt-eta with weights, inclusive in qT/y
+        self.save_histo4 = save_histo4
+        self.plot_vars_histo3 = plot_vars_histo3
+        if save_histo4:
+            self.histos = add_histo2D_lepton_mc_weights( charges=['Wminus','Wplus'], masses=masses, weights=self.weights_for_histos, plot_vars=plot_vars_histo3 ) 
+
         # add branches to tree (needed even if self.save_tree=False)
         self.variables = add_vars(self.outtree)
 
@@ -111,7 +117,7 @@ class TreeProducer:
             if self.debug:
                 if i%100==0:
                     print "Processing event", i, '/', self.events.size()
-                if i>1000:
+                if i>10000:
                     break
             else:
                 if i%1000==0:
@@ -400,6 +406,26 @@ class TreeProducer:
                                     coeff=['A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7']
                                     )
 
+                if self.save_histo4:
+                    if t not in ['WpreFSR']:
+                        continue
+                    q1 = 'Wplus' if self.variables['mu_charge'][0]==-13 else 'Wminus'                    
+                    ps_lep = (self.variables['Wbare_mu_eta'][0], self.variables['Wbare_mu_pt'][0])
+                    if self.plot_vars_histo3[1]=='1/pt':
+                        ps_lep = (self.variables['Wbare_mu_eta'][0], 1./self.variables['Wbare_mu_pt'][0] if self.variables['Wbare_mu_pt'][0]>0. else +99999.)
+                    for w in self.weights_for_histos:
+                        fill_lepton_lab_mc_weights(
+                            histos=self.histos, 
+                            q=q1,
+                            masses=self.masses,
+                            ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt(), Wp4[t].M()), 
+                            ps_CS=(ps[1],ps[2]),
+                            ps_lep=ps_lep,
+                            weight=self.variables['weights'][w],
+                            weight_id=w
+                            )
+
+
             # fill the tree
             if self.save_tree:
                 self.outtree.Fill()
@@ -449,6 +475,22 @@ class TreeProducer:
                                     print '\t\t\t\t\tCoeff: '+ka+'.....', a.GetEntries(), 'entries'                                    
                                     self.outfile.cd(kq+'/'+kv+'/'+kc+'/'+km+'/'+kb)
                                     a.Write('', ROOT.TObject.kOverwrite)
+                self.outfile.cd()
+
+        if self.save_histo4:
+            for kq,q in self.histos.items():
+                print 'Charge: '+kq
+                self.outfile.mkdir(kq)
+                for km,m in q.items():
+                    print '\tMass: '+km
+                    self.outfile.mkdir(kq+'/'+km)
+                    for kb,b in m.items():
+                        print '\t\tBin: '+kb
+                        self.outfile.mkdir(kq+'/'+km+'/'+kb)
+                        for kw,w in b.items():
+                            print '\t\t\tWeight: '+kw+'.....', w.GetEntries(), 'entries'                                    
+                            self.outfile.cd(kq+'/'+km+'/'+kb)
+                            w.Write('', ROOT.TObject.kOverwrite)
                 self.outfile.cd()
 
 

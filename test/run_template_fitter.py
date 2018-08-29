@@ -41,7 +41,7 @@ templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job
                                 )
 
 for i in range(ntoys):
-    templateFitter.load_data( dataset='random-all', save_plots=[], postfix='_'+str(i) )
+    templateFitter.load_data( dataset='random', save_plots=[], postfix='_'+str(i) )
     status = templateFitter.run(n_points=1000000, strategy=2, tolerance=0.1, run_minos=False, run_post_hesse=False)
     if status>0:
         continue

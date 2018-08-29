@@ -282,7 +282,7 @@ class TemplateFitter:
 
         self.V_prior = V_prior
         self.Vinv_prior = np.linalg.inv(V_prior)
-        self.beta_prior_backup = copy.deepcopy(self.beta_prior)
+        self.beta_prior_eval = copy.deepcopy(self.beta_prior)
 
         if 'prior' in save_plots:
             self.plot_cov_matrix(n_free=V_prior.shape[0], cov=V_prior, name='prior_'+self.prior_options['prior'])
@@ -316,12 +316,22 @@ class TemplateFitter:
                 if 'sum' in save_plots:
                     self.save_template_snapshot(data=(normUL*tUL+tjA)*inorm, title='Sum of templates', tag=self.get_y_qt_bin(iy,iqt)+'_template')
                 
-    #########
-    def randomize_norm_and_coeff(self):
+    # Create a random dataset with smeared values of the coefficents
+    def randomize_coefficients(self, randomize_in_generation=False):
         from tree_utils import get_coeff_vals
-        self.mc_random = np.zeros( (self.bins_qt_size, self.bins_y_size, self.bins_eta_size, self.bins_pt_size) )
-        # random instance of betas sampled from prior covariance matrix
-        beta_rnd = np.random.multivariate_normal(self.beta_prior_backup, self.V_prior)
+
+        # Random instance of betas sampled from prior covariance matrix
+        beta_rnd = np.random.multivariate_normal(self.beta_prior, self.V_prior)
+        if self.verbose:
+            print 'Old betas:', self.beta_prior
+            print 'New betas:', beta_rnd
+        # Use 'smeared' value of beta_prior in chi2 function
+        self.beta_prior_eval = copy.deepcopy(beta_rnd)
+        if not randomize_in_generation:
+            return
+
+        print 'Randomizing coefficients in toy generation...'
+        self.mc_random_coeff = np.zeros( (self.bins_qt_size, self.bins_y_size, self.bins_eta_size, self.bins_pt_size) )
         for iy1 in range(self.bins_y_size):
             y_bin1 = self.get_y_bin(iy1)
             for iqt in range(self.bins_qt_size):
@@ -347,12 +357,7 @@ class TemplateFitter:
                     tjA += copy.deepcopy(self.template[self.mc_mass_index][iqt][iy1][icoeff1])*coeff_val
 
                 residual = (normUL*tUL+tjA)*inorm
-                self.mc_random[iqt,iy1] += residual
-        # use 'smeared' value of beta_prior in chi2 function
-        if self.verbose:
-            print 'Old betas:', self.beta_prior
-            print 'New betas:', beta_rnd
-        self.beta_prior = copy.deepcopy(beta_rnd)
+                self.mc_random_coeff[iqt,iy1] += residual
 
     # tell Minuit to fix a parameter
     def fix_parameter(self, par_name):
@@ -703,7 +708,7 @@ class TemplateFitter:
             aux = np.linalg.multi_dot([Am, self.K, beta])
             chi2min = np.linalg.multi_dot( [(nsub-aux).T, self.Vinv, (nsub-aux)] )
             if self.use_prior:
-                res2 = (self.beta_prior-beta)
+                res2 = (self.beta_prior_eval-beta)
                 chi2_prior = np.linalg.multi_dot( [res2.T, self.Vinv_prior, res2] )
                 chi2min += chi2_prior
             if self.print_evals:
@@ -729,13 +734,13 @@ class TemplateFitter:
         aux1_inv = np.linalg.inv(aux1)
         aux2 = np.linalg.multi_dot( [ self.K.T, Am.T, self.Vinv, nsub ] )
         if self.use_prior:
-            aux2 +=  np.linalg.multi_dot( [ self.Vinv_prior, self.beta_prior ])
+            aux2 +=  np.linalg.multi_dot( [ self.Vinv_prior, self.beta_prior_eval ])
         beta = np.linalg.multi_dot( [aux1_inv, aux2 ] )        
         res1 = (nsub - np.linalg.multi_dot( [Am, self.K, beta]) )
         chi2min = np.linalg.multi_dot( [res1.T, self.Vinv, res1 ] )
 
         if self.use_prior:
-            res2 = (self.beta_prior-beta)
+            res2 = (self.beta_prior_eval-beta)
             chi2_prior = np.linalg.multi_dot( [res2.T, self.Vinv_prior, res2] )
             chi2min += chi2_prior
 
@@ -766,15 +771,17 @@ class TemplateFitter:
         self.dataset_type=dataset
         self.data = np.zeros( self.mc.shape )
         if dataset=='asimov':
-            self.data += copy.deepcopy(self.mc)
+            self.data += copy.deepcopy( self.mc )
             print 'Loading asimov dataset as DATA with', self.data.sum(), 'entries'
         elif dataset=='random':
+            if self.use_prior:
+                self.randomize_coefficients( randomize_in_generation=False )
             self.data += np.random.poisson( self.mc )
             print 'Loading poisson dataset as DATA with', self.data.sum(), 'entries'
-        elif dataset=='random-all':
-            self.randomize_norm_and_coeff()
-            self.data += np.random.poisson(self.overflow_template + self.mc_random.sum(axis=(0,1)))
-            print 'Loading dataset with poisson(norm) and V_prior(coeff) as DATA with', self.data.sum(), 'entries'
+        elif dataset=='random-coefficients':
+            self.randomize_coefficients( randomize_in_generation=True )
+            self.data += np.random.poisson(self.overflow_template + self.mc_random_coeff.sum(axis=(0,1)))
+            print 'Loading dataset with coeff ~ V_prior(coeff) as DATA with', self.data.sum(), 'entries'
         elif dataset=='normal':
             data_tmp = np.zeros( self.mc.shape ) 
             while (data_tmp[data_tmp<=0.].size > 0):
