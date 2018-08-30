@@ -185,7 +185,7 @@ elif argv[1]=='templates':
 elif argv[1]=='templates_mc_weights':
     merge_templates_mc_weights(charges=['Wplus'],
                                masses=[80.419],
-                               weights=range(2),
+                               weights=range(109),
                                np_bins_template_qt=np.array([0.]), 
                                np_bins_template_y=np.array([0.]),
                                rebin=(2,4),

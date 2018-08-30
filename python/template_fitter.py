@@ -82,6 +82,9 @@ class TemplateFitter:
         self.map_params_minuit = {}
         self.release_for_hesse = False
 
+        self.reduce_pt = reduce_pt
+        self.charge = charge
+
         self.update = True
 
         templates_files = {'template': 0, 'masses': 1, 'bins_qt' : 2, 
@@ -466,8 +469,8 @@ class TemplateFitter:
         self.arglist[0] = 1.0
         self.gMinuit.mnexcm( "SET ERR", self.arglist, 1, self.ierflg )
 
-        self.map_alphas = range(500)
-        self.map_betas  = range(500)
+        self.map_alphas = range(1000)
+        self.map_betas  = range(1000)
 
         # mass
         self.define_parameter( par_name='mass', start=self.mc_mass, step=0.100, 
@@ -766,13 +769,20 @@ class TemplateFitter:
         return chi2min
     
     
-    def load_data(self, dataset='asimov',  save_plots=['data', 'data-overflow'], postfix=''):
+    def load_data(self, dataset='asimov',  save_plots=['data', 'data-overflow'], postfix='', scale_id=0):
         
         self.dataset_type=dataset
         self.data = np.zeros( self.mc.shape )
         if dataset=='asimov':
             self.data += copy.deepcopy( self.mc )
             print 'Loading asimov dataset as DATA with', self.data.sum(), 'entries'
+        elif dataset=='asimov-scaled':
+            template_scaled  = np.load(self.in_dir+'template_'+self.charge+'_'+'mc_weights'+'.npz')['arr_0']
+            mc_nominal = template_scaled[0,0,0,0,:,0:self.reduce_pt]        if self.reduce_pt<0 else template_scaled[0,0,0,0,:,:]
+            mc_scaled  = template_scaled[0,0,0,scale_id,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,0,0,scale_id,:,:]
+            scaling = mc_scaled/mc_nominal
+            self.data += copy.deepcopy( self.mc*scaling )
+            print 'Loading asimov dataset scaled by weight '+str(scale_id)+' as DATA with', self.data.sum(), 'entries'
         elif dataset=='random':
             if self.use_prior:
                 self.randomize_coefficients( randomize_in_generation=False )

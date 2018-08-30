@@ -629,7 +629,7 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
 
 def merge_templates_mc_weights(charges=['Wplus'],  masses=[80.419], weights=[],
                                np_bins_template_qt=np.array([]), np_bins_template_y=np.array([]), rebin=(),
-                               input_tag='CC_FxFx', postfix=''):
+                               input_tag='CC_FxFx', postfix='', save_plots=False):
 
     from tree_utils import np_bins_y, np_bins_qt, np_bins_eta, np_bins_pt, np_bins_ptinv, angular_pdf_string
 
@@ -721,12 +721,12 @@ def merge_templates_mc_weights(charges=['Wplus'],  masses=[80.419], weights=[],
                                     for ieta in range(np_bins_rebin_eta.size-1):
                                         template[im][bin_template_qt_index][bin_template_y_index][iw][ieta][ipt] = h.GetBinContent(ieta+1,ipt+1)
                                         
-
+                                if not save_plots:
+                                    continue
                                 plt.pcolormesh(yy, xx, template[im][bin_template_qt_index][bin_template_y_index][iw])
                                 plt.colorbar()
 
                                 words = template_name.split('_')
-                                print words
                                 title = r'$'+words[0][0]+'^{'+('+' if 'plus' in words[0] else '-')+'}$, '
                                 title += r'$q_{T}\in['+'{:0.0f}'.format(np_bins_template_qt_ext[qt-1])+', '+('{:0.0f}'.format(np_bins_template_qt_ext[qt]) if qt<nbins_template_qt else '\infty')+']$ GeV'+', '
                                 title += r'$|y|\in['+'{:0.1f}'.format(np_bins_template_y_ext[y-1])+', '+('{:0.1f}'.format(np_bins_template_y_ext[y]) if y<nbins_template_y else '\infty')+']$'+', '
@@ -759,33 +759,58 @@ def merge_templates_mc_weights(charges=['Wplus'],  masses=[80.419], weights=[],
                     print res[f]
                     
 # draw derivative of template against one coefficient at the time
-def derivative_templates(charge='Wplus', var='WpreFSR', coeff_eval='val', bin=(0,0)):
+def derivative_templates(charge='Wplus', var='WpreFSR', coeff_eval='val', tag='', bin=(0,0,1)):
 
     rcParams['figure.figsize'] = 8,8
 
-    outname = 'plots/template_'+charge+'_'+var+'_'+coeff_eval
+    outname = '../data/template_'+charge+'_'+var+'_'+coeff_eval+'_'+tag
     print 'Content of file '+outname+'.npz'
     res = np.load(outname+'.npz')
     for f in res.files:
         print 'File: '+f, 'with size = ', res[f].shape
 
-    (iqt,iy) = bin
-
-    templates = []
-    for i in range(8):
-        templates.append( (res['arr_0'][0][iqt][iy][i]-res['arr_0'][0][iqt][iy][-2]) )
-
+    np_bins_mass = res['arr_1']
     np_bins_qt = res['arr_2']
     np_bins_y  = res['arr_3']
     np_bins_rebin_eta = res['arr_5']
     np_bins_rebin_pt  = res['arr_6']
+
+    (iqt,iy,imass) = bin
+
+    templates = []
+    # P0 ... P4
+    for i in range(5):
+        templates.append( (res['arr_0'][imass][iqt][iy][i]-res['arr_0'][imass][iqt][iy][-2]) )
+    # UL
+    templates.append( res['arr_0'][imass][iqt][iy][-2] )
+    # MC
+    templates.append( res['arr_0'][imass][iqt][iy][-1]/res['arr_0'][imass][iqt][iy][-1].sum()*res['arr_7'][imass][iqt][iy] )
+    # MC Delta Mass
+    templates.append( (res['arr_0'][imass+1][iqt][iy][-1] - res['arr_0'][imass][iqt][iy][-1] )/(np_bins_mass[imass+1]-np_bins_mass[imass])/res['arr_0'][imass][iqt][iy][-1].sum()*res['arr_7'][imass][iqt][iy] )
+    # MC Delta qT
+    templates.append( (res['arr_0'][imass][iqt+1][iy][-1] - res['arr_0'][imass][iqt][iy][-1] )/(np_bins_qt[iqt+1]-np_bins_qt[iqt])/res['arr_0'][imass][iqt][iy][-1].sum()*res['arr_7'][imass][iqt][iy] )
+    # MC Delta y
+    templates.append( (res['arr_0'][imass][iqt][iy+1][-1] - res['arr_0'][imass][iqt][iy][-1] )/(np_bins_y[iy+1]-np_bins_y[iy])/res['arr_0'][imass][iqt][iy][-1].sum()*res['arr_7'][imass][iqt][iy] )
+
     xx,yy = np.meshgrid(np_bins_rebin_pt, np_bins_rebin_eta)        
     
-    for i in range(8):
-        plt.subplot(4, 2, i+1)
+    for i in range(5+3+2):
+        plt.subplot(5, 2, i+1)
+        print i, '=>',  templates[i].sum()
         plt.pcolormesh(yy, xx, templates[i])
         plt.colorbar(format='%.0e')
-        plt.title(r'$A_{'+str(i)+r'}$')
+        if i<=4:
+            plt.title(r'$T_{'+str(i)+r'}$')
+        elif i==5:
+            plt.title(r'UL')
+        elif i==6:
+            plt.title('MC')
+        elif i==7:
+            plt.title('$d$MC/$dM$')
+        elif i==8:
+            plt.title('$d$MC/$dq_{T}$')
+        elif i==9:
+            plt.title('$d$MC/$d|y|$')
         plt.axis([np_bins_rebin_eta.min(), np_bins_rebin_eta.max(), np_bins_rebin_pt.min(), np_bins_rebin_pt.max()])        
         if i%2==0:
             plt.ylabel('$p_{T}$ (GeV)', fontsize=12)
@@ -795,8 +820,29 @@ def derivative_templates(charge='Wplus', var='WpreFSR', coeff_eval='val', bin=(0
     plt.suptitle(r'$q_{T} \in ['+'{:0.1f}'.format(np_bins_qt[iqt])+', '+'{:0.1f}'.format(np_bins_qt[iqt+1])+']$ GeV, '+'$|y| \in ['+'{:0.1f}'.format(np_bins_y[iy])+', '+'{:0.1f}'.format(np_bins_y[iy+1])+']$', fontsize=20)
     plt.subplots_adjust(wspace=0.4, hspace=0.4)
     plt.show()
-    plt.savefig('plots/derivative_'+charge+'_'+var+'_'+coeff_eval+'.png')
+    plt.savefig('plots/derivative_'+charge+'_'+var+'_'+coeff_eval+'_'+tag+'_bin'+str(bin[0])+'_'+str(bin[1])+'_'+str(bin[2])+'.png')
     plt.close('all')
+
+# draw derivative of template against one coefficient at the time
+def weighted_templates(charge='Wplus', weights=[]):
+    outname = '../data/template_'+charge+'_'+'mc_weights'
+    res     = np.load(outname+'.npz')
+    np_bins_rebin_eta = res['arr_5']
+    np_bins_rebin_pt  = res['arr_6']
+    xx,yy = np.meshgrid(np_bins_rebin_pt, np_bins_rebin_eta)        
+    mc = res['arr_0'][0,0,0,0]
+
+    for w in weights:
+        mc_w = res['arr_0'][0,0,0,w]
+        diff = (mc_w-mc)/np.sqrt(mc)
+        plt.plot()
+        plt.axis([np_bins_rebin_eta.min(), np_bins_rebin_eta.max(), np_bins_rebin_pt.min(), np_bins_rebin_pt.max()])        
+        plt.title('Weight '+str(w))
+        plt.pcolormesh(yy, xx, diff)
+        plt.colorbar()
+        plt.show()
+        plt.savefig('plots/weighted_templates_'+str(w)+'.png')
+        plt.close('all')
 
 
 def profile_toys( files=[], alphas=['norm'], var='rms', postfix='', save_pulls=False, truth='val'):
@@ -808,10 +854,11 @@ def profile_toys( files=[], alphas=['norm'], var='rms', postfix='', save_pulls=F
     #bins_template_qt= [ 0.0, 4.0, 8.0, 12.0, 16.0, 20.0]
 
     from fit_utils import polynomial, get_orders    
-    res_coeff = np.load(open('../data/fit_results_CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated.pkl', 'r'))
     x = np.array( [ (bins_template_qt[iqt]+bins_template_qt[iqt+1])*0.5 for iqt in range(len(bins_template_qt)-1) ] )
 
     for ifname,fname in enumerate(files):
+
+        res_coeff = np.load(open('../data/fit_results_'+fname[2]+'.pkl', 'r'))
 
         c = ROOT.TCanvas('canvas_'+str(ifname), '', 1350, 800)      
         ROOT.gPad.SetBottomMargin(0.35)

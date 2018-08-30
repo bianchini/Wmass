@@ -32,15 +32,15 @@ import copy
 job_base = {'job_name'         : 'TEST', 
             'ntoys'            : 1,
             'dataset'          : 'random',
-            'input_tag_fit'    : 'all_A0-4_forced_v4_finer_y_qt32_decorrelated', 
+            'input_tag_fit'    : 'all_A0-4_forced_v4_finer_y_qt32_A1A3A4pol3_decorrelated', 
             'input_tag_templ'  : '_finer_y_qt32',
-            'fixed_parameters' : ['pol', 'A', 'mass'], 
+            'fixed_parameters' : ['pol', 'A'], 
             'fit_mode'         : 'parametric',
             'reduce_y'         : -1,
             'prior_options'    : 'prior_options_noprior'
             }
 
-bins_template_y = [ 0.,0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. , 3.5]
+bins_template_y = [0., 0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. , 3.5]
 
 jobs = []
 for dataset in ['random',
@@ -51,7 +51,8 @@ for dataset in ['random',
                           ]:
      
             for prior_option in [
-                'prior_options_noprior',
+                #'prior_options_noprior',
+                'prior_options_base'
                 #'prior_options_A0',
                 #'prior_options_A1',
                 #'prior_options_A2',
@@ -63,20 +64,12 @@ for dataset in ['random',
                 ]:
 
                 job_new = copy.deepcopy(job_base)
-                job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32'+'_'+'default'  #prior_option.split('_')[-1]
+                job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32'+'_'+'mass_A1A3A4pol3_prior'
                 job_new['fit_mode'] = fit_mode
                 job_new['reduce_y'] = reduce_y
                 job_new['dataset'] = dataset
                 job_new['prior_options'] = prior_option
                 jobs.append(job_new)
-
-    continue
-    job_new = copy.deepcopy(job_base)
-    job_new['job_name'] = dataset+'_'+'parametric'+'_'+('y{:03.2f}'.format(bins_template_y[-1])).replace('.', 'p')+'_'+'prior_options_y'+'_qt32'
-    job_new['fit_mode'] = 'parametric'
-    job_new['reduce_y'] = -1
-    job_new['prior_options'] = 'prior_options_y'
-    jobs.append(job_new)
 
 
 if __name__ == '__main__':

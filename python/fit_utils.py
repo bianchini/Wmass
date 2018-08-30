@@ -33,6 +33,19 @@ def polynomial(x, coeff, order):
         val +=  coeff[p]*np.power(x,p)
     return val
 
+def get_orders(res_coeff, coeff='', y_bin=''):               
+        valid_orders = []
+        if y_bin=='':
+            if coeff in ['A0','A2','A3']:
+                return ([0,2,4], 4)
+            else:
+                return ([1,3,5], 5)
+        order = len(res_coeff[coeff+'_'+y_bin+'_fit'])-1
+        for io,o in enumerate(res_coeff[coeff+'_'+y_bin+'_fit']):
+            if o!=0.:
+                valid_orders.append(io)
+        return (valid_orders, order)                
+
 # Perform Fisher-test based on chi2 of fit to pol_order: [0] + [1]*x + [2]*x*x + ... 
 # Stop when p-value of chi2>0.05
 # If force_order>=0, force order; fix_to_zero requires [0] := 0.0

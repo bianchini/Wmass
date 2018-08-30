@@ -9,13 +9,13 @@ from template_fitter import TemplateFitter
 
 np.random.seed(0)
 
-ntoys = 200
+ntoys = 1
 
 prior_options = {'prior'  : 'sum', 
                  'select' : [], 
                  'inflate': 1e+03, 
                  'decorrelate' : []}
-#prior_options = {}
+prior_options = {}
 
 templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job_name='TEST', 
                                 input_tag_fit='all_A0-4_forced_v4_finer_y_qt32_decorrelated',
@@ -24,10 +24,10 @@ templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job
                                 mc_mass=80.419, 
                                 num_events=3.0e+07,
                                 verbose=False, 
-                                fixed_parameters=['pol', 'A'],  
+                                fixed_parameters=['pol', 'A', 'mass'],  
                                 prior_options=prior_options,
                                 reduce_qt=-1, 
-                                reduce_y=-13,
+                                reduce_y=-1,
                                 reduce_pt=0,
                                 fit_mode='parametric',
                                 do_analytic_fit=False,
@@ -41,7 +41,7 @@ templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job
                                 )
 
 for i in range(ntoys):
-    templateFitter.load_data( dataset='random', save_plots=[], postfix='_'+str(i) )
+    templateFitter.load_data( dataset='asimov-scaled', save_plots=[], postfix='_'+str(i), scale_id=4 )
     status = templateFitter.run(n_points=1000000, strategy=2, tolerance=0.1, run_minos=False, run_post_hesse=False)
     if status>0:
         continue
