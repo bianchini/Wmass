@@ -116,6 +116,9 @@ class TemplateFitter:
             if key=='template':
                 size = template_file[0,0,0,0].size
                 setattr(self, key,template_file[:,:,:,:,:,0:reduce_pt] if reduce_pt<0 else template_file)
+                if reduce_pt<0:
+                    self.update_acceptances = np.ones( template_file.shape[0:3] )
+                    self.update_acceptances *= template_file[:,:,:,-1,:,0:reduce_pt].sum(axis=(3,4))/template_file[:,:,:,-1,:,:].sum(axis=(3,4))
                 if alternative_mc!='':
                     setattr(self, key+'_alt', templates_alternative['arr_'+str(p)][:,:,:,:,:,0:reduce_pt] \
                                 if reduce_pt<0 else templates_alternative['arr_'+str(p)])
@@ -148,6 +151,10 @@ class TemplateFitter:
 
         self.mc_mass_index = np.where(self.masses==mc_mass)[0][0]
         print 'MC mass at index...', self.mc_mass_index
+
+        if hasattr(self, 'update_acceptances'):
+            print 'Updating acceptances to account for pt burnt bins'
+            self.mc_acceptances *= self.update_acceptances
 
         if self.interpolation=='quadratic':
             M = np.zeros((self.masses_size,self.masses_size))
@@ -194,6 +201,7 @@ class TemplateFitter:
                     self.overflow_template += getattr(self, 'template_alt')[0, qt, burn_y, -1]                
         if 'of' in save_plots:
             self.save_template_snapshot(data=self.overflow_template, title='Overflow', tag='of')
+        print 'Overflow template has integral:', self.overflow_template.sum(), ' ('+'{:4.4f}'.format(self.overflow_template.sum()/self.mc.sum())+' of total)' 
 
 
         self.dim_A     = 0
@@ -425,14 +433,14 @@ class TemplateFitter:
         elif self.setup_norm_ranges=='hardcoded_finer_y_qt32':
             rel_err = max(self.mid_point_qt(bin[1])*0.03, 0.2)* \
                 (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
-            rel_err /= math.sqrt(self.num_events/1.5e+06)
+            rel_err /= math.sqrt(self.num_events/1.5e+06 if self.num_events>0 else 1.0)
             n_sigmas = 5
             out = (rel_err, (1-rel_err*n_sigmas), (1+rel_err*n_sigmas))            
 
         elif self.setup_norm_ranges=='hardcoded_finer_y_qt20':
             rel_err = max(self.mid_point_qt(bin[1])*0.03, 0.2)* \
                 (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
-            rel_err /= math.sqrt(self.num_events/1.5e+06)
+            rel_err /= math.sqrt(self.num_events/1.5e+06 if self.num_events>0 else 1.0)
             n_sigmas = 5
             out = (rel_err, (1-rel_err*n_sigmas), (1+rel_err*n_sigmas))
 
@@ -461,7 +469,7 @@ class TemplateFitter:
         if not self.verbose:
             self.gMinuit.SetPrintLevel(-1)
         self.gMinuit.SetFCN( self.fcn ) 
-
+    
         self.arglist = array( 'd', 10*[0.] )
         self.ierflg = ROOT.Long(0)
         
@@ -778,10 +786,11 @@ class TemplateFitter:
             print 'Loading asimov dataset as DATA with', self.data.sum(), 'entries'
         elif dataset=='asimov-scaled':
             template_scaled  = np.load(self.in_dir+'template_'+self.charge+'_'+'mc_weights'+'.npz')['arr_0']
-            mc_nominal = template_scaled[0,0,0,0,:,0:self.reduce_pt]        if self.reduce_pt<0 else template_scaled[0,0,0,0,:,:]
+            mc_nominal = template_scaled[0,0,0,0,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,0,0,0,:,:]
             mc_scaled  = template_scaled[0,0,0,scale_id,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,0,0,scale_id,:,:]
-            scaling = mc_scaled/mc_nominal
+            scaling = mc_scaled/mc_nominal            
             self.data += copy.deepcopy( self.mc*scaling )
+            self.data *= self.num_events/self.data.sum()
             print 'Loading asimov dataset scaled by weight '+str(scale_id)+' as DATA with', self.data.sum(), 'entries'
         elif dataset=='random':
             if self.use_prior:
