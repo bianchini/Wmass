@@ -24,16 +24,16 @@ templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job
                                 mc_mass=80.419, 
                                 num_events=3.0e+07,
                                 verbose=False, 
-                                fixed_parameters=['pol', 'A', 'mass'],  
+                                fixed_parameters=['pol', 'A'],  
                                 prior_options=prior_options,
                                 reduce_qt=-1, 
-                                reduce_y=-1,
+                                reduce_y=-13,
                                 reduce_pt=0,
                                 fit_mode='parametric',
                                 do_analytic_fit=False,
                                 interpolation='quadratic',
                                 use_prefit=False,
-                                add_nonclosure=True,
+                                add_nonclosure=False,
                                 use_gradient=False,
                                 random_start=False,
                                 save_plots=[],
@@ -41,7 +41,7 @@ templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job
                                 )
 
 for i in range(ntoys):
-    templateFitter.load_data( dataset='asimov-scaled', save_plots=[], postfix='_'+str(i), scale_id=4 )
+    templateFitter.load_data( dataset='asimov-scaled-full', save_plots=[], postfix='_'+str(i), scale_id=4 )
     status = templateFitter.run(n_points=1000000, strategy=2, tolerance=0.1, run_minos=False, run_post_hesse=False)
     if status>0:
         continue

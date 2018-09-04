@@ -32,26 +32,30 @@ import copy
 job_base = {'job_name'         : 'TEST', 
             'ntoys'            : 1,
             'dataset'          : 'random',
-            'input_tag_fit'    : 'all_A0-4_forced_v4_finer_y_qt32_A1A3A4pol3_decorrelated', 
+            'input_tag_fit'    : 'all_A0-4_forced_v4_finer_y_qt32_decorrelated', 
             'input_tag_templ'  : '_finer_y_qt32',
             'fixed_parameters' : ['pol', 'A'], 
             'fit_mode'         : 'parametric',
             'reduce_y'         : -1,
-            'prior_options'    : 'prior_options_noprior'
+            'prior_options'    : 'prior_options_noprior',
+            'scale_id'         : 0
             }
 
 bins_template_y = [0., 0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. , 3.5]
 
 jobs = []
-for dataset in ['random',
-                'asimov'
+for dataset in [#'random',
+                #'asimov',
+                'asimov-scaled-in-acceptance-only',
+                'asimov-scaled-out-acceptance-only',
+                'asimov-scaled-full'
                 ]:
     for fit_mode in ['parametric']:
         for reduce_y in [ -4
                           ]:
      
             for prior_option in [
-                #'prior_options_noprior',
+                'prior_options_noprior',
                 'prior_options_base'
                 #'prior_options_A0',
                 #'prior_options_A1',
@@ -63,13 +67,16 @@ for dataset in ['random',
                 #'prior_options_A0A2',
                 ]:
 
-                job_new = copy.deepcopy(job_base)
-                job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32'+'_'+'mass_A1A3A4pol3_prior'
-                job_new['fit_mode'] = fit_mode
-                job_new['reduce_y'] = reduce_y
-                job_new['dataset'] = dataset
-                job_new['prior_options'] = prior_option
-                jobs.append(job_new)
+                for scale_id in [4]:
+
+                    job_new = copy.deepcopy(job_base)
+                    job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32'+'_'+prior_option.split('_')[-1]+'_'+'weight'+str(scale_id)
+                    job_new['fit_mode'] = fit_mode
+                    job_new['reduce_y'] = reduce_y
+                    job_new['dataset'] = dataset
+                    job_new['prior_options'] = prior_option
+                    job_new['scale_id'] = scale_id
+                    jobs.append(job_new)
 
 
 if __name__ == '__main__':
@@ -112,6 +119,8 @@ if __name__ == '__main__':
                     line += ']'
                 elif 'reduce_y' in line:
                     line += str(job['reduce_y'])
+                elif 'scale_id' in line:
+                    line += str(job['scale_id'])
                 elif "#save_plots=[]" in line and job['dataset']=='random':
                     line = line.replace('#', '')
                 elif "#save_plots=['norm', 'cov', 'coeff']" in line and job['dataset']=='asimov':
@@ -140,13 +149,14 @@ if __name__ == '__main__':
             config.JobType.scriptExe = 'crab_script_'+job['job_name']+'.sh'
             config.JobType.inputFiles = ['crab_script_'+job['job_name']+'.py', 'FrameworkJobReport.xml', 'tree_utils.py', 'fit_utils.py', 'template_fitter.py']
             config.JobType.outputFiles = ['result_CC_FxFx_Wplus_'+job['job_name']+'.root']
-            if job['dataset']=='asimov':
+            if 'asimov' in job['dataset']:
                 config.Data.totalUnits = 1     
-                config.JobType.outputFiles.extend([ 'covariance_fit_'+job['job_name']+'.png', 'covariance_fit_'+job['job_name']+'.C',
-                                                    'norm_resolution_'+job['job_name']+'.png', 'norm_resolution_'+job['job_name']+'.C'])
-                for coeff in ['A0','A1','A2','A3','A4']:
-                    for iy,y in enumerate(bins_template_y[0:job['reduce_y']]): 
-                        config.JobType.outputFiles.extend([ 'coefficient_'+coeff+'_'+'y{:03.2f}'.format(bins_template_y[iy])+'_'+'y{:03.2f}'.format(bins_template_y[iy+1])+'_'+job['job_name']+'_fit.png' ])
+                if job['dataset']=='asimov':
+                    config.JobType.outputFiles.extend([ 'covariance_fit_'+job['job_name']+'.png', 'covariance_fit_'+job['job_name']+'.C',
+                                                        'norm_resolution_'+job['job_name']+'.png', 'norm_resolution_'+job['job_name']+'.C'])
+                    for coeff in ['A0','A1','A2','A3','A4']:
+                        for iy,y in enumerate(bins_template_y[0:job['reduce_y']]): 
+                            config.JobType.outputFiles.extend([ 'coefficient_'+coeff+'_'+'y{:03.2f}'.format(bins_template_y[iy])+'_'+'y{:03.2f}'.format(bins_template_y[iy+1])+'_'+job['job_name']+'_fit.png' ])
             crabCommand('submit', config = config)
 
     if argv[1]=='killall':

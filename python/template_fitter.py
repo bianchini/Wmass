@@ -83,6 +83,8 @@ class TemplateFitter:
         self.release_for_hesse = False
 
         self.reduce_pt = reduce_pt
+        self.reduce_qt = reduce_qt
+        self.reduce_y  = reduce_y
         self.charge = charge
 
         self.update = True
@@ -145,9 +147,12 @@ class TemplateFitter:
 
             setattr(self, key+'_size', size)
 
-        print 'Fitting these bins:'
-        print '\ty :', self.bins_y
-        print '\tqt:', self.bins_qt
+        print 'Fit range:'
+        print '\ty  :', self.bins_y
+        print '\tqt :', self.bins_qt
+        print 'Observables:'
+        print '\tpt :', self.bins_pt
+        print '\teta:', self.bins_eta
 
         self.mc_mass_index = np.where(self.masses==mc_mass)[0][0]
         print 'MC mass at index...', self.mc_mass_index
@@ -176,7 +181,7 @@ class TemplateFitter:
 
         if self.num_events>0:            
             total_mc = self.mc.sum()
-            print 'Scale down MC by...', self.num_events/total_mc
+            print 'Scale MC by...', self.num_events/total_mc
             self.mc *= (self.num_events/total_mc)
             self.template[:,:,:,-1] *= (self.num_events/total_mc)
 
@@ -233,6 +238,8 @@ class TemplateFitter:
 
         self.fit_results['minuit'] = array( 'f', 6*[ 0.0 ] ) 
         self.out_tree.Branch('minuit', self.fit_results['minuit'], 'minuit[6]/F')
+        self.fit_results['weight'] = array( 'f', [ 0.0 ] ) 
+        self.out_tree.Branch('weight', self.fit_results['weight'], 'weight/F')
 
         self.build_aux_matrices()
 
@@ -781,26 +788,87 @@ class TemplateFitter:
         
         self.dataset_type=dataset
         self.data = np.zeros( self.mc.shape )
+
         if dataset=='asimov':
             self.data += copy.deepcopy( self.mc )
             print 'Loading asimov dataset as DATA with', self.data.sum(), 'entries'
-        elif dataset=='asimov-scaled':
-            template_scaled  = np.load(self.in_dir+'template_'+self.charge+'_'+'mc_weights'+'.npz')['arr_0']
-            mc_nominal = template_scaled[0,0,0,0,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,0,0,0,:,:]
-            mc_scaled  = template_scaled[0,0,0,scale_id,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,0,0,scale_id,:,:]
+
+        elif dataset=='asimov-scaled-in-acceptance-only':
+            self.fit_results['weight'][0] = scale_id 
+            template_scaled_full  = np.load(self.in_dir+'template_'+self.charge+'_'+'mc_weights'+'.npz')['arr_0']
+            (all_qt, burnt_qt, all_y, burnt_y)   = (2, 1, 3, -1)
+            if self.reduce_y==-4:                
+                burnt_y = 2 
+            elif self.reduce_y==-1:
+                burnt_y = 1
+            else:
+                print 'asimov-scaled-in-acceptance-only cannot be called with this configuration. Return'
+                return
+            print 'Summing bins qt [', 0, ':', all_qt-burnt_qt, '], y [', 0, ':', all_y-burnt_y  , ']'
+            template_scaled = template_scaled_full[:,0:(all_qt-burnt_qt),0:(all_y-burnt_y),:,:,:].sum(axis=(1,2))
+            mc_nominal = template_scaled[0,0,       :,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,0,       :,:]
+            mc_scaled  = template_scaled[0,scale_id,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,scale_id,:,:]
+            mc_nominal += 1e-03
+            mc_scaled  += 1e-03
+            scaling = mc_scaled/mc_nominal
+            self.data += copy.deepcopy( (self.mc-self.overflow_template)*scaling)
+            self.data += copy.deepcopy( self.overflow_template )
+            self.data *= self.num_events/self.data.sum()
+            print 'Loading asimov dataset scaled by weight '+str(scale_id)+' as DATA with', self.data.sum(), 'entries'
+
+        elif dataset=='asimov-scaled-out-acceptance-only':
+            self.fit_results['weight'][0] = scale_id 
+            template_scaled_full  = np.load(self.in_dir+'template_'+self.charge+'_'+'mc_weights'+'.npz')['arr_0']
+            (all_qt, burnt_qt, all_y, burnt_y)   = (2, 1, 3, -1)
+            if self.reduce_y==-4:                
+                burnt_y = 2 
+            elif self.reduce_y==-1:
+                burnt_y = 1
+            else:
+                print 'asimov-scaled-out-acceptance-only cannot be called with this configuration. Return'
+                return
+            template_scaled = np.zeros(template_scaled_full.shape[3:]) 
+            for burn_qt in range(-burnt_qt, 0):
+                for y in range(all_y-burnt_y):
+                    print 'Summing bin qt', burn_qt, ', y', y
+                    template_scaled  += template_scaled_full[0,burn_qt,y,:,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled_full[0,burn_qt,y,:,:,:] 
+            for burn_y in range(-burnt_y, 0):
+                for qt in range(all_qt):
+                    print 'Summing bin qt', qt, ', y', burn_y
+                    template_scaled += template_scaled_full[0,qt,burn_y,:,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled_full[0,qt,burn_y,:,:,:]    
+            mc_nominal = template_scaled[0,       :,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,       :,:]
+            mc_scaled  = template_scaled[scale_id,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[scale_id,:,:]
+            mc_nominal += 1e-03
+            mc_scaled  += 1e-03
+            scaling = mc_scaled/mc_nominal
+            self.data += copy.deepcopy( (self.mc-self.overflow_template) )
+            self.data += copy.deepcopy( self.overflow_template*scaling )
+            self.data *= self.num_events/self.data.sum()
+            print 'Loading asimov dataset scaled by weight '+str(scale_id)+' as DATA with', self.data.sum(), 'entries'
+
+        elif dataset=='asimov-scaled-full':
+            self.fit_results['weight'][0] = scale_id 
+            template_scaled  = np.load(self.in_dir+'template_'+self.charge+'_'+'mc_weights'+'.npz')['arr_0'].sum(axis=(1,2))
+            mc_nominal = template_scaled[0,0,       :,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,0,       :,:]
+            mc_scaled  = template_scaled[0,scale_id,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,scale_id,:,:]
             scaling = mc_scaled/mc_nominal            
+            mc_nominal += 1e-03
+            mc_scaled  += 1e-03
             self.data += copy.deepcopy( self.mc*scaling )
             self.data *= self.num_events/self.data.sum()
             print 'Loading asimov dataset scaled by weight '+str(scale_id)+' as DATA with', self.data.sum(), 'entries'
+
         elif dataset=='random':
             if self.use_prior:
                 self.randomize_coefficients( randomize_in_generation=False )
             self.data += np.random.poisson( self.mc )
             print 'Loading poisson dataset as DATA with', self.data.sum(), 'entries'
+
         elif dataset=='random-coefficients':
             self.randomize_coefficients( randomize_in_generation=True )
             self.data += np.random.poisson(self.overflow_template + self.mc_random_coeff.sum(axis=(0,1)))
             print 'Loading dataset with coeff ~ V_prior(coeff) as DATA with', self.data.sum(), 'entries'
+
         elif dataset=='normal':
             data_tmp = np.zeros( self.mc.shape ) 
             while (data_tmp[data_tmp<=0.].size > 0):
@@ -811,8 +879,10 @@ class TemplateFitter:
         elif dataset=='alternative':
             self.data += copy.deepcopy(self.template_alt.sum(axis=(1,2))[0,-1])
             print 'Loading alternative dataset as DATA with', self.data.sum(), 'entries'
+
         else:
             print 'Option not implemented'
+
         if 'data' in save_plots:
             self.save_template_snapshot(data=self.data, title='Data', tag='data'+postfix)
 

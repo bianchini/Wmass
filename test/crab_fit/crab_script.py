@@ -73,7 +73,7 @@ templateFitter = TemplateFitter(DY='CC_FxFx'
                                 ,prior_options=
                                 ,reduce_qt=-1 
                                 ,reduce_y=
-                                ,reduce_pt=0
+                                ,reduce_pt=-5
                                 ,fit_mode=
                                 ,interpolation='quadratic'
                                 ,use_prefit=False
@@ -88,7 +88,9 @@ templateFitter = TemplateFitter(DY='CC_FxFx'
 for i in range(ntoys):
     templateFitter.load_data( dataset= 
                               ,save_plots=[]
-                              ,postfix='_'+str(i) )
+                              ,postfix='_'+str(i)
+                              ,scale_id=
+                              )
     status = templateFitter.run(n_points=1000000, strategy=2, tolerance=0.1, run_minos=False, run_post_hesse=False)
     if status>0:
         continue
