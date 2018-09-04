@@ -699,6 +699,7 @@ def merge_templates_mc_weights(charges=['Wplus'],  masses=[80.419], weights=[],
 
                 for im,m in enumerate(masses):
                     mass_str = 'M'+'{:05.3f}'.format(m)
+
                     for iw,w in enumerate(weights):
                         template_name = q+'_'+mass_str+'_'+qt_template_bin+'_'+y_template_bin+'_'+str(w)
                         h = None
@@ -713,53 +714,53 @@ def merge_templates_mc_weights(charges=['Wplus'],  masses=[80.419], weights=[],
                                 else:
                                     h.Add( h_tmp )                                        
 
-                                if rebin!=():
-                                    h.Rebin2D(rebin[0], rebin[1])
+                        if rebin!=():
+                            h.Rebin2D(rebin[0], rebin[1])
 
-                                # templates are normalised in acceptance
-                                for ipt in range(np_bins_rebin_pt.size-1):
-                                    for ieta in range(np_bins_rebin_eta.size-1):
-                                        template[im][bin_template_qt_index][bin_template_y_index][iw][ieta][ipt] = h.GetBinContent(ieta+1,ipt+1)
+                        # templates are normalised in acceptance
+                        for ipt in range(np_bins_rebin_pt.size-1):
+                            for ieta in range(np_bins_rebin_eta.size-1):
+                                template[im][bin_template_qt_index][bin_template_y_index][iw][ieta][ipt] = h.GetBinContent(ieta+1,ipt+1)
                                         
-                                if not save_plots:
-                                    continue
-                                plt.pcolormesh(yy, xx, template[im][bin_template_qt_index][bin_template_y_index][iw])
-                                plt.colorbar()
+                        if not save_plots:
+                            continue
+                        plt.pcolormesh(yy, xx, template[im][bin_template_qt_index][bin_template_y_index][iw])
+                        plt.colorbar()
 
-                                words = template_name.split('_')
-                                title = r'$'+words[0][0]+'^{'+('+' if 'plus' in words[0] else '-')+'}$, '
-                                title += r'$q_{T}\in['+'{:0.0f}'.format(np_bins_template_qt_ext[qt-1])+', '+('{:0.0f}'.format(np_bins_template_qt_ext[qt]) if qt<nbins_template_qt else '\infty')+']$ GeV'+', '
-                                title += r'$|y|\in['+'{:0.1f}'.format(np_bins_template_y_ext[y-1])+', '+('{:0.1f}'.format(np_bins_template_y_ext[y]) if y<nbins_template_y else '\infty')+']$'+', '
-                                title += r'weight '+str(w)
-                                plt.title(title, fontsize=20)
-                                plt.axis([np_bins_rebin_eta[0], np_bins_rebin_eta[-1], np_bins_rebin_pt[0], np_bins_rebin_pt[-1]])        
-                                plt.figtext(0.15, 0.86, r'$M_{W}$ = '+words[1][1:]+' GeV', color='white')
-                                plt.xlabel('$\eta$', fontsize=20)
-                                plt.ylabel('$p_{T}$ (GeV)', fontsize=20)
-                                plt.show()
-                                plt.savefig('plots/template_'+template_name+'.png')
-                                plt.close('all')
-                                #return
+                        words = template_name.split('_')
+                        title = r'$'+words[0][0]+'^{'+('+' if 'plus' in words[0] else '-')+'}$, '
+                        title += r'$q_{T}\in['+'{:0.0f}'.format(np_bins_template_qt_ext[qt-1])+', '+('{:0.0f}'.format(np_bins_template_qt_ext[qt]) if qt<nbins_template_qt else '\infty')+']$ GeV'+', '
+                        title += r'$|y|\in['+'{:0.1f}'.format(np_bins_template_y_ext[y-1])+', '+('{:0.1f}'.format(np_bins_template_y_ext[y]) if y<nbins_template_y else '\infty')+']$'+', '
+                        title += r'weight '+str(w)
+                        plt.title(title, fontsize=20)
+                        plt.axis([np_bins_rebin_eta[0], np_bins_rebin_eta[-1], np_bins_rebin_pt[0], np_bins_rebin_pt[-1]])        
+                        plt.figtext(0.15, 0.86, r'$M_{W}$ = '+words[1][1:]+' GeV', color='white')
+                        plt.xlabel('$\eta$', fontsize=20)
+                        plt.ylabel('$p_{T}$ (GeV)', fontsize=20)
+                        plt.show()
+                        plt.savefig('plots/template_'+template_name+'.png')
+                        plt.close('all')
+                        #return
 
-                outname = 'plots/template_'+q+'_'+postfix
-                np.savez(outname,
-                         template, 
-                         np.array(masses), 
-                         np_bins_template_qt_ext, 
-                         np_bins_template_y_ext[(nbins_template_y/2):], 
-                         np_weights_ext, 
-                         np_bins_rebin_eta, np_bins_rebin_pt,
-                         )
+        outname = 'plots/template_'+q+'_'+postfix
+        np.savez(outname,
+                 template, 
+                 np.array(masses), 
+                 np_bins_template_qt_ext, 
+                 np_bins_template_y_ext[(nbins_template_y/2):], 
+                 np_weights_ext, 
+                 np_bins_rebin_eta, np_bins_rebin_pt,
+                 )
 
-                # for validation
-                print 'Content of file '+outname+'.npz'
-                res = np.load(outname+'.npz')
-                for f in res.files:
-                    print 'File: '+f, 'with size = ', res[f].size
-                    print res[f]
+        # for validation
+        print 'Content of file '+outname+'.npz'
+        res = np.load(outname+'.npz')
+        for f in res.files:
+            print 'File: '+f, 'with size = ', res[f].size
+            print res[f]
                     
 # draw derivative of template against one coefficient at the time
-def derivative_templates(charge='Wplus', var='WpreFSR', coeff_eval='val', tag='', bin=(0,0,1)):
+def derivative_templates(charge='Wplus', var='WpreFSR', coeff_eval='val', tag='', bin=(0,0,1), bins_qt=[], bins_y=[]):
 
     rcParams['figure.figsize'] = 8,8
 
@@ -770,8 +771,8 @@ def derivative_templates(charge='Wplus', var='WpreFSR', coeff_eval='val', tag=''
         print 'File: '+f, 'with size = ', res[f].shape
 
     np_bins_mass = res['arr_1']
-    np_bins_qt = res['arr_2']
-    np_bins_y  = res['arr_3']
+    np_bins_qt = res['arr_2'] if len(bins_qt)==0 else np.array(bins_qt)
+    np_bins_y  = res['arr_3'] if len(bins_y)==0  else np.array(bins_y)
     np_bins_rebin_eta = res['arr_5']
     np_bins_rebin_pt  = res['arr_6']
 
@@ -820,26 +821,41 @@ def derivative_templates(charge='Wplus', var='WpreFSR', coeff_eval='val', tag=''
     plt.suptitle(r'$q_{T} \in ['+'{:0.1f}'.format(np_bins_qt[iqt])+', '+'{:0.1f}'.format(np_bins_qt[iqt+1])+']$ GeV, '+'$|y| \in ['+'{:0.1f}'.format(np_bins_y[iy])+', '+'{:0.1f}'.format(np_bins_y[iy+1])+']$', fontsize=20)
     plt.subplots_adjust(wspace=0.4, hspace=0.4)
     plt.show()
-    plt.savefig('plots/derivative_'+charge+'_'+var+'_'+coeff_eval+'_'+tag+'_bin'+str(bin[0])+'_'+str(bin[1])+'_'+str(bin[2])+'.png')
+    plt.savefig('plots/derivative_'+charge+'_'+var+'_'+coeff_eval+'_'+tag+'_qt'+'{:0.1f}'.format(np_bins_qt[iqt])+'_qt'+'{:0.1f}'.format(np_bins_qt[iqt+1])+'_y'+'{:0.1f}'.format(np_bins_y[iy])+'_y'+'{:0.1f}'.format(np_bins_y[iy+1])+'.png')
     plt.close('all')
 
 # draw derivative of template against one coefficient at the time
 def weighted_templates(charge='Wplus', weights=[]):
+    from tree_utils import get_weight_meaning
+
+    rcParams['figure.figsize'] = 8,8
     outname = '../data/template_'+charge+'_'+'mc_weights'
     res     = np.load(outname+'.npz')
     np_bins_rebin_eta = res['arr_5']
     np_bins_rebin_pt  = res['arr_6']
     xx,yy = np.meshgrid(np_bins_rebin_pt, np_bins_rebin_eta)        
-    mc = res['arr_0'][0,0,0,0]
+    mc = res['arr_0'].sum(axis=(1,2))[0,0,:,:]
 
     for w in weights:
-        mc_w = res['arr_0'][0,0,0,w]
-        diff = (mc_w-mc)/np.sqrt(mc)
-        plt.plot()
-        plt.axis([np_bins_rebin_eta.min(), np_bins_rebin_eta.max(), np_bins_rebin_pt.min(), np_bins_rebin_pt.max()])        
-        plt.title('Weight '+str(w))
-        plt.pcolormesh(yy, xx, diff)
-        plt.colorbar()
+        mc_w = res['arr_0'].sum(axis=(1,2))[0,w,:,:]        
+        for ivar,var in enumerate(['pull', 'pull_flat', 'ratio', 'ratio_flat']):
+            if var=='pull':
+                diff = (mc_w-mc)/np.sqrt(mc) 
+            elif var=='pull_flat':
+                diff = (mc_w*mc.sum()/mc_w.sum()-mc)/np.sqrt(mc)
+            elif var=='ratio':
+                diff = (mc_w-mc)/mc
+            elif var=='ratio_flat':
+                diff = (mc_w*mc.sum()/mc_w.sum()-mc)/mc
+            plt.subplot(2, 2, ivar+1)
+            plt.axis([np_bins_rebin_eta.min(), np_bins_rebin_eta.max(), np_bins_rebin_pt.min(), np_bins_rebin_pt.max()])        
+            plt.title(var.upper())
+            plt.ylabel('$p_{T}$ (GeV)', fontsize=12)
+            plt.xlabel('$\eta$', fontsize=12)
+            plt.pcolormesh(yy, xx, diff)
+            plt.colorbar()
+        plt.suptitle(get_weight_meaning(w))
+        plt.subplots_adjust(wspace=0.4, hspace=0.4)
         plt.show()
         plt.savefig('plots/weighted_templates_'+str(w)+'.png')
         plt.close('all')

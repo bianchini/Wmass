@@ -22,11 +22,11 @@ np_bins_template_y_coarser        = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2,
 np_bins_template_y_finer          = np.array([-3.5, -3. , -2.5, -2., -1.8, -1.6, -1.4, -1.2, -1.0, -0.8, -0.6, -0.4, -0.2,  0. ,  0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. ,  3.5])
 
 # forced orders for qt fit
-forced_orders_default    = {'A0': 3, 'A1': 4, 'A2': 3, 'A3': 4, 'A4': 4, 'A5': 0, 'A6':0, 'A7':0}
-forced_orders_pol2       = {'A0': 2, 'A1': 2, 'A2': 2, 'A3': 2, 'A4': 2, 'A5': 0, 'A6':0, 'A7':0}
-forced_orders_pol3       = {'A0': 3, 'A1': 3, 'A2': 3, 'A3': 3, 'A4': 3, 'A5': 0, 'A6':0, 'A7':0}
-forced_orders_A1A3A4pol3 = {'A0': 2, 'A1': 3, 'A2': 2, 'A3': 3, 'A4': 3, 'A5': 0, 'A6':0, 'A7':0}
-forced_orders_A1A3pol3   = {'A0': 2, 'A1': 3, 'A2': 2, 'A3': 3, 'A4': 2, 'A5': 0, 'A6':0, 'A7':0}
+forced_orders_default      = {'A0': 3, 'A1': 4, 'A2': 3, 'A3': 4, 'A4': 4, 'A5': 0, 'A6':0, 'A7':0}
+forced_orders_pol2         = {'A0': 2, 'A1': 2, 'A2': 2, 'A3': 2, 'A4': 2, 'A5': 0, 'A6':0, 'A7':0}
+forced_orders_pol3         = {'A0': 3, 'A1': 3, 'A2': 3, 'A3': 3, 'A4': 3, 'A5': 0, 'A6':0, 'A7':0}
+forced_orders_A1A3A4pol3   = {'A0': 2, 'A1': 3, 'A2': 2, 'A3': 3, 'A4': 3, 'A5': 0, 'A6':0, 'A7':0}
+forced_orders_A1A3pol3     = {'A0': 2, 'A1': 3, 'A2': 2, 'A3': 3, 'A4': 2, 'A5': 0, 'A6':0, 'A7':0}
 
 # coefficients in qt fit that will be fixed to zero
 fix_to_zero_default = {'A0': [0,1], 'A1': [0], 'A2': [0,1], 'A3': [0], 'A4': [], 'A5':[0], 'A6': [0], 'A7': [0]}
@@ -118,11 +118,11 @@ elif argv[1]=='cov-all':
             for var in ['WpreFSR']:
                 get_covariance(fname='../root/tree_histos1_'+DY+'.root', DY=DY, var=var, q=q, weights=weights, 
                                coefficients=['A0','A1','A2','A3','A4'], 
-                               fix_to_zero=fix_to_zero_default,
-                               forced_orders=forced_orders_A1A3pol3,
+                               fix_to_zero=fix_to_zero_p0,
+                               forced_orders=forced_orders_A1A3A4pol3,
                                fit_range=[0.0, 28.0],
                                add_stat_uncert=True, 
-                               postfix='all_A0-4_forced_v4_finer_y_qt32_A1A3pol3_decorrelated',
+                               postfix='all_A0-4_forced_v4_finer_y_qt32_p0A1A3A4pol3_decorrelated',
                                save_corr=True, save_coeff=True, save_tree=True, save_pkl=True,
                                np_bins_template_qt=np_bins_template_qt_coarser_qt32,
                                np_bins_template_y=np_bins_template_y_finer,
@@ -186,11 +186,12 @@ elif argv[1]=='templates_mc_weights':
     merge_templates_mc_weights(charges=['Wplus'],
                                masses=[80.419],
                                weights=range(109),
-                               np_bins_template_qt=np.array([0.]), 
-                               np_bins_template_y=np.array([0.]),
+                               np_bins_template_qt=np.array([0.0, 32.0]), 
+                               np_bins_template_y=np.array([-2.0, 0., +2.0]),
                                rebin=(2,4),
-                               input_tag='CC_FxFx',
-                               postfix='mc_weights'
+                               input_tag='CC_FxFx_morebins',
+                               postfix='mc_weights',
+                               save_plots=True
                                )
 
 else:

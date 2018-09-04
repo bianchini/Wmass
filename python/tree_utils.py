@@ -11,7 +11,7 @@ np_bins_qt_p1 = np.linspace(12.0, 20.0, 5)
 np_bins_qt_p2 = np.linspace(24.0, 40.0, 5)
 np_bins_qt_p3 = np.array([60, 80, 100, 150, 200]) 
 #np_bins_qt    = np.append( np.append(np_bins_qt_p0, np_bins_qt_p1), np.append( np_bins_qt_p2, np_bins_qt_p3))
-np_bins_qt    = np.array([0.0])
+np_bins_qt    = np.array([0.0, 32.0])
 
 np_bins_qt_width = np.array( [np_bins_qt[i+1]-np_bins_qt[i] for i in range(np_bins_qt.size-1)] )
 np_bins_qt_mid   = np.array( [(np_bins_qt[i+1]+np_bins_qt[i])*0.5 for i in range(np_bins_qt.size-1)] )
@@ -20,7 +20,7 @@ np_bins_y_p0 = np.linspace(-5.0, -2.5,  6)
 np_bins_y_p1 = np.linspace(-2.0, +2.0, 21)
 np_bins_y_p2 = np.linspace(+2.5, +5.0,  6)
 #np_bins_y    = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
-np_bins_y = np.array([0.0])
+np_bins_y = np.array([-3.5, -2.0, 0.0, 2.0, 3.5])
 
 np_bins_y_width = np.array( [np_bins_y[i+1]-np_bins_y[i] for i in range(np_bins_y.size-1)] )
 np_bins_y_mid   = np.array( [(np_bins_y[i+1]+np_bins_y[i])*0.5 for i in range(np_bins_y.size-1)] )
@@ -59,6 +59,28 @@ def find_y_qt_bin( ps=(), verbose=False ):
         print 'qt=', qt, 'yields bins (', iqt_low, iqt_high, ') => Ok'
     
     return (bin_y, iy_low, bin_qt, iqt_low)
+
+def get_weight_meaning(wid=0):
+    if wid==0:
+        return r'$[\mu_{R},\mu_{F}]=[1.0,1.0]$'
+    elif wid==1:
+        return r'$[\mu_{R},\mu_{F}]=[1.0,2.0]$'
+    elif wid==2:
+        return r'$[\mu_{R},\mu_{F}]=[1.0,0.5]$'
+    elif wid==3:
+        return r'$[\mu_{R},\mu_{F}]=[2.0,1.0]$'
+    elif wid==4:
+        return r'$[\mu_{R},\mu_{F}]=[2.0,2.0]$'
+    elif wid==5:
+        return r'$[\mu_{R},\mu_{F}]=[2.0,0.5]$'
+    elif wid==6:
+        return r'$[\mu_{R},\mu_{F}]=[0.5,1.0]$'
+    elif wid==7:
+        return r'$[\mu_{R},\mu_{F}]=[0.5,2.0]$'
+    elif wid==8:
+        return r'$[\mu_{R},\mu_{F}]=[0.5,0.5]$'
+    else:
+        return r'NNPDF replica '+str(wid-9)
 
 
 def isFromW(p):
