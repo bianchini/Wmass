@@ -808,12 +808,15 @@ class TemplateFitter:
             template_scaled = template_scaled_full[:,0:(all_qt-burnt_qt),0:(all_y-burnt_y),:,:,:].sum(axis=(1,2))
             mc_nominal = template_scaled[0,0,       :,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,0,       :,:]
             mc_scaled  = template_scaled[0,scale_id,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,scale_id,:,:]
-            mc_nominal += 1e-03
-            mc_scaled  += 1e-03
+            mc_nominal += 1e+01
+            mc_scaled  += 1e+01
             scaling = mc_scaled/mc_nominal
-            self.data += copy.deepcopy( (self.mc-self.overflow_template)*scaling)
+            mc_distorted = (self.mc-self.overflow_template)*scaling
+            self.data += copy.deepcopy( mc_distorted*(self.num_events-self.overflow_template.sum())/(mc_distorted.sum()) )
             self.data += copy.deepcopy( self.overflow_template )
-            self.data *= self.num_events/self.data.sum()
+            if 'pulls' in save_plots:
+                self.save_template_snapshot(data=(self.data-self.mc)/np.sqrt(self.mc), title='Pull', tag='pulls_in_acceptance_weight'+str(scale_id))            
+                self.save_template_snapshot(data=scaling, title='Scaling', tag='scaling_in_acceptance_weight'+str(scale_id))            
             print 'Loading asimov dataset scaled by weight '+str(scale_id)+' as DATA with', self.data.sum(), 'entries'
 
         elif dataset=='asimov-scaled-out-acceptance-only':
@@ -831,19 +834,22 @@ class TemplateFitter:
             for burn_qt in range(-burnt_qt, 0):
                 for y in range(all_y-burnt_y):
                     print 'Summing bin qt', burn_qt, ', y', y
-                    template_scaled  += template_scaled_full[0,burn_qt,y,:,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled_full[0,burn_qt,y,:,:,:] 
+                    template_scaled  += template_scaled_full[0,burn_qt,y,:,:,:]
             for burn_y in range(-burnt_y, 0):
                 for qt in range(all_qt):
                     print 'Summing bin qt', qt, ', y', burn_y
-                    template_scaled += template_scaled_full[0,qt,burn_y,:,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled_full[0,qt,burn_y,:,:,:]    
+                    template_scaled += template_scaled_full[0,qt,burn_y,:,:,:]
             mc_nominal = template_scaled[0,       :,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,       :,:]
             mc_scaled  = template_scaled[scale_id,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[scale_id,:,:]
-            mc_nominal += 1e-03
-            mc_scaled  += 1e-03
+            mc_nominal += 1e+01
+            mc_scaled  += 1e+01
             scaling = mc_scaled/mc_nominal
+            mc_distorted = self.overflow_template*scaling
             self.data += copy.deepcopy( (self.mc-self.overflow_template) )
-            self.data += copy.deepcopy( self.overflow_template*scaling )
-            self.data *= self.num_events/self.data.sum()
+            self.data += copy.deepcopy( mc_distorted*(self.num_events-(self.mc-self.overflow_template).sum())/mc_distorted.sum() )
+            if 'pulls' in save_plots:
+                self.save_template_snapshot(data=(self.data-self.mc)/np.sqrt(self.mc), title='Pull', tag='pulls_out_acceptance_weight'+str(scale_id))            
+                self.save_template_snapshot(data=scaling, title='Scaling', tag='scaling_out_acceptance_weight'+str(scale_id))            
             print 'Loading asimov dataset scaled by weight '+str(scale_id)+' as DATA with', self.data.sum(), 'entries'
 
         elif dataset=='asimov-scaled-full':
@@ -856,6 +862,9 @@ class TemplateFitter:
             mc_scaled  += 1e-03
             self.data += copy.deepcopy( self.mc*scaling )
             self.data *= self.num_events/self.data.sum()
+            if 'pulls' in save_plots:
+                self.save_template_snapshot(data=(self.data-self.mc)/np.sqrt(self.mc), title='Pull', tag='pulls_full_weight'+str(scale_id))            
+                self.save_template_snapshot(data=scaling, title='Scaling', tag='scaling_full_weight'+str(scale_id))            
             print 'Loading asimov dataset scaled by weight '+str(scale_id)+' as DATA with', self.data.sum(), 'entries'
 
         elif dataset=='random':

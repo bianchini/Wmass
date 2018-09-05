@@ -14,25 +14,29 @@ from plot_utils import *
 
 if argv[1]=='profile_toys':
     files = [
-        #['CC_FxFx_Wplus_random_parametric_y2p50_qt32_default', 'W^{+}, toys, param-1D, |y| #leq 2.5, 30M, mass', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
-        #['CC_FxFx_Wplus_asimov_parametric_y2p50_qt32_default', 'W^{+}, asimov, param-1D, |y| #leq 2.5, 30M, mass', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
-        #['CC_FxFx_Wplus_random_parametric_y3p00_qt32_default', 'W^{+}, toys, param-1D, |y| #leq 3.0, 30M, mass', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
-        #['CC_FxFx_Wplus_asimov_parametric_y3p00_qt32_default', 'W^{+}, asimov, param-1D, |y| #leq 3.0, 30M, mass', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
-        #['CC_FxFx_Wplus_random_parametric_y3p50_qt32_default', 'W^{+}, toys, param-1D, |y| #leq 3.5, 30M, mass', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
-        #['CC_FxFx_Wplus_asimov_parametric_y3p50_qt32_default', 'W^{+}, asimov, param-1D, |y| #leq 3.5, 30M, mass', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
-        #['CC_FxFx_Wplus_asimov_parametric_y2p00_qt32_default_pt55', 'W^{+}, asimov, param-1D, |y| #leq 2.0, 30M, mass, p_{T}<55 GeV', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
-        ['CC_FxFx_Wplus_random_parametric_y2p00_qt32_default_pt55', 'W^{+}, toys, param-1D, |y| #leq 2.0, 30M, mass, p_{T}<55 GeV', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
+        ['CC_FxFx_Wplus_asimov-scaled-in-acceptance-only_parametric_y2p00_qt32_noprior_weight4', 
+         'W^{+}, toys, param-1D, |y| #leq 2.0, 30M, mass, in-acc, p_{T}<55 GeV, weight 4', 
+         'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
+        ['CC_FxFx_Wplus_asimov-scaled-in-acceptance-only_parametric_y2p00_qt32_base_weight4', 
+         'W^{+}, toys, param-1D, |y| #leq 2.0, 30M, mass prior, in-acc, p_{T}<55 GeV, weight 4', 
+         'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
+        ['CC_FxFx_Wplus_asimov-scaled-out-acceptance-only_parametric_y2p00_qt32_noprior_weight4', 
+         'W^{+}, toys, param-1D, |y| #leq 2.0, 30M, mass, out-acc, p_{T}<55 GeV, weight 4', 
+         'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
+        ['CC_FxFx_Wplus_asimov-scaled-out-acceptance-only_parametric_y2p00_qt32_base_weight4', 
+         'W^{+}, toys, param-1D, |y| #leq 2.0, 30M, mass prior, out-acc, p_{T}<55 GeV, weight 4', 
+         'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
+        ['CC_FxFx_Wplus_asimov-scaled-full_parametric_y2p00_qt32_base_weight4', 
+         'W^{+}, toys, param-1D, |y| #leq 2.0, 30M, mass prior, p_{T}<55 GeV, weight 4', 
+         'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
         ]
-
-    for v in [#'bias', 
-              #'rms',
-              'biasANDrms'
-              ]:
-        #profile_toys( files=files, alphas=['mass'],   var=v, postfix='_mass', save_pulls=True,  truth='val')
-        profile_toys( files=files, alphas=['minuit'], var=v, postfix='',      save_pulls=False, truth='')
-        #profile_toys( files=files, alphas=['norm'],   var=v, postfix='_norm', save_pulls=True,  truth='val')
-        #for coeff in ['A0', 'A1', 'A2', 'A3', 'A4']:
-        #    profile_toys( files=files, alphas=[coeff], var=v, postfix='_'+coeff,   save_pulls=True,  truth='fit')
+    for fname in files:
+        for v in ['biasANDrms']:
+            profile_toys( fname=fname, alphas=['mass'],   var=v, postfix='_mass', save_pulls=True,  truth='val')
+            profile_toys( fname=fname, alphas=['minuit'], var=v, postfix='',      save_pulls=False, truth='')
+            profile_toys( fname=fname, alphas=['norm'],   var=v, postfix='_norm', save_pulls=True,  truth='val')
+            for coeff in ['A0', 'A1', 'A2', 'A3', 'A4']:
+                profile_toys( fname=fname, alphas=[coeff], var=v, postfix='_'+coeff, save_pulls=True,  truth='fit')
 
 elif argv[1]=='derivatives':
     bins_template_y = [ 0.,  0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2.]

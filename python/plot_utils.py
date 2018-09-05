@@ -861,7 +861,7 @@ def weighted_templates(charge='Wplus', weights=[]):
         plt.close('all')
 
 
-def profile_toys( files=[], alphas=['norm'], var='rms', postfix='', save_pulls=False, truth='val'):
+def profile_toys( fname=['', '', ''], alphas=['norm'], var='rms', postfix='', save_pulls=False, truth='val'):
 
     bins_template_y = [ 0., 0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2.]
     bins_template_qt= [ 0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 24.0, 32.0 ]
@@ -872,202 +872,200 @@ def profile_toys( files=[], alphas=['norm'], var='rms', postfix='', save_pulls=F
     from fit_utils import polynomial, get_orders    
     x = np.array( [ (bins_template_qt[iqt]+bins_template_qt[iqt+1])*0.5 for iqt in range(len(bins_template_qt)-1) ] )
 
-    for ifname,fname in enumerate(files):
+    res_coeff = np.load(open('../data/fit_results_'+fname[2]+'.pkl', 'r'))
 
-        res_coeff = np.load(open('../data/fit_results_'+fname[2]+'.pkl', 'r'))
+    c = ROOT.TCanvas('canvas', '', 1350, 800)      
+    ROOT.gPad.SetBottomMargin(0.35)
 
-        c = ROOT.TCanvas('canvas_'+str(ifname), '', 1350, 800)      
-        ROOT.gPad.SetBottomMargin(0.35)
+    f = ROOT.TFile('plots/result_'+fname[0]+'.root', 'READ')
+    tree = f.Get('tree')
+    ntoys = tree.GetEntries()
 
-        f = ROOT.TFile('plots/result_'+fname[0]+'.root', 'READ')
-        tree = f.Get('tree')
-        ntoys = tree.GetEntries()
-
-        asimov = ('asimov' in fname[0])
+    asimov = ('asimov' in fname[0])
         
-        # Minimizer status
-        if 'minuit' in alphas:
-            hminuits = [ROOT.TH1F('hminuit_status','Status distribution from '+str(ntoys)+' toys;Status;Entries', 5, 0,5), 
-                        ROOT.TH1F('hminuit_edm','EDM distribution from '+str(ntoys)+' toys;EDM;Entries', 50, 0, 1e-04), 
-                        ROOT.TH1F('hminuit_ndof','ndof distribution from '+str(ntoys)+' toys;ndof;Entries', 1000, 0, 1000),  
-                        ROOT.TH1F('hminuit_chi2min','#chi^{2}_{min} distribution from '+str(ntoys)+' toys;#chi^{2}_{min};Entries', 100, 600, 1000), 
-                        ROOT.TH1F('hminuit_pval','P-value distribution from '+str(ntoys)+' toys;p-value;Entries', 51, 0., 1.02), 
-                        ROOT.TH1F('hminuit_cpu','CPU time distribution from '+str(ntoys)+' toys;time [h];Entries', 50, 0., 10), 
-                        ]
-            tree.Draw('minuit[0]>>hminuit_status')
-            tree.Draw('minuit[1]>>hminuit_edm')
-            tree.Draw('minuit[3]>>hminuit_ndof')
-            tree.Draw('minuit[2]>>hminuit_chi2min')
-            tree.Draw('minuit[4]>>hminuit_pval')
-            tree.Draw('minuit[5]/3600>>hminuit_cpu')
-            ndof = 0
-            for hminuit in hminuits:
-                if 'ndof' in hminuit.GetName():
-                    ndof = hminuit.GetMean()
-                    continue
-                c.cd()
-                hminuit.Draw('HIST')
-                if 'chi2min' in hminuit.GetName():
-                    line = ROOT.TLine(ndof, 0, ndof, hminuit.GetMaximum())
-                    line.SetLineStyle(ROOT.kDashed)
-                    line.SetLineColor(ROOT.kRed)
-                    line.SetLineWidth(3)
-                    line.Draw('SAME')
-                c.SaveAs('plots/profile_toys_'+fname[0]+'_'+(hminuit.GetName().split('_')[-1])+'.png')
-            
-            for hminuit in hminuits:
-                hminuit.IsA().Destructor( hminuit )
-            print 'Done. Close the file and remove canvas'
-            f.Close()
-            c.IsA().Destructor( c )
-            return
-
-        ys  = []
-        last_y = False
-        for iy in range(len(bins_template_y)-1):
-            if last_y:
+    # Minimizer status
+    if 'minuit' in alphas:
+        hminuits = [ROOT.TH1F('hminuit_status','Status distribution from '+str(ntoys)+' toys;Status;Entries', 5, 0,5), 
+                    ROOT.TH1F('hminuit_edm','EDM distribution from '+str(ntoys)+' toys;EDM;Entries', 50, 0, 1e-04), 
+                    ROOT.TH1F('hminuit_ndof','ndof distribution from '+str(ntoys)+' toys;ndof;Entries', 1000, 0, 1000),  
+                    ROOT.TH1F('hminuit_chi2min','#chi^{2}_{min} distribution from '+str(ntoys)+' toys;#chi^{2}_{min};Entries', 1100, 0, 1100), 
+                    ROOT.TH1F('hminuit_pval','P-value distribution from '+str(ntoys)+' toys;p-value;Entries', 51, 0., 1.02), 
+                    ROOT.TH1F('hminuit_cpu','CPU time distribution from '+str(ntoys)+' toys;time [h];Entries', 50, 0., 10), 
+                    ]
+        tree.Draw('minuit[0]>>hminuit_status')
+        tree.Draw('minuit[1]>>hminuit_edm')
+        tree.Draw('minuit[3]>>hminuit_ndof')
+        tree.Draw('minuit[2]>>hminuit_chi2min')
+        tree.Draw('minuit[4]>>hminuit_pval')
+        tree.Draw('minuit[5]/3600>>hminuit_cpu')
+        ndof = 0
+        for hminuit in hminuits:
+            if 'ndof' in hminuit.GetName():
+                ndof = hminuit.GetMean()
                 continue
-            ys.append( 'y{:03.2f}'.format(bins_template_y[iy])+'_'+'y{:03.2f}'.format(bins_template_y[iy+1])  )
-            if 'y{:03.2f}'.format(bins_template_y[iy+1]).replace('.', 'p') in fname[0]:
-                last_y = True
-
-        qts = []
-        last_qt = False
-        for iqt in range(len(bins_template_qt)-1):
-            if last_qt:
-                continue
-            qts.append( 'qt{:03.1f}'.format(bins_template_qt[iqt])+'_'+'qt{:03.1f}'.format(bins_template_qt[iqt+1])  )
-            if 'qt{:03.0f}'.format(bins_template_qt[iqt+1]) in fname[0]:
-                last_qt = True
-
-        tot = len(ys)*(len(alphas)-1)*len(qts)+1 if 'mass' in alphas else len(ys)*len(alphas)*len(qts)
-        print ys
-        print qts
-        print tot
-
-        title = fname[1]+';;'+var
-        res   = ROOT.TH1F('res', title, tot, 0, tot)        
-        res.SetLineWidth(2)
-        res.SetLineColor(ROOT.kBlue)
-        res.SetStats(ROOT.kFALSE)
-
-        line0 = ROOT.TF1("line0", "+0.0", 0, tot) 
-        line0.SetLineColor(ROOT.kBlack) 
-        line0.SetLineWidth(3)
-        line0.SetLineStyle(ROOT.kDashed)
-        line1 = ROOT.TF1("line1", "+1.0", 0, tot) 
-        line1.SetLineColor(ROOT.kRed) 
-        line1.SetLineWidth(3) 
-        line1.SetLineStyle(ROOT.kDashed)
-        line2 = ROOT.TF1("line2", "-1.0", 0, tot) 
-        line2.SetLineColor(ROOT.kRed) 
-        line2.SetLineWidth(3)
-        line2.SetLineStyle(ROOT.kDashed);
-
-        bin = 1
-        for iy,y in enumerate(ys):
-            for A in alphas:        
-                for iqt,qt in enumerate(qts):
-
-                    leg1 = ROOT.TLegend(0.15,0.75,0.35,0.88, "","brNDC")
-                    leg1.SetFillStyle(0)
-                    leg1.SetBorderSize(0)
-                    leg1.SetTextSize(0.04)
-                    leg1.SetFillColor(10)
-
-                    if A=='mass':
-                        res.GetXaxis().SetBinLabel(bin, A)
-                    else:
-                        res.GetXaxis().SetBinLabel(bin, y+'_'+qt+'_'+A)
-
-                    hpull = ROOT.TH1F('hpull','Pull distribution from '+str(ntoys)+' toys;(toy-'+truth+')/err;Entries', 100, -4,4)
-                    hpull.SetStats(ROOT.kFALSE)
-                    hpull.Sumw2()
-                    if A=='mass':
-                        hmass = ROOT.TH1F('hmass','Parameter distribution from '+str(ntoys)+' toys;Parameter;Entries', 300, 80.419-0.150,80.419+0.150)
-                        hmass.SetStats(ROOT.kTRUE)
-                        hmass.Sumw2()
-                    g = ROOT.TF1('g', '[0]*TMath::Exp( -0.5*(x-[1])*(x-[1])/[2]/[2] )', -3.0, +3.0)
-                    g.SetLineColor(ROOT.kBlue)
-                    g.SetLineWidth(3)
-                    g.SetNpx(10000)
-                    g.SetParameter(0, 10.)
-                    g.SetParameter(1, 0.)
-                    g.SetParameter(2, 1.)
-
-                    if A=='mass':
-                        if y==ys[0] and qt==qts[0]:
-                            tree.Draw(A+'[4]>>hpull')
-                            tree.Draw(A+'[0]>>hmass')
-                            hmass.Draw('HIST')
-                            c.SaveAs('plots/profile_toys_'+fname[0]+'_'+A+'_'+'toys'+'.png')
-                        else:
-                            hpull.IsA().Destructor(hpull)
-                            hmass.IsA().Destructor(hmass)
-                            g.IsA().Destructor(g)
-                            leg1.IsA().Destructor(leg1)
-                            continue
-                    else:                        
-                        if truth=='val':
-                            tree.Draw(y+'_'+qt+'_'+A+'[4]>>hpull')
-                        elif truth=='fit':
-                            (valid_orders, order) = get_orders(res_coeff, A, y)
-                            p = res_coeff[A+'_'+y+'_fit']
-                            vals = polynomial(x=x, coeff=p, order=order)
-                            tree.Draw('(('+y+'_'+qt+'_'+A+'[0]-'+'{:03.5f}'.format(vals[iqt])+')/'+y+'_'+qt+'_'+A+'[2])'+'>>hpull')
-
-                    if hpull.Integral( hpull.FindBin(-2.5), hpull.FindBin(+2.5) ) <= 0.:
-                        bin += 1
-                        hpull.IsA().Destructor(hpull)
-                        g.IsA().Destructor(g)            
-                        leg1.IsA().Destructor(leg1)
-                        continue
-
-                    if not asimov:
-                        fit = hpull.Fit('g', 'SRQ')
-                        (mu, mu_err)       = (fit.Parameter(1), fit.ParError(1))
-                        (sigma, sigma_err) = (abs(fit.Parameter(2)), fit.ParError(2))
-                        if save_pulls:
-                            c.cd()
-                            leg1.AddEntry(hpull, 'Mean='+'{:3.2f}'.format(hpull.GetMean())+', RMS='+'{:3.2f}'.format(hpull.GetRMS()), 'P')
-                            leg1.AddEntry(g, '#mu='+'{:3.2f}'.format(mu)+', #sigma='+'{:3.2f}'.format(sigma), 'L')
-                            hpull.Draw('HIST')
-                            g.Draw('SAME')
-                            leg1.Draw()
-                            c.SaveAs('plots/profile_toys_'+fname[0]+'_'+(y+'_'+qt+'_' if A!='mass' else '')+A+'_'+'pulls'+'.png')
-                    else:
-                        (mu, mu_err)       = ( hpull.GetMean(), 0.0 )
-                        (sigma, sigma_err) = (0., 0.)
-                    
-                    if var=='rms':
-                        res.SetBinContent(bin, sigma)
-                        res.SetBinError(bin, sigma_err)
-                    elif var=='bias':
-                        res.SetBinContent(bin, mu)
-                        res.SetBinError(bin, mu_err)
-                    elif var=='biasANDrms':
-                        res.SetBinContent(bin, mu)
-                        res.SetBinError(bin, sigma)                        
-
-                    bin += 1
-                    hpull.IsA().Destructor(hpull)
-                    g.IsA().Destructor(g)
-                    leg1.IsA().Destructor(leg1)
-
-        c.cd()
-        res.SetMaximum(+3.0)
-        res.SetMinimum(-3.0)
-        res.Draw("HISTE")
-        res.GetXaxis().LabelsOption('v')
-        line0.Draw("SAME")
-        line1.Draw("SAME")
-        line2.Draw("SAME")
-
-        #raw_input()
-        c.SaveAs('plots/profile_toys_'+fname[0]+'_'+var+postfix+'.png')
-
+            c.cd()
+            hminuit.Draw('HIST')
+            if 'chi2min' in hminuit.GetName():
+                line = ROOT.TLine(ndof, 0, ndof, hminuit.GetMaximum())
+                line.SetLineStyle(ROOT.kDashed)
+                line.SetLineColor(ROOT.kRed)
+                line.SetLineWidth(3)
+                line.Draw('SAME')
+            c.SaveAs('plots/profile_toys_'+fname[0]+'_'+(hminuit.GetName().split('_')[-1])+'.png')                
+        for hminuit in hminuits:
+            hminuit.IsA().Destructor( hminuit )
         print 'Done. Close the file and remove canvas'
         f.Close()
         c.IsA().Destructor( c )
+        return
+
+    ys  = []
+    last_y = False
+    for iy in range(len(bins_template_y)-1):
+        if last_y:
+            continue
+        ys.append( 'y{:03.2f}'.format(bins_template_y[iy])+'_'+'y{:03.2f}'.format(bins_template_y[iy+1])  )
+        if 'y{:03.2f}'.format(bins_template_y[iy+1]).replace('.', 'p') in fname[0]:
+            last_y = True
+
+    qts = []
+    last_qt = False
+    for iqt in range(len(bins_template_qt)-1):
+        if last_qt:
+            continue
+        qts.append( 'qt{:03.1f}'.format(bins_template_qt[iqt])+'_'+'qt{:03.1f}'.format(bins_template_qt[iqt+1])  )
+        if 'qt{:03.0f}'.format(bins_template_qt[iqt+1]) in fname[0]:
+            last_qt = True
+
+    tot = len(ys)*(len(alphas)-1)*len(qts)+1 if 'mass' in alphas else len(ys)*len(alphas)*len(qts)
+    print ys
+    print qts
+    print tot
+    
+    title = fname[1]+';;'+var
+    res   = ROOT.TH1F('res', title, tot, 0, tot)        
+    res.SetLineWidth(2)
+    res.SetLineColor(ROOT.kBlue)
+    res.SetStats(ROOT.kFALSE)
+    
+    line0 = ROOT.TF1("line0", "+0.0", 0, tot) 
+    line0.SetLineColor(ROOT.kBlack) 
+    line0.SetLineWidth(3)
+    line0.SetLineStyle(ROOT.kDashed)
+    line1 = ROOT.TF1("line1", "+1.0", 0, tot) 
+    line1.SetLineColor(ROOT.kRed) 
+    line1.SetLineWidth(3) 
+    line1.SetLineStyle(ROOT.kDashed)
+    line2 = ROOT.TF1("line2", "-1.0", 0, tot) 
+    line2.SetLineColor(ROOT.kRed) 
+    line2.SetLineWidth(3)
+    line2.SetLineStyle(ROOT.kDashed);
+
+    bin = 1
+    for iy,y in enumerate(ys):
+        for A in alphas:        
+            for iqt,qt in enumerate(qts):
+                
+                leg1 = ROOT.TLegend(0.15,0.75,0.35,0.88, "","brNDC")
+                leg1.SetFillStyle(0)
+                leg1.SetBorderSize(0)
+                leg1.SetTextSize(0.04)
+                leg1.SetFillColor(10)
+
+                if A=='mass' and y==ys[0] and qt==qts[0]:
+                    res.GetXaxis().SetBinLabel(bin, A)
+                elif A!='mass':
+                    res.GetXaxis().SetBinLabel(bin, y+'_'+qt+'_'+A)
+
+                hpull = ROOT.TH1F('hpull','Pull distribution from '+str(ntoys)+' toys;(toy-'+truth+')/err;Entries', 100, -4,4)
+                hpull.SetStats(ROOT.kFALSE)
+                hpull.Sumw2()
+                if A=='mass' and y==ys[0] and qt==qts[0]:
+                    hmass = ROOT.TH1F('hmass','Parameter distribution from '+str(ntoys)+' toys;Parameter;Entries', 300, 80.419-0.150,80.419+0.150)
+                    hmass.SetStats(ROOT.kTRUE)
+                    hmass.Sumw2()
+                g = ROOT.TF1('g', '[0]*TMath::Exp( -0.5*(x-[1])*(x-[1])/[2]/[2] )', -3.0, +3.0)
+                g.SetLineColor(ROOT.kBlue)
+                g.SetLineWidth(3)
+                g.SetNpx(10000)
+                g.SetParameter(0, 10.)
+                g.SetParameter(1, 0.)
+                g.SetParameter(2, 1.)
+
+                if A=='mass':
+                    if y==ys[0] and qt==qts[0]:
+                        tree.Draw(A+'[4]>>hpull')
+                        tree.Draw(A+'[0]>>hmass')
+                        c.cd()
+                        hmass.Draw('HIST')
+                        c.SaveAs('plots/profile_toys_'+fname[0]+'_'+A+'_'+'toys'+'.png')
+                        hmass.IsA().Destructor(hmass)
+                    else:
+                        hpull.IsA().Destructor(hpull)
+                        g.IsA().Destructor(g)
+                        leg1.IsA().Destructor(leg1)
+                        continue
+                else:                        
+                    if truth=='val':
+                        tree.Draw(y+'_'+qt+'_'+A+'[4]>>hpull')
+                    elif truth=='fit':
+                        (valid_orders, order) = get_orders(res_coeff, A, y)
+                        p = res_coeff[A+'_'+y+'_fit']
+                        vals = polynomial(x=x, coeff=p, order=order)
+                        tree.Draw('(('+y+'_'+qt+'_'+A+'[0]-'+'{:03.5f}'.format(vals[iqt])+')/'+y+'_'+qt+'_'+A+'[2])'+'>>hpull')
+
+                if hpull.Integral( hpull.FindBin(-2.5), hpull.FindBin(+2.5) ) <= 0.:
+                    bin += 1
+                    hpull.IsA().Destructor(hpull)
+                    g.IsA().Destructor(g)            
+                    leg1.IsA().Destructor(leg1)
+                    continue
+
+                if not asimov:
+                    fit = hpull.Fit('g', 'SRQ')
+                    (mu, mu_err)       = (fit.Parameter(1), fit.ParError(1))
+                    (sigma, sigma_err) = (abs(fit.Parameter(2)), fit.ParError(2))
+                    if save_pulls:
+                        c.cd()
+                        leg1.AddEntry(hpull, 'Mean='+'{:3.2f}'.format(hpull.GetMean())+', RMS='+'{:3.2f}'.format(hpull.GetRMS()), 'P')
+                        leg1.AddEntry(g, '#mu='+'{:3.2f}'.format(mu)+', #sigma='+'{:3.2f}'.format(sigma), 'L')
+                        hpull.Draw('HIST')
+                        g.Draw('SAME')
+                        leg1.Draw()
+                        c.SaveAs('plots/profile_toys_'+fname[0]+'_'+(y+'_'+qt+'_' if A!='mass' else '')+A+'_'+'pulls'+'.png')
+                else:
+                    (mu, mu_err)       = (hpull.GetMean(), 0.0 )
+                    (sigma, sigma_err) = (0., 0.)
+                    
+                if var=='rms':
+                    res.SetBinContent(bin, sigma)
+                    res.SetBinError(bin, sigma_err)
+                elif var=='bias':
+                    res.SetBinContent(bin, mu)
+                    res.SetBinError(bin, mu_err)
+                elif var=='biasANDrms':
+                    res.SetBinContent(bin, mu)
+                    res.SetBinError(bin, sigma)                        
+
+                bin += 1
+                hpull.IsA().Destructor(hpull)
+                g.IsA().Destructor(g)
+                leg1.IsA().Destructor(leg1)
+
+    c.cd()
+    res.SetMaximum(+3.0)
+    res.SetMinimum(-3.0)
+    res.Draw("HISTE")
+    res.GetXaxis().LabelsOption('v')
+    line0.Draw("SAME")
+    line1.Draw("SAME")
+    line2.Draw("SAME")
+
+    #raw_input()
+    c.SaveAs('plots/profile_toys_'+fname[0]+'_'+var+postfix+'.png')
+
+    print 'Done. Close the file and remove canvas'
+    f.Close()
+    c.IsA().Destructor( c )
     
 
