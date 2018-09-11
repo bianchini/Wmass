@@ -817,13 +817,14 @@ class TemplateFitter:
 
             template_scaled_file  = np.load(self.in_dir+'template_'+self.charge+'_'+'mc_weights'+'.npz')
             template_scaled_full = template_scaled_file['arr_0']
-            (imass, all_qt, burnt_qt, all_y, burnt_y)   = ( np.where( template_scaled_file['arr_1']==self.mc_mass)[0][0],
-                                                            template_scaled_file['arr_2'].size-1 ,                                                             
-                                                            template_scaled_file['arr_2'].size - np.where( template_scaled_file['arr_2']==self.bins_qt[-1])[0][0] - 1 ,
-                                                            template_scaled_file['arr_3'].size-1 , 
-                                                            template_scaled_file['arr_3'].size - np.where( template_scaled_file['arr_3']==self.bins_y[-1])[0][0] - 1 
-                                                            )
-            print '(imass, all_qt, burnt_qt, all_y, burnt_y) =', (imass, all_qt, burnt_qt, all_y, burnt_y) 
+            imass = np.where( template_scaled_file['arr_1']==self.mc_mass)[0][0]
+            if acc!='full':
+                (all_qt, burnt_qt, all_y, burnt_y)   = (template_scaled_file['arr_2'].size-1 ,                                                             
+                                                        template_scaled_file['arr_2'].size-np.where( template_scaled_file['arr_2']==self.bins_qt[-1])[0][0]-1,
+                                                        template_scaled_file['arr_3'].size-1 , 
+                                                        template_scaled_file['arr_3'].size-np.where( template_scaled_file['arr_3']==self.bins_y[-1])[0][0]-1 
+                                                        )
+                print '(imass, all_qt, burnt_qt, all_y, burnt_y) =', (imass, all_qt, burnt_qt, all_y, burnt_y) 
 
             template_scaled = np.zeros(template_scaled_full.shape[3:]) 
             if acc=='full':
