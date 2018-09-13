@@ -861,9 +861,9 @@ def weighted_templates(charge='Wplus', weights=[]):
         plt.close('all')
 
 
-def profile_toys( fname=['', '', ''], alphas=['norm'], var='rms', postfix='', save_pulls=False, truth='val'):
+def profile_toys( fname=['', '', ''], alphas=['norm'], var='rms', postfix='', save_pulls=False, truth='val', do_fit='True'):
 
-    bins_template_y = [ 0., 0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2.]
+    bins_template_y = [ 0., 0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2., 2.5]
     bins_template_qt= [ 0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 24.0, 32.0 ]
 
     #bins_template_y = [ 0., 0.2]
@@ -878,10 +878,10 @@ def profile_toys( fname=['', '', ''], alphas=['norm'], var='rms', postfix='', sa
     ROOT.gPad.SetBottomMargin(0.35)
 
     f = ROOT.TFile('plots/result_'+fname[0]+'.root', 'READ')
-    tree = f.Get('tree')
+    tree = f.Get('tree').CopyTree('weight<9 && weight!=5 && weight!=7')
     ntoys = tree.GetEntries()
 
-    asimov = ('asimov' in fname[0])
+    asimov = ('asimov' in fname[0] and 'weightsall' not in fname[0])
         
     # Minimizer status
     if 'minuit' in alphas:
@@ -1022,15 +1022,22 @@ def profile_toys( fname=['', '', ''], alphas=['norm'], var='rms', postfix='', sa
                     continue
 
                 if not asimov:
-                    fit = hpull.Fit('g', 'SRQ')
-                    (mu, mu_err)       = (fit.Parameter(1), fit.ParError(1))
-                    (sigma, sigma_err) = (abs(fit.Parameter(2)), fit.ParError(2))
+                    if do_fit:
+                        fit = hpull.Fit('g', 'SRQ')
+                        (mu, mu_err)       = (fit.Parameter(1), fit.ParError(1))
+                        (sigma, sigma_err) = (abs(fit.Parameter(2)), fit.ParError(2))
+                    else:
+                        (mu, mu_err)       = (hpull.GetMean(), hpull.GetMeanError())
+                        (sigma, sigma_err) = (hpull.GetRMS(), hpull.GetRMSError())
+                        
                     if save_pulls:
                         c.cd()
                         leg1.AddEntry(hpull, 'Mean='+'{:3.2f}'.format(hpull.GetMean())+', RMS='+'{:3.2f}'.format(hpull.GetRMS()), 'P')
-                        leg1.AddEntry(g, '#mu='+'{:3.2f}'.format(mu)+', #sigma='+'{:3.2f}'.format(sigma), 'L')
+                        if do_fit:
+                            leg1.AddEntry(g, '#mu='+'{:3.2f}'.format(mu)+', #sigma='+'{:3.2f}'.format(sigma), 'L')
                         hpull.Draw('HIST')
-                        g.Draw('SAME')
+                        if do_fit:
+                            g.Draw('SAME')
                         leg1.Draw()
                         c.SaveAs('plots/profile_toys_'+fname[0]+'_'+(y+'_'+qt+'_' if A!='mass' else '')+A+'_'+'pulls'+'.png')
                 else:
@@ -1067,5 +1074,112 @@ def profile_toys( fname=['', '', ''], alphas=['norm'], var='rms', postfix='', sa
     print 'Done. Close the file and remove canvas'
     f.Close()
     c.IsA().Destructor( c )
-    
 
+
+
+def profile_systs( fname=[''], mass_true=80.419 ):
+
+    range_mass = 0.150
+    nbins = int(2*range_mass/0.005)
+    
+    c = ROOT.TCanvas('canvas', '', 1350, 800)      
+    ROOT.gPad.SetBottomMargin(0.15)
+
+    leg1 = ROOT.TLegend(0.12,0.55,0.30,0.88, "","brNDC")
+    leg1.SetFillStyle(0)
+    leg1.SetBorderSize(0)
+    leg1.SetTextSize(0.04)
+    leg1.SetFillColor(10)
+
+    f = ROOT.TFile('plots/result_'+fname[0]+'.root', 'READ')
+    tree = f.Get('tree')
+    ntoys = tree.GetEntries()
+
+    hmasses = {
+        'pdf' : ROOT.TH1F('hmass_pdf',fname[1]+';M_{W} (GeV);Entries/5 MeV', nbins, mass_true-range_mass, mass_true+range_mass),
+        'scale' : ROOT.TH1F('hmass_scale','Mass;M_{W} (GeV);Entries', nbins*5, mass_true-range_mass, mass_true+range_mass),
+        'nominal' : ROOT.TH1F('hmass_nominal','Mass;M_{W} (GeV);Entries', nbins, mass_true-range_mass, mass_true+range_mass),
+        'width' : ROOT.TH1F('hwidth_nominal','Mass;M_{W} (GeV);Entries', 100, 0.0, 0.100),
+        }
+    hmasses['pdf'].SetLineColor(ROOT.kBlue)
+    hmasses['pdf'].SetFillColor(ROOT.kBlue)
+    hmasses['pdf'].SetFillStyle(3003)
+    hmasses['pdf'].SetLineWidth(3)
+    hmasses['pdf'].SetStats(ROOT.kFALSE)
+    hmasses['scale'].SetLineColor(ROOT.kOrange)
+    hmasses['scale'].SetLineStyle(ROOT.kDotted)
+    hmasses['scale'].SetLineWidth(2)
+
+    tree.Draw('mass[0]>>hmass_scale', 'weight==0')
+    scale_nominal = hmasses['scale'].GetMean()
+    tree.Draw('mass[0]>>hmass_scale', 'weight==4')
+    scale_up = hmasses['scale'].GetMean()
+    tree.Draw('mass[0]>>hmass_scale', 'weight==8')
+    scale_down = hmasses['scale'].GetMean()
+    tree.Draw('mass[0]>>hmass_scale', '(weight>0 && weight!=5 && weight!=7 && weight<9)')
+    scale_max = -1
+    for ibin in range(hmasses['scale'].GetNbinsX()):
+        if hmasses['scale'].GetBinContent(ibin+1)>0:
+            delta = abs(hmasses['scale'].GetBinCenter(ibin+1)-scale_nominal)
+            if delta>=scale_max:
+                scale_max = delta
+
+    tree.Draw('mass[0]>>hmass_pdf', '(weight>=9)')
+    tree.Draw('mass[0]>>hmass_nominal', '(weight==0)')
+    tree.Draw('mass[2]>>hwidth_nominal', '(weight==0)')
+    
+    g = ROOT.TF1('g', '[0]*TMath::Exp( -0.5*(x-[1])*(x-[1])/[2]/[2] )', mass_true-range_mass, mass_true+range_mass)
+    g.SetLineColor(ROOT.kBlack)
+    g.SetLineWidth(3)
+    g.SetNpx(10000)
+    g.SetParameter(0, hmasses['pdf'].GetMaximum())
+    g.SetParameter(1, hmasses['nominal'].GetMean())
+    g.SetParameter(2, hmasses['width'].GetMean())
+
+    hmasses['pdf'].Draw('HIST')
+    hmasses['scale'].Scale(hmasses['pdf'].GetMaximum()/hmasses['scale'].GetMaximum())
+    hmasses['scale'].Draw('HISTSAME')
+    hmasses['pdf'].Draw('HISTSAME')
+    g.Draw('SAME')
+
+    line_scale_up = ROOT.TLine(scale_up, 0, scale_up, hmasses['pdf'].GetMaximum())
+    line_scale_up.SetLineStyle(ROOT.kSolid)
+    line_scale_up.SetLineColor(ROOT.kGreen)
+    line_scale_up.SetLineWidth(3)
+    line_scale_up.Draw('SAME')
+    line_scale_down = ROOT.TLine(scale_down, 0, scale_down, hmasses['pdf'].GetMaximum())
+    line_scale_down.SetLineStyle(ROOT.kSolid)
+    line_scale_down.SetLineColor(ROOT.kGreen)
+    line_scale_down.SetLineWidth(3)
+    line_scale_down.Draw('SAME')
+
+    line_scale_max_up = ROOT.TLine(scale_nominal+scale_max, 0, scale_nominal+scale_max, hmasses['pdf'].GetMaximum())
+    line_scale_max_up.SetLineStyle(ROOT.kSolid)
+    line_scale_max_up.SetLineColor(ROOT.kOrange)
+    line_scale_max_up.SetLineWidth(3)
+    line_scale_max_up.Draw('SAME')
+    line_scale_max_down = ROOT.TLine(scale_nominal-scale_max, 0, scale_nominal-scale_max, hmasses['pdf'].GetMaximum())
+    line_scale_max_down.SetLineStyle(ROOT.kSolid)
+    line_scale_max_down.SetLineColor(ROOT.kOrange)
+    line_scale_max_down.SetLineWidth(3)
+    line_scale_max_down.Draw('SAME')
+
+    line_true = ROOT.TLine(mass_true, 0, mass_true, hmasses['pdf'].GetMaximum())
+    line_true.SetLineStyle(ROOT.kDashed)
+    line_true.SetLineColor(ROOT.kRed)
+    line_true.SetLineWidth(5)
+    line_true.Draw('SAME')
+
+    leg1.AddEntry(g, 'Stat: #DeltaM_{W} = '+'{:3.1f}'.format(hmasses['width'].GetMean()*1e+03)+' MeV', 'L')
+    leg1.AddEntry(hmasses['pdf'], 'PDF: #DeltaM_{W} = '+'{:3.1f}'.format(hmasses['pdf'].GetRMS()*1e+03)+' MeV', 'L')
+    leg1.AddEntry(line_scale_up, '#mu_{R,F}: #DeltaM_{W} = '+'{:3.1f}'.format(abs(scale_up-scale_down)*0.5*1e+03)+' MeV', 'L')
+    leg1.AddEntry(line_scale_max_up, '7 pts: #DeltaM_{W} = '+'{:3.1f}'.format(scale_max*1e+03)+' MeV', 'L')
+    leg1.AddEntry(line_true, 'True', 'L')
+    leg1.Draw()
+
+    #raw_input()
+    c.SaveAs('plots/profile_systs_'+fname[0]+'.png')
+
+    print 'Done. Close the file and remove canvas'
+    f.Close()
+    c.IsA().Destructor( c )
