@@ -760,6 +760,7 @@ class TemplateFitter:
             #        if par[p]<0.:
             #            print '\t', key, par[p]
             #################################
+            self.mu = -(nsub-aux)+self.n
             return chi2min
 
         # construction of chi2
@@ -787,6 +788,7 @@ class TemplateFitter:
         # save the intermediate values of beta and Vbeta
         self.beta  = beta
         self.Vbeta = aux1_inv
+        self.mu = -res1+self.n
 
         #################################
         # debug in case of negative norms
@@ -851,7 +853,7 @@ class TemplateFitter:
                 tmp_data_norm = self.data.sum()
             self.data += mc_distorted/mc_distorted.sum()*(self.num_events-tmp_data_norm)
             if 'pulls' in save_plots:
-                self.save_template_snapshot(data=(self.data-self.mc)/np.sqrt(self.mc), title='Pull', tag='pulls_'+acc+sub_acc+'_weight'+str(scale_id))            
+                self.save_template_snapshot(data=(self.data-self.mc)/np.sqrt(self.mc), title='Prefit pulls', tag='prefit_pulls_'+acc+sub_acc+'_weight'+str(scale_id))            
                 self.save_template_snapshot(data=scaling, title='Scaling', tag='scaling_'+acc+sub_acc+'_weight'+str(scale_id))            
             print 'Loading asimov dataset scaled by weight '+str(scale_id)+' as DATA with', self.data.sum(), 'entries'
 
@@ -888,8 +890,10 @@ class TemplateFitter:
             print n[n<10].size, ' bins with less than 10 entries!'
         self.Vinv = np.diag(1./n)
         self.nsub = n - self.overflow_template.flatten()
+        self.n = copy.deepcopy(n)
         if 'data-overflow' in save_plots:
             self.save_template_snapshot(data=self.nsub.reshape(self.mc.shape), title='Data-overflow', tag='data_sub'+postfix)
+        self.mu = np.zeros(self.nsub.shape)
 
         return
 
@@ -923,6 +927,11 @@ class TemplateFitter:
                     for icoeff,coeff in enumerate(self.coefficients):
                         idx_beta += 1        
             self.plot_cov_matrix(n_free=self.Vbeta.shape[0], cov=self.Vbeta, name='analytic')
+            self.mu_postfit = copy.deepcopy(self.mu)
+            pulls  = (self.data-self.mu_postfit.reshape(self.data.shape))/np.sqrt(self.data)
+            print 'pulls sum = '+'{:3.3f}'.format(pulls.sum())+', '+'pulls2 sum = '+'{:3.3f}'.format(np.power(pulls,2).sum())
+            self.save_template_snapshot(data=pulls, title='Postfit pulls', tag='postfit_pulls')
+            self.save_template_snapshot(data=np.power(pulls,2), title='Postfit pulls squared', tag='postfit_pulls2')
             return status
 
         # this flag freezes beta's in chi2
@@ -958,6 +967,7 @@ class TemplateFitter:
 
         self.Vbeta_min = copy.deepcopy(self.Vbeta)
         self.beta_min = copy.deepcopy(self.beta)
+        self.mu_postfit = copy.deepcopy(self.mu)
 
         np.save(self.in_dir+'prefit_Vbeta.npy', self.Vbeta_min)
         np.save(self.in_dir+'prefit_beta.npy', self.beta_min)
@@ -1023,7 +1033,7 @@ class TemplateFitter:
             print param_val, ' ===> ',  '{:0.2f}'.format(chi2) 
 
 
-    def update_results(self, print_results=True, save_plots=['coeff', 'polynom', 'norm', 'cov'], propagate_covariance=False):
+    def update_results(self, print_results=True, save_plots=['coeff', 'polynom', 'norm', 'cov', 'postfit'], propagate_covariance=False):
 
         if 'cov' in save_plots:
             self.plot_cov_matrix(n_free=self.gMinuit.GetNumFreePars(), cov=self.TMatrix, name='fit')
@@ -1136,6 +1146,14 @@ class TemplateFitter:
 
         if 'norm' in save_plots:
             self.plot_results_norm_y_qt(var='resolution')        
+
+        if 'postfit' in save_plots:
+            pulls  = (self.data-self.mu_postfit.reshape(self.data.shape))/np.sqrt(self.data)
+            pulls2 = np.power(self.data-self.mu_postfit.reshape(self.data.shape), 2)/self.data 
+            print 'Pulls sum = '+'{:3.3f}'.format(pulls.sum())
+            print 'Pulls2 sum = '+'{:3.3f}'.format(pulls2.sum())
+            self.save_template_snapshot(data=pulls, title='Postfit pulls', tag='postfit_pulls')
+            self.save_template_snapshot(data=pulls2, title='Postfit pulls squared', tag='postfit_pulls2')
 
         # fill the tree
         self.out_tree.Fill()
