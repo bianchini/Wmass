@@ -18,15 +18,16 @@ if argv[1]=='profile_toys':
         #['CC_FxFx_Wplus_asimov-scaled-full_parametric_y2p50_qt32_noprior_weightsall',  'W^{+}, |y| #leq 2.0, q_{T}<32 GeV, 30M events', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
         #['CC_FxFx_Wplus_random_parametric_y2p50_qt32_noprior_A1A3pol3_pt55',  'W^{+}, |y| #leq 2.5, q_{T}<32 GeV, 30M events, A_{1,3} pol_{3}, p_{T}<55', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
         #['CC_FxFx_Wplus_asimov_parametric_y2p50_qt32_noprior_A1A3pol3_pt55',  'W^{+}, |y| #leq 2.5, q_{T}<32 GeV, 30M events, A_{1,3} pol_{3}, p_{T}<55', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated'],
-        ['CC_FxFx_Wplus_asimov-scaled-full_parametric_y2p50_qt32_A1A3pol3_noprior_weightsall', '', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated']
+        #['CC_FxFx_Wplus_asimov-scaled-full_parametric_y2p50_qt32_A1A3pol3_noprior_weightsall', '', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32_decorrelated']
+        ['CC_FxFx_Wplus_random_parametric_y2p00_qt32v2_noprior_pt55', '', 'CC_FxFx_Wplus_WpreFSR_all_A0-4_forced_v4_finer_y_qt32v2_decorrelated']
         ]
     for fname in files:
         for v in ['biasANDrms']:
-            profile_toys( fname=fname, alphas=['mass'],   var=v, postfix='_mass', save_pulls=True,  truth='val', do_fit=False)
-            profile_toys( fname=fname, alphas=['minuit'], var=v, postfix='',      save_pulls=False, truth='', do_fit=False)
-            profile_toys( fname=fname, alphas=['norm'],   var=v, postfix='_norm', save_pulls=True,  truth='val', do_fit=False)
+            profile_toys( fname=fname, alphas=['mass'],   var=v, postfix='_mass', save_pulls=True,  truth='val', do_fit=True)
+            profile_toys( fname=fname, alphas=['minuit'], var=v, postfix='',      save_pulls=False, truth='', do_fit=True)
+            profile_toys( fname=fname, alphas=['norm'],   var=v, postfix='_norm', save_pulls=True,  truth='val', do_fit=True)
             for coeff in ['A0', 'A1', 'A2', 'A3', 'A4']:
-                profile_toys( fname=fname, alphas=[coeff], var=v, postfix='_'+coeff, save_pulls=True,  truth='fit', do_fit=False)
+                profile_toys( fname=fname, alphas=[coeff], var=v, postfix='_'+coeff, save_pulls=True,  truth='fit', do_fit=True)
 
 elif argv[1]=='derivatives':
     bins_template_y = [ 0.,  0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2.]

@@ -20,7 +20,7 @@ from DataFormats.FWLite import Handle, Events
 
 class TreeProducer:
 
-    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test', save_tree=True, save_histo1=False, save_histo2=False, save_histo3=False, save_histo4=False, masses=[80.419],  plot_vars_histo3=['eta','pt']):
+    def __init__(self, DY='CC', verbose=False, debug=True, filenames=[], postfix='test', save_tree=True, save_histo1=False, save_histo2=False, save_histo3=False, save_histo4=False, save_histo5=False, masses=[80.419],  plot_vars_histo3=['eta','pt']):
     
         print "****** TreeProducer *****"
         print 'Running for '+DY+' Drell-Yan'
@@ -80,9 +80,14 @@ class TreeProducer:
 
         # pt-eta with weights, inclusive in qT/y
         self.save_histo4 = save_histo4
-        self.plot_vars_histo3 = plot_vars_histo3
         if save_histo4:
             self.histos = add_histo2D_lepton_mc_weights( charges=['Wminus','Wplus'], masses=masses, weights=self.weights_for_histos, plot_vars=plot_vars_histo3 ) 
+
+        # pt-eta with shifted pt scale, inclusive in qT/y
+        self.save_histo5 = save_histo5
+        self.pt_scales = [-2.0, -1.0, 0.0, 1.0, 2.0]
+        if save_histo5:
+            self.histos = add_histo2D_lepton_pt_scale( charges=['Wminus','Wplus'], masses=masses,  pt_scales=self.pt_scales, plot_vars=plot_vars_histo3 ) 
 
         # add branches to tree (needed even if self.save_tree=False)
         self.variables = add_vars(self.outtree)
@@ -425,6 +430,25 @@ class TreeProducer:
                             weight_id=w
                             )
 
+                if self.save_histo5:
+                    if t not in ['WpreFSR']:
+                        continue
+                    q1 = 'Wplus' if self.variables['mu_charge'][0]==-13 else 'Wminus'                    
+                    ps_lep = (self.variables['Wbare_mu_eta'][0], self.variables['Wbare_mu_pt'][0])
+                    if self.plot_vars_histo3[1]=='1/pt':
+                        ps_lep = (self.variables['Wbare_mu_eta'][0], 1./self.variables['Wbare_mu_pt'][0] if self.variables['Wbare_mu_pt'][0]>0. else +99999.)
+                    for s in self.pt_scales:
+                        fill_lepton_lab_pt_scale(
+                            histos=self.histos, 
+                            q=q1,
+                            masses=self.masses,
+                            ps_W=(Wp4[t].Rapidity(), Wp4[t].Pt(), Wp4[t].M()), 
+                            ps_CS=(ps[1],ps[2]),
+                            ps_lep=ps_lep,
+                            weight=self.variables['weights'][0],
+                            pt_scale=s
+                            )
+
 
             # fill the tree
             if self.save_tree:
@@ -491,6 +515,22 @@ class TreeProducer:
                             print '\t\t\tWeight: '+kw+'.....', w.GetEntries(), 'entries'                                    
                             self.outfile.cd(kq+'/'+km+'/'+kb)
                             w.Write('', ROOT.TObject.kOverwrite)
+                self.outfile.cd()
+
+        if self.save_histo5:
+            for kq,q in self.histos.items():
+                print 'Charge: '+kq
+                self.outfile.mkdir(kq)
+                for km,m in q.items():
+                    print '\tMass: '+km
+                    self.outfile.mkdir(kq+'/'+km)
+                    for kb,b in m.items():
+                        print '\t\tBin: '+kb
+                        self.outfile.mkdir(kq+'/'+km+'/'+kb)
+                        for ks,s in b.items():
+                            print '\t\t\tScale: '+ks+'.....', s.GetEntries(), 'entries'                                    
+                            self.outfile.cd(kq+'/'+km+'/'+kb)
+                            s.Write('', ROOT.TObject.kOverwrite)
                 self.outfile.cd()
 
 

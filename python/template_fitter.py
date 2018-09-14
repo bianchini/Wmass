@@ -445,39 +445,22 @@ class TemplateFitter:
         if self.setup_norm_ranges=='hardcoded':
             rel_err = max(self.mid_point_qt(bin[1])*0.01, 0.1)* \
                 (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
-            n_sigmas = 4
+            rel_err /= math.sqrt(self.num_events/1.5e+06 if self.num_events>0 else 1.0)
+            n_sigmas = 5
             out = (rel_err, (1-rel_err*n_sigmas), (1+rel_err*n_sigmas))
                 
         elif self.setup_norm_ranges=='hardcoded_finer_y':
             rel_err = max(self.mid_point_qt(bin[1])*0.02, 0.2)* \
                 (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )            
-            n_sigmas = 10
-            out = (rel_err, (1-rel_err*n_sigmas), (1+rel_err*n_sigmas))            
-
-        elif self.setup_norm_ranges=='hardcoded_finer_y_qt32':
-            rel_err = max(self.mid_point_qt(bin[1])*0.03, 0.2)* \
-                (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
             rel_err /= math.sqrt(self.num_events/1.5e+06 if self.num_events>0 else 1.0)
             n_sigmas = 5
             out = (rel_err, (1-rel_err*n_sigmas), (1+rel_err*n_sigmas))            
 
-        elif self.setup_norm_ranges=='hardcoded_finer_y_qt20':
+        elif 'finer_y_qt32' in self.setup_norm_ranges:
             rel_err = max(self.mid_point_qt(bin[1])*0.03, 0.2)* \
                 (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
             rel_err /= math.sqrt(self.num_events/1.5e+06 if self.num_events>0 else 1.0)
             n_sigmas = 5
-            out = (rel_err, (1-rel_err*n_sigmas), (1+rel_err*n_sigmas))
-
-        elif self.setup_norm_ranges=='hardcoded_finer_qt':
-            rel_err = max(self.mid_point_qt(bin[1])*0.02, 0.2)* \
-                (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
-            n_sigmas = 4
-            out = (rel_err, (1-rel_err*n_sigmas), (1+rel_err*n_sigmas))            
-
-        elif self.setup_norm_ranges=='hardcoded_finer_y_qt':
-            rel_err = max(self.mid_point_qt(bin[1])*0.03, 0.3)* \
-                (1.0 + math.pow(self.mid_point_y(bin[0])/2.5, 2.0) )
-            n_sigmas = 4
             out = (rel_err, (1-rel_err*n_sigmas), (1+rel_err*n_sigmas))            
 
         if self.verbose:
@@ -627,6 +610,13 @@ class TemplateFitter:
 
     def mid_point_y(self, iy=-1):
          return 0.5*(self.bins_y[iy]+self.bins_y[iy+1])
+
+    def width_qt(self, iqt=-1):
+         return -(self.bins_qt[iqt]-self.bins_qt[iqt+1])
+
+    def width_y(self, iy=-1):
+         return -(self.bins_y[iy]-self.bins_y[iy+1])
+
 
     def build_aux_matrices(self):
 
@@ -812,13 +802,22 @@ class TemplateFitter:
             self.data += copy.deepcopy( self.mc )
             print 'Loading asimov dataset as DATA with', self.data.sum(), 'entries'
  
-        elif 'asimov-scaled' in dataset:
+        elif ('asimov-scaled' in dataset or 'asimov-shifted' in dataset):
             self.fit_results['weight'][0] = scale_id 
             acc = dataset.split('-')[2]            
             sub_acc = '_'+dataset.split('-')[3] if acc=='out' and len(dataset.split('-'))>3 and dataset.split('-')[3] in ['y','qt'] else ''
 
-            template_scaled_file  = np.load(self.in_dir+'template_'+self.charge+'_'+'mc_weights'+'.npz')
+            if 'scaled' in dataset:
+                input_tag = 'mc_weights'
+            elif 'shifted' in dataset:
+                input_tag = 'pt_scales'
+
+            template_scaled_file  = np.load(self.in_dir+'template_'+self.charge+'_'+input_tag+'.npz')
             template_scaled_full = template_scaled_file['arr_0']
+            iweight = np.where(template_scaled_file['arr_4']==scale_id)[0][0]
+            iweight_nominal = np.where(template_scaled_file['arr_4']==0)[0][0]
+            print 'Nominal template at place', iweight_nominal
+            
             imass = np.where( template_scaled_file['arr_1']==self.mc_mass)[0][0]
             if acc!='full':
                 (all_qt, burnt_qt, all_y, burnt_y)   = (template_scaled_file['arr_2'].size-1 ,                                                             
@@ -839,8 +838,8 @@ class TemplateFitter:
                 if sub_acc in ['', '_y']:
                     template_scaled += template_scaled_full[imass,:,-burnt_y:,:,:,:].sum(axis=(0,1))
 
-            mc_nominal = template_scaled[0,       :,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[0,       :,:]
-            mc_scaled  = template_scaled[scale_id,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[scale_id,:,:]
+            mc_nominal = template_scaled[iweight_nominal,       :,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[iweight_nominal,       :,:]
+            mc_scaled  = template_scaled[iweight,:,0:self.reduce_pt] if self.reduce_pt<0 else template_scaled[iweight,:,:]
             mc_nominal += 1e+01
             mc_scaled  += 1e+01
             scaling = mc_scaled/mc_nominal
@@ -1146,6 +1145,11 @@ class TemplateFitter:
 
         if 'norm' in save_plots:
             self.plot_results_norm_y_qt(var='resolution')        
+
+        if 'qt-spectra' in save_plots:
+            self.plot_spectra(A='qt',B='y')
+        if 'y-spectra' in save_plots:
+            self.plot_spectra(A='y', B='qt')
 
         if 'postfit' in save_plots:
             pulls  = (self.data-self.mu_postfit.reshape(self.data.shape))/np.sqrt(self.data)
@@ -1579,6 +1583,47 @@ class TemplateFitter:
                 plt.close('all')            
 
                 idx_beta += (len(valid_orders_y)*len(valid_orders_qt))
+
+    def plot_spectra(self, A='qt', B='y'):
+
+        # plot A | B         
+        for iB in range( getattr(self, 'bins_'+B+'_size')):
+            B_bin = getattr(self,'get_'+B+'_bin')(iB)
+            plt.figure()
+            fig, ax = plt.subplots()
+            vals = np.zeros( (getattr(self, 'bins_'+A+'_size')) )
+            errs = np.zeros( (getattr(self, 'bins_'+A+'_size')) )
+            trues = np.zeros( (getattr(self, 'bins_'+A+'_size')) )
+            for iA in range(getattr(self, 'bins_'+A+'_size')):                    
+                A_bin = getattr(self,'get_'+A+'_bin')(iA)
+                bin_name = B_bin+'_'+A_bin+'_norm' if A=='qt' else  A_bin+'_'+B_bin+'_norm'
+                vals[iA] = self.fit_results[bin_name][0]/getattr(self, 'width_'+A)(iA)
+                errs[iA] = self.fit_results[bin_name][2]/getattr(self, 'width_'+A)(iA)
+                trues[iA] = self.fit_results[bin_name][3]/getattr(self, 'width_'+A)(iA)
+            ax.errorbar([ getattr(self, 'mid_point_'+A)(iA) for iA in range(getattr(self, 'bins_'+A+'_size'))], 
+                        trues, 
+                        xerr=[getattr(self, 'width_'+A)(iA)*0.5  for iA in range(getattr(self, 'bins_'+A+'_size'))], 
+                        yerr=[0.]*getattr(self, 'bins_'+A+'_size'),
+                        fmt='none', ecolor='r', elinewidth=3.0, label='True')            
+            ax.errorbar([ getattr(self, 'mid_point_'+A)(iA) for iA in range(getattr(self, 'bins_'+A+'_size'))], 
+                        vals, 
+                        xerr=[getattr(self, 'width_'+A)(iA)*0.5  for iA in range(getattr(self, 'bins_'+A+'_size'))], 
+                        yerr=errs,
+                        fmt='o', color='black', label='Fit $\pm1\sigma$')            
+            plt.axis( [0.0, getattr(self, 'bins_'+A)[-1], 0.0, vals.max()*1.1] )
+            plt.grid(True)
+            legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
+            if A=='qt':
+                plt.title('Dataset: '+self.dataset_type+', $|y| \in ['+B_bin.split('_')[0][1:]+','+B_bin.split('_')[1][1:]+']$', fontsize=20)
+                plt.xlabel('$q_{T}$ (GeV)', fontsize=20)
+                plt.ylabel('$dN/dq_{T}$', fontsize=20)
+            elif A=='y':
+                print B_bin
+                plt.title('Dataset: '+self.dataset_type+', $q_{T} \in ['+B_bin.split('_')[0][2:]+','+B_bin.split('_')[1][2:]+']$', fontsize=20)
+                plt.xlabel('$|y|$', fontsize=20)
+                plt.ylabel('$dN/d|y|$', fontsize=20)                
+            plt.show()
+            plt.savefig(self.out_dir+'/spectrum_'+A+'_'+B_bin+'_'+self.job_name+'.png')
 
                 
     def plot_cov_matrix(self, n_free=0, cov=None, name=''):

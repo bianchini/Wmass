@@ -16,6 +16,7 @@ from plot_utils import *
 # (qt,y) binning 
 np_bins_template_qt_coarser       = np.array([   0.,  4., 8.,  12.,  16.,  20.,  24.,  32.,   40.,   60. ])
 np_bins_template_qt_coarser_qt32  = np.array([   0.,  4., 8.,  12.,  16.,  20.,  24.,  32. ])
+np_bins_template_qt_coarser_qt32v2  = np.array([   0.,  2., 4., 6., 8.,  12.,  16.,  20.,  24.,  32. ])
 np_bins_template_qt_coarser_qt20  = np.array([   0.,  4., 8.,  12.,  16.,  20. ])
 np_bins_template_qt_finer         = np.array([   0.,  2.,   4.,  6.,   8.,  10.,   12.,  14.,  16., 20.,   24.,  32.,   40.,   60. ])
 np_bins_template_y_coarser        = np.array([-3.5, -3. , -2.5, -2., -1.6, -1.2, -0.8, -0.4,  0. , 0.4, 0.8, 1.2,  1.6,  2. ,  2.5,  3. ,  3.5])
@@ -118,13 +119,13 @@ elif argv[1]=='cov-all':
             for var in ['WpreFSR']:
                 get_covariance(fname='../root/tree_histos1_'+DY+'.root', DY=DY, var=var, q=q, weights=weights, 
                                coefficients=['A0','A1','A2','A3','A4'], 
-                               fix_to_zero=fix_to_zero_p0,
-                               forced_orders=forced_orders_A1A3A4pol3,
+                               fix_to_zero=fix_to_zero_default,
+                               forced_orders=forced_orders_pol2,
                                fit_range=[0.0, 28.0],
                                add_stat_uncert=True, 
-                               postfix='all_A0-4_forced_v4_finer_y_qt32_p0A1A3A4pol3_decorrelated',
+                               postfix='all_A0-4_forced_v4_finer_y_qt32v2_decorrelated',
                                save_corr=True, save_coeff=True, save_tree=True, save_pkl=True,
-                               np_bins_template_qt=np_bins_template_qt_coarser_qt32,
+                               np_bins_template_qt=np_bins_template_qt_coarser_qt32v2,
                                np_bins_template_y=np_bins_template_y_finer,
                                plot_updown=False,
                                decorrelate_scale=True
@@ -173,25 +174,26 @@ elif argv[1]=='compare':
 ### Produce a npy array with all the templates ###
 elif argv[1]=='templates':
     merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], 
-                    masses=[80.419], coeff=['A0', 'A1', 'A2', 'A3', 'A4'], 
-                    np_bins_template_qt=np_bins_template_qt_coarser_qt20, 
+                    masses=[80.419-0.500, 80.419, 80.419+0.500], coeff=['A0', 'A1', 'A2', 'A3', 'A4'], 
+                    np_bins_template_qt=np_bins_template_qt_coarser_qt32v2, 
                     np_bins_template_y=np_bins_template_y_finer,
                     rebin=(2,4),
-                    input_tag='CC_FxFx_ptinv',
-                    postfix='_finer_y_qt20_ptinv'
+                    input_tag='CC_FxFx_extra_masses',
+                    postfix='_finer_y_qt32v2'
                     )
 
 ### Produce a npy array with all the templates ###
 elif argv[1]=='templates_mc_weights':
     merge_templates_mc_weights(charges=['Wplus'],
                                masses=[80.419],
-                               weights=range(109),
+                               weights=[-2.0, -1.0, 0.0, +1.0, +2.0 ],
+                               weight_type='pt_scale',
                                np_bins_template_qt=np.array([0.0, 32.0]), 
-                               np_bins_template_y=np.array([-2.0, 0., +2.0]),
+                               np_bins_template_y=np.array([-3.5, -2.5, 0., +2.5, +3.5]),
                                rebin=(2,4),
-                               input_tag='CC_FxFx_morebins',
-                               postfix='mc_weights',
-                               save_plots=True
+                               input_tag='CC_FxFx',
+                               postfix='pt_scales',
+                               save_plots=False
                                )
 
 else:

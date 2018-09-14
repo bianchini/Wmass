@@ -20,11 +20,12 @@ config.Data.unitsPerJob = 1
 config.Data.totalUnits = 500
 #config.Data.totalUnits = 1
 config.Data.publication = False
+#config.Data.outputDatasetTag = 'Systs_scaled_full_acceptance_mass_y2p50_A1A3pol3'
 config.Data.outputDatasetTag = 'TEST'
 config.Data.outLFNDirBase = '/store/user/bianchi/'
 
 config.section_("Site")
-config.Site.storageSite = "T2_IT_Pisa"
+config.Site.storageSite = 'T2_IT_Pisa'
 
 from sys import argv
 import copy 
@@ -32,8 +33,8 @@ import copy
 job_base = {'job_name'         : 'TEST', 
             'ntoys'            : 1,
             'dataset'          : 'random',
-            'input_tag_fit'    : 'all_A0-4_forced_v4_finer_y_qt32_decorrelated', 
-            'input_tag_templ'  : '_finer_y_qt32',
+            'input_tag_fit'    : 'all_A0-4_forced_v4_finer_y_qt32v2_decorrelated', 
+            'input_tag_templ'  : '_finer_y_qt32v2',
             'fixed_parameters' : ['pol', 'A'], 
             'fit_mode'         : 'parametric',
             'reduce_y'         : -1,
@@ -44,11 +45,12 @@ job_base = {'job_name'         : 'TEST',
 bins_template_y = [0., 0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2. ,  2.5,  3. , 3.5]
 
 jobs = []
-for dataset in [#'random',
-                #'asimov',
-                'asimov-scaled-in-acceptance-only',
-                'asimov-scaled-out-acceptance-only',
-                'asimov-scaled-full'
+for dataset in ['random',
+                'asimov',
+                #'asimov-scaled-in',
+                #'asimov-scaled-out-qt',
+                #'asimov-scaled-out-y',
+                #'asimov-scaled-full'
                 ]:
     for fit_mode in ['parametric']:
         for reduce_y in [ -4
@@ -56,7 +58,7 @@ for dataset in [#'random',
      
             for prior_option in [
                 'prior_options_noprior',
-                'prior_options_base'
+                #'prior_options_base'
                 #'prior_options_A0',
                 #'prior_options_A1',
                 #'prior_options_A2',
@@ -67,10 +69,10 @@ for dataset in [#'random',
                 #'prior_options_A0A2',
                 ]:
 
-                for scale_id in [4]:
-
+                for scale_id in range(0,1):
                     job_new = copy.deepcopy(job_base)
-                    job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32'+'_'+prior_option.split('_')[-1]+'_'+'weight'+str(scale_id)
+                    #job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32'+'_'+prior_option.split('_')[-1]+'_'+'weight'+str(scale_id)
+                    job_new['job_name'] = dataset+'_'+fit_mode+'_'+('y{:03.2f}'.format(bins_template_y[reduce_y])).replace('.', 'p')+'_'+'qt32v2'+'_'+prior_option.split('_')[-1]+'_'+'pt55'
                     job_new['fit_mode'] = fit_mode
                     job_new['reduce_y'] = reduce_y
                     job_new['dataset'] = dataset
@@ -157,6 +159,7 @@ if __name__ == '__main__':
                     for coeff in ['A0','A1','A2','A3','A4']:
                         for iy,y in enumerate(bins_template_y[0:job['reduce_y']]): 
                             config.JobType.outputFiles.extend([ 'coefficient_'+coeff+'_'+'y{:03.2f}'.format(bins_template_y[iy])+'_'+'y{:03.2f}'.format(bins_template_y[iy+1])+'_'+job['job_name']+'_fit.png' ])
+            #print config
             crabCommand('submit', config = config)
 
     if argv[1]=='killall':

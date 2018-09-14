@@ -12,7 +12,7 @@ np.random.seed(0)
 ntoys = 1
 
 #nweights = 109
-weights = range(8,9)
+weights = [8]
 
 prior_options = {'prior'  : 'sum', 
                  'select' : [], 
@@ -45,14 +45,14 @@ templateFitter = TemplateFitter(DY='CC_FxFx', charge='Wplus', var='WpreFSR', job
 
 for i in range(ntoys):
     for scale_id in weights:
-        templateFitter.load_data( dataset='asimov-scaled-full', save_plots=[], postfix='_'+str(i), scale_id=scale_id )
+        templateFitter.load_data( dataset='asimov-scaled-full', save_plots=['pulls'], postfix='_'+str(i), scale_id=scale_id )
         status = templateFitter.run(n_points=1000000, strategy=2, tolerance=0.1, run_minos=False, run_post_hesse=False)
         if status>0:
             continue
         templateFitter.update_results(print_results=False, 
                                       #save_plots=['cov', 'norm', 'coeff', 'polynom'], 
                                       #save_plots=['cov','norm'], 
-                                      save_plots=['postfit'],
+                                      save_plots=[],
                                       propagate_covariance=False)
 
 templateFitter.close()

@@ -627,7 +627,7 @@ def merge_templates(charges=['Wplus'], var=['WpreFSR'], coeff_eval=['val'], mass
                     print res[f]
 
 
-def merge_templates_mc_weights(charges=['Wplus'],  masses=[80.419], weights=[],
+def merge_templates_mc_weights(charges=['Wplus'],  masses=[80.419], weights=[], weight_type='lhe',
                                np_bins_template_qt=np.array([]), np_bins_template_y=np.array([]), rebin=(),
                                input_tag='CC_FxFx', postfix='', save_plots=False):
 
@@ -659,7 +659,7 @@ def merge_templates_mc_weights(charges=['Wplus'],  masses=[80.419], weights=[],
     xx, yy = np.meshgrid(np_bins_rebin_pt, np_bins_rebin_eta)        
     np_weights_ext = np.array(weights)
 
-    fin = ROOT.TFile('../root/tree_histos4_'+input_tag+'.root', 'READ')
+    fin = ROOT.TFile('../root/tree_histos'+('4' if weight_type=='lhe' else '5')+'_'+input_tag+'.root', 'READ')
 
     # create TH2D
     for q in charges:
@@ -701,7 +701,11 @@ def merge_templates_mc_weights(charges=['Wplus'],  masses=[80.419], weights=[],
                     mass_str = 'M'+'{:05.3f}'.format(m)
 
                     for iw,w in enumerate(weights):
-                        template_name = q+'_'+mass_str+'_'+qt_template_bin+'_'+y_template_bin+'_'+str(w)
+                        template_name = q+'_'+mass_str+'_'+qt_template_bin+'_'+y_template_bin+'_'
+                        if weight_type=='lhe':
+                            template_name += str(w)
+                        elif weight_type=='pt_scale':
+                            template_name += '{:2.1f}'.format(w)
                         h = None
                         for iqt in iqts:
                             qt_bin = 'qt{:03.1f}'.format(np_bins_qt_ext[iqt-1])+'_'+'qt{:03.1f}'.format(np_bins_qt_ext[iqt]) if iqt<nbins_qt else 'OF'
@@ -731,7 +735,11 @@ def merge_templates_mc_weights(charges=['Wplus'],  masses=[80.419], weights=[],
                         title = r'$'+words[0][0]+'^{'+('+' if 'plus' in words[0] else '-')+'}$, '
                         title += r'$q_{T}\in['+'{:0.0f}'.format(np_bins_template_qt_ext[qt-1])+', '+('{:0.0f}'.format(np_bins_template_qt_ext[qt]) if qt<nbins_template_qt else '\infty')+']$ GeV'+', '
                         title += r'$|y|\in['+'{:0.1f}'.format(np_bins_template_y_ext[y-1])+', '+('{:0.1f}'.format(np_bins_template_y_ext[y]) if y<nbins_template_y else '\infty')+']$'+', '
-                        title += r'weight '+str(w)
+                        if weight_type=='lhe':
+                            title += r'weight '+str(w)
+                        elif weight_type=='pt_scale':
+                            title += r'$p_{T}$ scale $\times(1'+'{:2.1f}'.format(w)+'\;10^{-4})$'
+
                         plt.title(title, fontsize=20)
                         plt.axis([np_bins_rebin_eta[0], np_bins_rebin_eta[-1], np_bins_rebin_pt[0], np_bins_rebin_pt[-1]])        
                         plt.figtext(0.15, 0.86, r'$M_{W}$ = '+words[1][1:]+' GeV', color='white')
@@ -863,7 +871,7 @@ def weighted_templates(charge='Wplus', weights=[]):
 
 def profile_toys( fname=['', '', ''], alphas=['norm'], var='rms', postfix='', save_pulls=False, truth='val', do_fit='True'):
 
-    bins_template_y = [ 0., 0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2., 2.5]
+    bins_template_y = [ 0., 0.2,  0.4, 0.6, 0.8, 1.0, 1.2, 1.4,  1.6, 1.8,  2.]
     bins_template_qt= [ 0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 24.0, 32.0 ]
 
     #bins_template_y = [ 0., 0.2]
@@ -878,7 +886,8 @@ def profile_toys( fname=['', '', ''], alphas=['norm'], var='rms', postfix='', sa
     ROOT.gPad.SetBottomMargin(0.35)
 
     f = ROOT.TFile('plots/result_'+fname[0]+'.root', 'READ')
-    tree = f.Get('tree').CopyTree('weight<9 && weight!=5 && weight!=7')
+    #tree = f.Get('tree').CopyTree('weight<9 && weight!=5 && weight!=7')
+    tree = f.Get('tree')
     ntoys = tree.GetEntries()
 
     asimov = ('asimov' in fname[0] and 'weightsall' not in fname[0])

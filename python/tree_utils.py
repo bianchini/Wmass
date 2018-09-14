@@ -20,7 +20,7 @@ np_bins_y_p0 = np.linspace(-5.0, -2.5,  6)
 np_bins_y_p1 = np.linspace(-2.0, +2.0, 21)
 np_bins_y_p2 = np.linspace(+2.5, +5.0,  6)
 #np_bins_y    = np.append( np.append(np_bins_y_p0, np_bins_y_p1), np_bins_y_p2)
-np_bins_y = np.array([-3.5, -2.0, 0.0, 2.0, 3.5])
+np_bins_y = np.array([-3.5, -2.5, 0.0, 2.5, 3.5])
 
 np_bins_y_width = np.array( [np_bins_y[i+1]-np_bins_y[i] for i in range(np_bins_y.size-1)] )
 np_bins_y_mid   = np.array( [(np_bins_y[i+1]+np_bins_y[i])*0.5 for i in range(np_bins_y.size-1)] )
@@ -344,6 +344,44 @@ def add_histo2D_lepton_mc_weights(charges=['Wminus','Wplus'],  masses=[80.000], 
                         histos[q][mass_str][bin_name][str(w)]= h2
     return histos
 
+def add_histo2D_lepton_pt_scale(charges=['Wminus','Wplus'],  masses=[80.000], pt_scales=[], plot_vars=['eta','pt']):
+    # binning
+    np_bins_xx = np_bins_eta
+    np_bins_yy = np_bins_pt
+    if plot_vars[1]=='1/pt':
+        np_bins_yy = np_bins_ptinv
+        
+    bins_yy = array( 'f',  np_bins_yy )
+    bins_xx = array( 'f',  np_bins_xx )
+
+    np_bins_y_extL = np.insert(np_bins_y,   0, [-10.])
+    np_bins_y_ext  = np.append(np_bins_y_extL, [+10.])
+    np_bins_qt_ext = np.append(np_bins_qt, 999.)
+
+    nbins_y = np_bins_y_ext.size - 1 
+    nbins_qt = np_bins_qt_ext.size - 1 
+
+    histos = {}
+
+    # create TH2D
+    for q in charges:
+        histos[q] = {}
+        for m in masses:
+            mass_str = 'M'+'{:05.3f}'.format(m)
+            histos[q][mass_str] = {}
+            for qt in range(1, nbins_qt+1):
+                qt_bin = 'qt{:03.1f}'.format(np_bins_qt_ext[qt-1])+'_'+'qt{:03.1f}'.format(np_bins_qt_ext[qt]) if qt<nbins_qt else 'OF'
+                for y in range(nbins_y/2+1, nbins_y+1):
+                    y_bin = 'y{:03.2f}'.format(np_bins_y_ext[y-1])+'_'+'y{:03.2f}'.format(np_bins_y_ext[y]) if y<nbins_y else 'OF'
+                    bin_name = qt_bin+'_'+y_bin
+                    histos[q][mass_str][bin_name] = {}                                
+                    for s in pt_scales:
+                        name = q+'_'+mass_str+'_'+bin_name+'_'+'{:2.1f}'.format(s)
+                        h2 = ROOT.TH2F(name, name, len(bins_xx)-1, bins_xx, len(bins_yy)-1, bins_yy) 
+                        h2.Sumw2()
+                        histos[q][mass_str][bin_name]['{:2.1f}'.format(s)]= h2
+    return histos
+
 
 
 # The test function for projecting-out one harmonic at the time
@@ -577,6 +615,22 @@ def fill_lepton_lab_mc_weights(histos={}, q='', masses=[80.419], ps_W=(), ps_CS=
         mass_str = 'M'+'{:05.3f}'.format(m)
         h2 = histos[q][mass_str][bin_qt+'_'+bin_y][str(weight_id)]
         h2.Fill( ps_lep[0], ps_lep[1], weight*wm)
+
+# fill lepton kinematics (pt,eta) in the lab
+def fill_lepton_lab_pt_scale(histos={}, q='', masses=[80.419], ps_W=(), ps_CS=(), ps_lep=(), weight=1.0, pt_scale=1.0):
+
+    # if (qt,y) not in the bins, use MC
+    useMC = False
+    (bin_y, iy_low, bin_qt, iqt_low) = find_y_qt_bin( ps=ps_W, verbose=False )
+    if bin_y=='OF' or bin_qt=='OF':
+        useMC = True
+
+    # loop over MW hypotheses
+    for m in masses:
+        wm = mass_weight(mass=ps_W[2], mass_target=m )
+        mass_str = 'M'+'{:05.3f}'.format(m)
+        h2 = histos[q][mass_str][bin_qt+'_'+bin_y]['{:2.1f}'.format(pt_scale)]
+        h2.Fill( ps_lep[0], ps_lep[1]*(1+pt_scale*1e-04), weight*wm)
 
 
 # compute dsigma/dphidcos in the CS frame
