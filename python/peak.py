@@ -36,7 +36,7 @@ def polynomial(x, coeff, order, der=0):
 
 class Peak:
 
-    def __init__(self, f_name='out.root', var=['e'], cut='all', M=80.419, charges='both', derivables=[1,3], tag='' ):
+    def __init__(self, f_name='out.root', var=['e'], cut='all', M=80.419, charges='both', derivables=[1,3], tag='', verbose=True ):
         self.f = ROOT.TFile.Open(f_name)
         self.cut = cut
         self.var = var
@@ -44,6 +44,7 @@ class Peak:
         self.derivables = derivables
         self.tag = tag
         self.M = M
+        self.verbose=verbose
 
     def initialize_central(self, deg=2, addbins=2):
         if self.charges=='toy':
@@ -65,7 +66,8 @@ class Peak:
         self.ib_high = self.ib_max + deg/2  + addbins
         self.x_min_fit = h_plus.GetBinLowEdge(self.ib_low)
         self.x_max_fit = h_plus.GetBinLowEdge(self.ib_high+1)
-        print 'Fitting ', self.ib_high-self.ib_low+1, 'bins in the range '+self.var[0]+' in [', self.x_min_fit, ',',  self.x_max_fit , ']' 
+        if self.verbose:
+            print 'Fitting ', self.ib_high-self.ib_low+1, 'bins in the range '+self.var[0]+' in [', self.x_min_fit, ',',  self.x_max_fit , ']' 
 
     def get_peak(self, deg=2, addbins=2, der=0, weight=0, ntoys=-1, do_plot=True, do_mean=False):        
 
@@ -103,7 +105,7 @@ class Peak:
         self.coeff = np.linalg.multi_dot([self.cov, A.T, Vinv, y])
         self.chi2 =  np.linalg.multi_dot([(np.linalg.multi_dot([A,self.coeff])-y).T,Vinv,np.linalg.multi_dot([A,self.coeff])-y])
         self.ndf = x.size-(deg+1)
-        if ntoys>0:
+        if ntoys>0 and self.verbose:
             print 'Chi2=', '{:0.2f}'.format(self.chi2), 'ndf=', self.ndf, 'chi2/ndf=', '{:0.3f}'.format(self.chi2/self.ndf)
 
         extremal = [-1.0]
@@ -121,9 +123,10 @@ class Peak:
             extremal = [self.mean_val]       
             
         points = np.array( extremal )
+        setattr(self, 'points', points)
 
         if ntoys<0:
-            return points
+            return
 
         y_rnd      = np.zeros( (x.size, ntoys) )                
         points_rnd = np.zeros( (1,ntoys) )    
@@ -147,29 +150,29 @@ class Peak:
         # get errors
         if der in self.derivables:
             points_err = np.std( points_rnd, axis=1)
-            print 'Deg:', deg, ', derivative:', der, ', add bins:', addbins, ' => ', '{:0.5f}'.format(points[0]), '+/-', '{:0.5f}'.format(points_err[0]), \
-                ' => ', '{:0.5f}'.format((points[0]+1)*self.M), '+/-', '{:0.5f}'.format((points_err[0])*self.M)
+            self.points_err = points_err
+            if self.verbose:
+                print 'Deg:', deg, ', derivative:', der, ', add bins:', addbins, ' => ', '{:0.5f}'.format(points[0]), '+/-', '{:0.5f}'.format(points_err[0]), \
+                    ' => ', '{:0.5f}'.format((points[0]+1)*self.M), '+/-', '{:0.5f}'.format((points_err[0])*self.M)
         else:
             points_err = [-1.0]
 
-        self.points_err = points_err
-
         if not do_plot:
-            return 
+            return
 
         # plotting
         plt.figure()
         fig, ax = plt.subplots()
-        x_fine = np.linspace(x[0]-0.002, x[-1]+0.002, 100)
         ax.fill_between(x, polynomial(x=x, coeff=self.coeff, order=deg, der=der)-np.std(y_rnd, axis=1), 
                         polynomial(x=x, coeff=self.coeff, order=deg, der=der)+np.std(y_rnd, axis=1), 
                         color='y', linestyle='-', label=r'$\pm1\sigma$')
         ax.plot(x, polynomial(x=x, coeff=self.coeff, order=deg, der=der), 'r--', label=r'Fit ($\mathrm{pol}_{'+str(deg)+'}$), $\chi^2$/ndof='+'{:0.2f}'.format(self.chi2/self.ndf), linewidth=3.0)
-
+        
         if der==0:
             ax.errorbar(x=x, y=y, xerr=[self.bin_size]*x.size, yerr=y_err, fmt='o', color='black', label='')
             #plt.axis( [x[0]-0.01, x[-1]+0.01, 0.96, 1.04] )
 
+        ax.set_xlim( x[0]-0.01, x[-1]+0.01 )
         plt.grid(True)
         legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
         #plt.title('Polynom of deg '+str(deg)+', +/- '+str(addbins)+'bins from 0.0, derivative '+str(der))
@@ -194,21 +197,26 @@ class Peak:
             for iaddbin,addbin in enumerate(addbins):
                 self.initialize_central(deg=deg, addbins=addbin)
                 for der in range(0, deg):
-                    self.get_peak(deg=deg, addbins=addbin, der=der, weight=0, ntoys=1000)
+                    self.get_peak(deg=deg, addbins=addbin, der=der, weight=0, ntoys=1000)                    
+                    nominal = self.points
                     if not do_systematics:
                         continue                    
                     extremals_scale = np.zeros(len(weights_scale))
                     if der not in self.derivables:
                         continue
                     for iw,w in enumerate(weights_scale):
-                        extremals_scale[iw] = self.get_peak(deg=deg, addbins=addbin, der=der, weight=w, ntoys=-1)
-                    scale_err = (np.max(extremals_scale)-np.min(extremals_scale))/2*self.M*1000
-                    print 'RMS (scale)', scale_err, 'MeV'
+                        self.get_peak(deg=deg, addbins=addbin, der=der, weight=w, ntoys=1000,  do_plot=False)
+                        extremals_scale[iw] = (self.points[0]-nominal[0])/self.points_err[0]
+                    #scale_err = (np.max(extremals_scale)-np.min(extremals_scale))/2*self.M*1000
+                    scale_err = np.mean(extremals_scale) , '+/-', np.std(extremals_scale)
+                    print 'RMS (scale)', scale_err #, 'MeV'
                     extremals_pdf = np.zeros(len(weights_pdf))
                     for iw,w in enumerate(weights_pdf):
-                        extremals_pdf[iw] = self.get_peak(deg=deg, addbins=addbin, der=der, weight=w, ntoys=-1)
-                    pdf_err = np.std(extremals_pdf)*self.M*1000
-                    print 'RMS (pdf)  ', pdf_err, 'MeV'
+                        self.get_peak(deg=deg, addbins=addbin, der=der, weight=w, ntoys=1000,  do_plot=False)
+                        extremals_pdf[iw] = (self.points[0]-nominal[0])/self.points_err[0]
+                    #pdf_err = np.std(extremals_pdf)*self.M*1000
+                    pdf_err = np.mean(extremals_pdf) , '+/-', np.std(extremals_pdf)
+                    print 'RMS (pdf)  ', pdf_err #, 'MeV'
 
 
     def run_fits_vs_mass(self, degs=[4], addbins=[5], do_systematics=False, weights_mass=[]):
@@ -301,14 +309,16 @@ weights_pdf = range(9,109)
 weights_mass = [80.119, 80.169, 80.219, 80.269, 80.319, 80.369, 80.419, 80.469, 80.519, 80.569, 80.619, 80.669, 80.719]
 addbins  = np.array([38])
 
-for charges in ['plus', 'minus', 'both']:
+for charges in ['plus', 
+                'minus', 
+                'both']:
     #continue
-    peak = Peak( f_name='out_pt_weights_full.root',  var=['e'], cut='all', M=80.419, charges=charges, derivables=[1,3], tag='_full')
+    peak = Peak( f_name='out_pt_weights_full.root',  var=['e'], cut='all', M=80.419, charges=charges, derivables=[1,3], tag='_full_width', verbose=False)
     peak.run_fits(degs=[4], addbins=addbins, do_systematics=True, weights_scale=weights_scale, weights_pdf=weights_pdf)
     peak.close()
 
 for charges in ['plus', 'minus', 'both']:
-    #continue
+    continue
     peak = Peak( f_name='out_pt_weights_mass_full.root',  var=['e'], cut='all', M=80.419, charges=charges, derivables=[0,1,3], tag='_full')
     peak.run_fits_vs_mass(degs=[4], addbins=addbins, do_systematics=True, weights_mass=weights_mass)
     peak.close()
