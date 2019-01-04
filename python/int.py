@@ -171,4 +171,4 @@ c.SaveAs('toy_spectrum_'+argv[2]+'.png')
 c.SaveAs('toy_spectrum_'+argv[2]+'.pdf')
 
 f.Close()
-#raw_input()
+raw_input()
