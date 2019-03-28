@@ -3,7 +3,7 @@ import math
 from sys import argv
 
 class FixPoint:
-    def __init__(self, x_low=0.92, x_high=1.08, nbins=201, p0=0.5, p1=1.0, p2=0.0, pR=3.0, pdf_type='power', create_file=True):
+    def __init__(self, x_low=0.92, x_high=1.08, nbins=201, p0=0.5, p1=1.0, p2=0.0, pR=3.0, pdf_type='power', pdf_mc='', create_file=True):
         print 'Initialize'
         if create_file:
             self.out = ROOT.TFile('fixpoint_'+argv[2]+'.root', 'RECREATE')
@@ -14,6 +14,7 @@ class FixPoint:
         self.pR = pR
         self.histo.Sumw2()
         self.pdf_type = pdf_type
+        self.pdf_mc = pdf_mc
 
     def pdf_gamma(self, gamma):
         if self.pdf_type=='exp':
@@ -85,15 +86,19 @@ class FixPoint:
         self.histo.Write('', ROOT.TObject.kOverwrite)
         self.out.Close()
 
-fixpoint = FixPoint(x_low=0.5, x_high=1.5, nbins=101, p0=float(argv[3]), p1=float(argv[4]), p2=float(argv[5]), pR=float(argv[6]), pdf_type='power', create_file=True)
-fixpoint.fill_histo(ntoys=int(argv[1]), width=0.0)
+fixpoint = FixPoint(x_low=0.5, x_high=1.5, nbins=101, p0=float(argv[3]), p1=float(argv[4]), p2=float(argv[5]), pR=float(argv[6]), pdf_type='mc', pdf_mc=argv[9], create_file=False)
+#fixpoint.fill_histo(ntoys=int(argv[1]), width=0.0)
 
 argv.append( '-b-' )
 import ROOT
-ROOT.gROOT.SetBatch(False)
+ROOT.gROOT.SetBatch(True)
 argv.remove( '-b-' )
 
-f = ROOT.TFile.Open('fixpoint_'+argv[2]+'.root', 'READ')
+if fixpoint.pdf_type=='mc':
+    #f = ROOT.TFile.Open('out_pt_weights_full_Range.root', 'READ')
+    f = ROOT.TFile.Open('out_pt_weights_full_'+fixpoint.pdf_mc+'.root', 'READ')
+else:
+    f = ROOT.TFile.Open('fixpoint_'+argv[2]+'.root', 'READ')
 c = ROOT.TCanvas("c", "canvas", 1200, 400)
 c.Divide(3,1)
 c.cd(1)
@@ -104,9 +109,24 @@ leg.SetFillStyle(1001)
 leg.SetBorderSize(1)
 leg.SetTextSize(0.05)
 leg.SetFillColor(0)
-h = f.Get('histo')
+
+if fixpoint.pdf_type=='mc':
+    hMC = f.Get('WpreFSR_mu_e_plus_all_w0')
+    hMC.Add(f.Get('WpreFSR_mu_e_minus_all_w0'))
+    hMC.Rebin(10)
+    h = ROOT.TH1D('h','', hMC.GetNbinsX(), hMC.GetXaxis().GetXmin()/80.419*2, hMC.GetXaxis().GetXmax()/80.419*2)
+    for ibin in range(1, hMC.GetNbinsX()+1):
+        h.SetBinContent(ibin, hMC.GetBinContent(ibin) )
+    h.Scale(1./h.Integral())
+    h.GetXaxis().SetRangeUser(0.5,1.5)
+else:
+    h = f.Get('histo')
+
 h.SetLineColor(ROOT.kBlack)
-h.SetMaximum(h.GetMaximum()*1.25)
+if fixpoint.pdf_type=='mc':
+    h.SetMaximum(h.GetMaximum()*1.35)
+else:
+    h.SetMaximum(h.GetMaximum()*1.25)
 h.SetTitle('f^{(0)}(x)')
 h.SetLineWidth(2)
 h.SetStats(0)
@@ -115,20 +135,25 @@ h.SetTitleSize(0.05, 'X')
 h.SetTitleSize(0.05, 'Y')
 h.SetLabelSize(0.05, 'X')
 h.SetLabelSize(0.05, 'Y')
-h.SetNdivisions(5,'X')
+if fixpoint.pdf_type=='mc':
+    h.SetNdivisions(10,'X')
+else:
+    h.SetNdivisions(5,'X')
 h.SetNdivisions(10,'Y')
 h.SetYTitle('A.U.')
 h.Draw('HISTE')
+if fixpoint.pdf_type=='mc':
+    leg.SetHeader('#splitline{MC simulation}{'+fixpoint.pdf_mc+', pre-FSR lepton}')
 if len(argv)>7:    
     if fixpoint.pdf_type=='exp':
-        leg.SetHeader('#splitline{g(#gamma)=(#gamma-'+'{:0.1f}'.format(fixpoint.p0)+')e^{[-'+'{:0.1f}'.format(fixpoint.p1)+'(#gamma-'+'{:0.1f}'.format(fixpoint.p0)+')]}'+', #gamma#leq'+'{:0.1f}'.format(fixpoint.pR)+'}{A_{0}='+('{:0.1f}'.format(float(argv[7])) if float(argv[7])!=0.6667 else '2/3')+', A_{4}='+'{:0.1f}'.format(float(argv[8]))+'}')
+        leg.SetHeader('#splitline{g(#gamma)=(#gamma-'+'{:1.0f}'.format(fixpoint.p0)+')e^{-'+('{:1.0f}'.format(fixpoint.p1) if fixpoint.p1!=1.0 else '')+'(#gamma-'+'{:1.0f}'.format(fixpoint.p0)+')}'+', #gamma#leq'+'{:0.1f}'.format(fixpoint.pR)+'}{A_{0}='+('{:0.1f}'.format(float(argv[7])) if float(argv[7])!=0.6667 else '2/3')+', A_{4}='+'{:0.1f}'.format(float(argv[8]))+'}')
     elif fixpoint.pdf_type=='power':
-        leg.SetHeader('#splitline{g(#gamma)=(#gamma-'+'{:0.1f}'.format(fixpoint.p0)+')^{'+'{:0.1f}'.format(fixpoint.p1)+'}'+', '+'#gamma#leq'+'{:0.1f}'.format(fixpoint.pR)+'}{A_{0}='+('{:0.1f}'.format(float(argv[7])) if float(argv[7])!=0.6667 else '2/3')+', A_{4}='+'{:0.1f}'.format(float(argv[8]))+'}')
+        leg.SetHeader('#splitline{g(#gamma)=(#gamma-'+'{:0.1f}'.format(fixpoint.p0)+')^{-'+'{:0.1f}'.format(fixpoint.p1)+'}'+', '+'#gamma#leq'+'{:0.1f}'.format(fixpoint.pR)+'}{A_{0}='+('{:0.1f}'.format(float(argv[7])) if float(argv[7])!=0.6667 else '2/3')+', A_{4}='+'{:0.1f}'.format(float(argv[8]))+'}')
 else:
     if fixpoint.pdf_type=='exp':
-        leg.SetHeader('#splitline{g(#gamma)=(#gamma-'+'{:0.1f}'.format(fixpoint.p0)+')e^{[-'+'{:0.1f}'.format(fixpoint.p1)+'(#gamma-'+'{:0.1f}'.format(fixpoint.p0)+')]}'+', #gamma#leq'+'{:0.1f}'.format(fixpoint.pR)+'}{A_{0}=th[4(#gamma-1)], A_{4}=th[0.3(#gamma-1)]}')
+        leg.SetHeader('#splitline{g(#gamma)=(#gamma-'+'{:1.0f}'.format(fixpoint.p0)+')e^{-'+('{:1.0f}'.format(fixpoint.p1) if fixpoint.p1!=1.0 else '')+'(#gamma-'+'{:1.0f}'.format(fixpoint.p0)+')}'+', #gamma#leq'+'{:0.1f}'.format(fixpoint.pR)+'}{A_{0}=th[4(#gamma-1)], A_{4}=th[0.3(#gamma-1)]}')
     elif fixpoint.pdf_type=='power':
-        leg.SetHeader('#splitline{g(#gamma)=(#gamma-'+'{:0.1f}'.format(fixpoint.p0)+')^{'+'{:0.1f}'.format(fixpoint.p1)+'}, #gamma#leq'+'{:0.1f}'.format(fixpoint.pR)+'}{A_{0}=th[4(#gamma-1)], A_{4}=th[0.3(#gamma-1)]}')
+        leg.SetHeader('#splitline{g(#gamma)=(#gamma-'+'{:0.1f}'.format(fixpoint.p0)+')^{-'+'{:0.1f}'.format(fixpoint.p1)+'}, #gamma#leq'+'{:0.1f}'.format(fixpoint.pR)+'}{A_{0}=th[4(#gamma-1)], A_{4}=th[0.3(#gamma-1)]}')
         
 leg.Draw()
 
@@ -141,7 +166,10 @@ hD1.SetTitleSize(0.05, 'X')
 hD1.SetTitleSize(0.05, 'Y')
 hD1.SetLabelSize(0.05, 'X')
 hD1.SetLabelSize(0.05, 'Y')
-hD1.SetNdivisions(5,'X')
+if fixpoint.pdf_type=='mc':
+    hD1.SetNdivisions(10,'X')
+else:
+    hD1.SetNdivisions(5,'X')
 hD1.SetNdivisions(10,'y')
 hD1.SetXTitle('x')
 #hD1.SetYTitle('A.U.')
@@ -159,7 +187,10 @@ hD2.SetTitleSize(0.05, 'X')
 hD2.SetTitleSize(0.05, 'Y')
 hD2.SetLabelSize(0.05, 'X')
 hD2.SetLabelSize(0.05, 'Y')
-hD2.SetNdivisions(5,'X')
+if fixpoint.pdf_type=='mc':
+    hD2.SetNdivisions(10,'X')
+else:
+    hD2.SetNdivisions(5,'X')
 hD2.SetNdivisions(10,'y')
 hD2.SetLineColor(ROOT.kBlue)
 for ib in range(2, h.GetNbinsX()):
@@ -184,6 +215,8 @@ min_y = hD1.GetMinimum()
 hD1.SetMaximum((max_y+min_y)*0.5 + 1.2*(max_y-min_y)*0.5)
 hD1.SetMinimum((max_y+min_y)*0.5 - 1.2*(max_y-min_y)*0.5)
 hD1.Draw('HIST')
+if fixpoint.pdf_type=='mc':
+    hD1.GetXaxis().SetRangeUser(0.5,1.5)
 c.cd(3)
 ROOT.gPad.SetRightMargin(0.2)
 ROOT.gPad.SetGrid()
@@ -191,10 +224,15 @@ max_y = hD2.GetMaximum()
 min_y = hD2.GetMinimum()
 hD2.SetMaximum((max_y+min_y)*0.5 + 1.2*(max_y-min_y)*0.5)
 hD2.SetMinimum((max_y+min_y)*0.5 - 1.2*(max_y-min_y)*0.5)
+#hD2.SetMaximum( 0.2 )
+#hD2.SetMinimum( -1.1)
 hD2.Draw('HIST')
+if fixpoint.pdf_type=='mc':
+    hD2.GetXaxis().SetRangeUser(0.5,1.5)
 
 c.SaveAs('toy_spectrum_'+argv[2]+'.png')
 c.SaveAs('toy_spectrum_'+argv[2]+'.pdf')
+c.SaveAs('toy_spectrum_'+argv[2]+'.C')
 
 f.Close()
-raw_input()
+#raw_input()

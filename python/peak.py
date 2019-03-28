@@ -62,6 +62,7 @@ class Peak:
                 h_plus.Add(  self.f.Get('W'+Wtype+'_mu_'+self.var[1]+'_minus_'+self.cut+'_w0') )
 
         (self.nbins, self.x_min, self.x_max, self.bin_size, self.ib_max) =  (h_plus.GetNbinsX(), h_plus.GetXaxis().GetXmin(), h_plus.GetXaxis().GetXmax(), h_plus.GetBinWidth(1)/self.M, h_plus.FindBin(self.M*0.5) )
+        self.ib_max += 0
         self.ib_low  = self.ib_max - deg/2 - deg%2 - addbins
         self.ib_high = self.ib_max + deg/2  + addbins
         self.x_min_fit = h_plus.GetBinLowEdge(self.ib_low)
@@ -99,7 +100,8 @@ class Peak:
 
         if do_random_smearing>0:
             y += np.random.normal( 0., do_random_smearing*y_err )
-        
+            #y_err *= math.sqrt(1+do_random_smearing)
+
         self.mean_val = (x*y).sum()/np.sum(y)
         self.mean_err = math.sqrt((x*x*y).sum()/np.sum(y) - math.pow(self.mean_val,2))/math.sqrt( (w.sum()*w.sum())/w2.sum() )
 
@@ -173,7 +175,8 @@ class Peak:
         ax.fill_between(x, polynomial(x=x, coeff=self.coeff, order=deg, der=der)-np.std(y_rnd, axis=1), 
                         polynomial(x=x, coeff=self.coeff, order=deg, der=der)+np.std(y_rnd, axis=1), 
                         color='y', linestyle='-', label=r'$\pm1\sigma$')
-        ax.plot(x, polynomial(x=x, coeff=self.coeff, order=deg, der=der), 'r--', label=r'Fit ($\mathrm{pol}_{'+str(deg)+'}$), $\chi^2$/ndof='+'{:0.2f}'.format(self.chi2/self.ndf), linewidth=3.0)
+        #ax.plot(x, polynomial(x=x, coeff=self.coeff, order=deg, der=der), 'r--', label=r'Fit ($\mathrm{pol}_{'+str(deg)+'}$), $\chi^2$/ndof='+'{:0.2f}'.format(self.chi2/self.ndf), linewidth=3.0)
+        ax.plot(x, polynomial(x=x, coeff=self.coeff, order=deg, der=der), 'r--', label=r'$f^{('+str(der)+')}$'+(', $\chi^2$/ndof='+'{:0.2f}'.format(self.chi2/self.ndf) if der==0 else ''), linewidth=3.0)
         
         if der==0:
             ax.errorbar(x=x, y=y, xerr=[self.bin_size]*x.size, yerr=y_err, fmt='o', color='black', label='')
@@ -181,11 +184,14 @@ class Peak:
 
         ax.set_xlim( x[0]-0.01, x[-1]+0.01 )
         plt.grid(True)
-        charge_label = '$f^{('+str(der)+')}$'
+        #charge_label = '$f^{('+str(der)+')}$'
+        charge_label = ''
         if self.charges=='both':
-            charge_label += (', $W^\pm$')
+            #charge_label += (', $W^\pm$')
+            charge_label += ('$W^\pm$')
         else:
-            charge_label += (', $W^+$' if self.charges=='plus' else '$W^-$')
+            #charge_label += (', $W^+$' if self.charges=='plus' else '$W^-$')
+            charge_label += ('$W^+$' if self.charges=='plus' else '$W^-$')
         legend = ax.legend(loc='best', shadow=False, fontsize='x-large')
         legend.set_title(charge_label+', '+title, prop = {'size':'x-large'})
         #plt.title('Polynom of deg '+str(deg)+', +/- '+str(addbins)+'bins from 0.0, derivative '+str(der))
@@ -210,21 +216,28 @@ class Peak:
                     if not do_systematics:
                         continue                    
                     extremals_scale = np.zeros(len(weights_scale))
+                    extremals_scale_err = np.zeros(len(weights_scale))
                     if der not in self.derivables:
                         continue
+                    nominal_err = self.points_err
                     for iw,w in enumerate(weights_scale):
                         self.get_peak(deg=deg, addbins=addbin, der=der, weight=w, ntoys=1000,  do_plot=False, do_random_smearing=-1)
                         extremals_scale[iw] = (self.points[0]-nominal[0])/self.points_err[0]
+                        extremals_scale_err[iw] = (self.points_err[0]-nominal_err[0])/nominal_err[0]
                     #scale_err = (np.max(extremals_scale)-np.min(extremals_scale))/2*self.M*1000
                     scale_err = np.mean(extremals_scale) , '+/-', np.std(extremals_scale)
-                    print 'RMS (scale)', scale_err #, 'MeV'
+                    scale_err_err = np.std(extremals_scale_err)
+                    print 'RMS (scale)', scale_err, ' error: ', scale_err_err
                     extremals_pdf = np.zeros(len(weights_pdf))
+                    extremals_pdf_err =  np.zeros(len(weights_pdf))
                     for iw,w in enumerate(weights_pdf):
                         self.get_peak(deg=deg, addbins=addbin, der=der, weight=w, ntoys=1000,  do_plot=False, do_random_smearing=-1)
                         extremals_pdf[iw] = (self.points[0]-nominal[0])/self.points_err[0]
+                        extremals_pdf_err[iw] = (self.points_err[0]-nominal_err[0])/nominal_err[0]
                     #pdf_err = np.std(extremals_pdf)*self.M*1000
                     pdf_err = np.mean(extremals_pdf) , '+/-', np.std(extremals_pdf)
-                    print 'RMS (pdf)  ', pdf_err #, 'MeV'
+                    pdf_err_err = np.std(extremals_pdf_err)
+                    print 'RMS (pdf)  ', pdf_err, 'error: ', pdf_err_err
 
 
     def run_fits_vs_mass(self, degs=[4], addbins=[5], do_systematics=False, weights_mass=[], Wtype='preFSR', title=''):
@@ -320,12 +333,13 @@ weights_scale = [0,1,2,3,4,6,8]
 weights_pdf = range(9,109)
 weights_mass = [80.119, 80.169, 80.219, 80.269, 80.319, 80.369, 80.419, 80.469, 80.519, 80.569, 80.619, 80.669, 80.719]
 addbins  = np.array([38])
+#addbins  = np.array([45])
 
-for charges in ['plus', 
-                'minus', 
+for charges in [#'plus', 
+                #'minus', 
                 'both']:
     #continue
-    peak = Peak( f_name='out_pt_weights_acc.root',  var=['e'], cut='all', M=80.419, charges=charges, derivables=[1,3], tag='_acc', verbose=False)
+    peak = Peak( f_name='out_pt_weights_full.root',  var=['e'], cut='all', M=80.419, charges=charges, derivables=[3], tag='_full_test', verbose=True)
     peak.run_fits(degs=[4], addbins=addbins, do_systematics=True, weights_scale=weights_scale, weights_pdf=weights_pdf, Wtype='preFSR', title='pre-FSR lepton')
     peak.close()
 
